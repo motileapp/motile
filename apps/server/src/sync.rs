@@ -836,6 +836,43 @@ mod tests {
     }
 
     #[test]
+    fn the_media_shown_is_what_the_threads_left_show_their_own_and_the_copies() {
+        let shows = |store: &Store, thread_id: &str, media: &[(&str, Option<&str>)]| {
+            let media: Vec<_> = media
+                .iter()
+                .map(|(id, poster)| serde_json::json!({ "id": id, "src": id, "video": false, "size": 1, "poster": poster }))
+                .collect();
+            let item = serde_json::json!({
+                "id": format!("{thread_id}-shows"), "seq": 9, "rev": 9, "created_at": 0.0,
+                "type": "assistant", "text": "Look", "media": media
+            });
+            store.save_item(thread_id, &serde_json::from_value(item).unwrap()).unwrap();
+        };
+        let (_a, a) = store();
+        let (_b, b) = store();
+        add_thread(&a, "kept", 1);
+        add_thread(&a, "gone", 1);
+        shows(&a, "kept", &[("video.mp4", Some("poster.png"))]);
+        shows(&a, "gone", &[("gone.png", None)]);
+        add_thread(&b, "own", 1);
+        shows(&b, "own", &[("own.png", None)]);
+        b.save_media("own", "photo.jpg").unwrap();
+        carry(&a, "a", true, &b);
+        let shown = |store: &Store| {
+            let mut shown: Vec<String> = store.shown_media().unwrap().into_iter().collect();
+            shown.sort();
+            shown
+        };
+        assert_eq!(shown(&b), ["gone.png", "own.png", "photo.jpg", "poster.png", "video.mp4"]);
+
+        a.delete_thread("gone").unwrap();
+        carry(&a, "a", true, &b);
+        b.delete_thread("own").unwrap();
+
+        assert_eq!(shown(&b), ["poster.png", "video.mp4"]);
+    }
+
+    #[test]
     fn a_copy_tells_which_thread_ids_are_another_servers() {
         let (_a, a) = store();
         let (_b, b) = store();

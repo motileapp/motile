@@ -116,7 +116,9 @@ const SETUP_OUTPUT_CHARS: usize = 4000;
 const BRANCH_PREFIX: &str = "motile";
 /// How long an uploaded file waits for the message it is attached to.
 const UNSENT_UPLOADS_STAY: Duration = Duration::from_secs(24 * 3600);
-const SWEEP_UPLOADS_EVERY: Duration = Duration::from_secs(3600);
+const SWEEP_FILES_EVERY: Duration = Duration::from_secs(3600);
+/// How long a file kept for a thread waits for the thread to show it.
+const UNSHOWN_MEDIA_STAYS: Duration = Duration::from_secs(3600);
 const NO_ROOM_FOR_HANDOFF: &str = "There isn't room in this model's context for what was said before. Pick a model \
      with a larger context, or start a new thread.";
 
@@ -1510,18 +1512,28 @@ impl Hub {
         }
     }
 
-    /// Removes the uploads that were never sent.
-    pub fn keep_uploads_swept(self: &Arc<Self>) {
+    /// Removes the uploads that were never sent and the media no thread shows any more, such as
+    /// that of the copies of threads another server deleted.
+    pub fn keep_files_swept(self: &Arc<Self>) {
         let hub = self.clone();
         tokio::spawn(async move {
             loop {
-                match hub.store.attachments(None) {
-                    Ok(kept) => files::sweep_uploads(&hub.attachments_folder, &kept, UNSENT_UPLOADS_STAY),
-                    Err(error) => tracing::error!("couldn't read the attachments: {error:#}"),
-                }
-                tokio::time::sleep(SWEEP_UPLOADS_EVERY).await;
+                let sweeping = hub.clone();
+                let _ = tokio::task::spawn_blocking(move || sweeping.sweep_files()).await;
+                tokio::time::sleep(SWEEP_FILES_EVERY).await;
             }
         });
+    }
+
+    fn sweep_files(&self) {
+        match self.store.attachments(None) {
+            Ok(kept) => files::sweep_uploads(&self.attachments_folder, &kept, UNSENT_UPLOADS_STAY),
+            Err(error) => tracing::error!("couldn't read the attachments: {error:#}"),
+        }
+        match self.store.shown_media() {
+            Ok(shown) => self.media.sweep(&shown, UNSHOWN_MEDIA_STAYS),
+            Err(error) => tracing::error!("couldn't read which media the threads show: {error:#}"),
+        }
     }
 
     /// A removed server's thread from this server's copy, with its transcript, for a new thread to

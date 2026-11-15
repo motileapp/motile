@@ -156,7 +156,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
         tracing::warn!("the agents can't read threads: {error:#}");
     }
     hub.refresh_models_soon();
-    hub.keep_uploads_swept();
+    hub.keep_files_swept();
     hub.keep_earlier_attachments();
     motile_server::activity::backfill_soon(&hub);
     hub.keep_parents_told();

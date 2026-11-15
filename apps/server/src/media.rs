@@ -2,8 +2,11 @@
 //! users attach to their messages. The server copies each one when it is shown, named by its contents, so
 //! a thread keeps showing it after the file has changed or gone.
 
+use std::collections::HashSet;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use anyhow::{Context, bail};
 use motile_protocol::media::{MAX_SIZE, Namer, bracket_spaced_images, extension, is_id, kind};
@@ -17,11 +20,13 @@ pub const POSTER: &str = ".poster.jpg";
 pub struct MediaStore {
     folder: PathBuf,
     home: String,
+    /// The files removed since the backup last took them, for it to delete from the bucket too.
+    removed: Arc<Mutex<HashSet<String>>>,
 }
 
 impl MediaStore {
     pub fn new(folder: PathBuf, home: &str) -> Self {
-        Self { folder, home: home.to_string() }
+        Self { folder, home: home.to_string(), removed: Arc::default() }
     }
 
     /// Copies what `text` shows or sends and `known` doesn't hold yet, each video with the image
@@ -215,9 +220,44 @@ impl MediaStore {
     }
 
     pub fn remove(&self, id: &str) {
-        if is_id(id) {
-            let _ = std::fs::remove_file(self.folder.join(id));
+        if is_id(id) && std::fs::remove_file(self.folder.join(id)).is_ok() {
+            self.removed().insert(id.to_string());
         }
+    }
+
+    /// Removes the files no thread shows and the unfinished copies, once they are older than `age`:
+    /// a file is copied a moment before the thread that shows it is saved.
+    pub fn sweep(&self, shown: &HashSet<String>, age: Duration) {
+        let Ok(entries) = std::fs::read_dir(&self.folder) else { return };
+        for entry in entries.flatten() {
+            let Ok(name) = entry.file_name().into_string() else { continue };
+            let old = entry
+                .metadata()
+                .and_then(|details| details.modified())
+                .is_ok_and(|modified| modified.elapsed().is_ok_and(|elapsed| elapsed > age));
+            if !old {
+                continue;
+            }
+            if name.ends_with(".part") {
+                let _ = std::fs::remove_file(entry.path());
+            } else if !shown.contains(&name) {
+                self.remove(&name);
+            }
+        }
+    }
+
+    /// The files removed since this was last asked.
+    pub fn take_removed(&self) -> HashSet<String> {
+        std::mem::take(&mut *self.removed())
+    }
+
+    /// Has the backup delete these from the bucket at its next pass.
+    pub fn keep_removed(&self, ids: impl IntoIterator<Item = String>) {
+        self.removed().extend(ids);
+    }
+
+    fn removed(&self) -> std::sync::MutexGuard<'_, HashSet<String>> {
+        self.removed.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 }
 
@@ -364,6 +404,33 @@ mod tests {
 
         assert_eq!(store.capture_image("shot.png", &cwd).map(|media| media.width), Some(Some(640)));
         assert_eq!(store.capture_image("notes.txt", &cwd), None);
+    }
+
+    #[test]
+    fn a_sweep_removes_old_files_no_thread_shows_and_tells_the_backup() {
+        let dir = tempfile::tempdir().unwrap();
+        let (store, _) = store(&dir);
+        let folder = dir.path().join("media");
+        std::fs::create_dir_all(&folder).unwrap();
+        let [shown, unshown, young] = ["a", "b", "c"].map(|digit| format!("{}.png", digit.repeat(64)));
+        let hour_ago = std::time::SystemTime::now() - Duration::from_secs(3600);
+        for name in [&shown, &unshown, &young, &"unfinished.part".to_string()] {
+            std::fs::write(folder.join(name), b"file").unwrap();
+            if name != &young {
+                std::fs::File::options().write(true).open(folder.join(name)).unwrap().set_modified(hour_ago).unwrap();
+            }
+        }
+
+        store.sweep(&HashSet::from([shown.clone()]), Duration::from_secs(60));
+
+        let mut left: Vec<String> = std::fs::read_dir(&folder)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect();
+        left.sort();
+        assert_eq!(left, [shown, young], "a file just copied waits for its thread");
+        assert_eq!(store.take_removed(), HashSet::from([unshown]));
+        assert!(store.take_removed().is_empty());
     }
 
     #[test]

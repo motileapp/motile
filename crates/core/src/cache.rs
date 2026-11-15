@@ -1,12 +1,13 @@
 //! The client's copy of what its servers hold, in SQLite, so the client shows where it left off before
 //! it has connected to anything.
 
+use std::collections::HashSet;
 use std::path::Path;
 use std::sync::Mutex;
 
 use motile_protocol::auth_api::Me;
 use motile_protocol::wire::{Activity, ITEMS_FORMAT, Item, ItemKind, Project, ServerInfo, Thread};
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, Params, params};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
@@ -42,6 +43,8 @@ CREATE TABLE IF NOT EXISTS items (
 );
 CREATE INDEX IF NOT EXISTS items_by_seq ON items(thread_id, seq);
 ";
+
+const MEDIA_SWEPT: &str = "media_swept";
 
 pub struct Cache {
     connection: Mutex<Connection>,
@@ -151,13 +154,14 @@ impl Cache {
         );
     }
 
-    pub fn remove_server(&self, server_id: &str) {
+    /// Forgets the server, and says which files only its threads showed.
+    pub fn remove_server(&self, server_id: &str) -> Vec<String> {
         let connection = self.connection();
-        let _ = connection
-            .execute("DELETE FROM items WHERE thread_id IN (SELECT id FROM threads WHERE server_id = ?1)", [server_id]);
+        let unshown = drop_items(&connection, "SELECT id FROM threads WHERE server_id = ?1", [server_id]);
         let _ = connection.execute("DELETE FROM threads WHERE server_id = ?1", [server_id]);
         let _ = connection.execute("DELETE FROM projects WHERE server_id = ?1", [server_id]);
         let _ = connection.execute("DELETE FROM servers WHERE id = ?1", [server_id]);
+        unshown
     }
 
     pub fn projects(&self, server_id: &str) -> Vec<Project> {
@@ -199,15 +203,16 @@ impl Cache {
         threads.collect()
     }
 
-    /// Replaces the server's threads with the list it sent. Threads it no longer has are dropped.
-    pub fn set_threads(&self, server_id: &str, threads: &[Thread]) {
+    /// Replaces the server's threads with the list it sent. Threads it no longer has are dropped,
+    /// and the files only they showed are told.
+    pub fn set_threads(&self, server_id: &str, threads: &[Thread]) -> Vec<String> {
         let mut connection = self.connection();
-        let Ok(transaction) = connection.transaction() else { return };
+        let Ok(transaction) = connection.transaction() else { return Vec::new() };
         let ids =
             serde_json::to_string(&threads.iter().map(|thread| &thread.id).collect::<Vec<_>>()).unwrap_or_default();
-        let _ = transaction.execute(
-            "DELETE FROM items WHERE thread_id IN
-                 (SELECT id FROM threads WHERE server_id = ?1 AND id NOT IN (SELECT value FROM json_each(?2)))",
+        let unshown = drop_items(
+            &transaction,
+            "SELECT id FROM threads WHERE server_id = ?1 AND id NOT IN (SELECT value FROM json_each(?2))",
             [server_id, &ids],
         );
         let _ = transaction.execute(
@@ -217,17 +222,22 @@ impl Cache {
         for thread in threads {
             let _ = upsert_thread(&transaction, server_id, thread);
         }
-        let _ = transaction.commit();
+        match transaction.commit() {
+            Ok(()) => unshown,
+            Err(_) => Vec::new(),
+        }
     }
 
     pub fn upsert_thread(&self, server_id: &str, thread: &Thread) {
         let _ = upsert_thread(&self.connection(), server_id, thread);
     }
 
-    pub fn remove_thread(&self, thread_id: &str) {
+    /// Forgets the thread, and says which files only it showed.
+    pub fn remove_thread(&self, thread_id: &str) -> Vec<String> {
         let connection = self.connection();
-        let _ = connection.execute("DELETE FROM items WHERE thread_id = ?1", [thread_id]);
+        let unshown = drop_items(&connection, "SELECT ?1", [thread_id]);
         let _ = connection.execute("DELETE FROM threads WHERE id = ?1", [thread_id]);
+        unshown
     }
 
     pub fn seen_at(&self, thread_id: &str) -> Option<f64> {
@@ -372,6 +382,46 @@ fn refresh_older_items(connection: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
+/// Runs `sweep` with the files the cached items show, once per cache: before a thread that went
+/// took its files with it, they stayed.
+pub fn sweep_media_once(path: &Path, sweep: impl FnOnce(&HashSet<String>)) -> rusqlite::Result<()> {
+    let connection = Connection::open(path)?;
+    let swept: bool =
+        connection.query_row("SELECT EXISTS (SELECT 1 FROM kv WHERE key = ?1)", [MEDIA_SWEPT], |row| row.get(0))?;
+    if swept {
+        return Ok(());
+    }
+    sweep(&shown_media(&connection, "1", []));
+    connection.execute("INSERT OR REPLACE INTO kv (key, value) VALUES (?1, 'true')", [MEDIA_SWEPT])?;
+    Ok(())
+}
+
+/// Deletes the items of the threads `threads` selects, and says which files no other thread's
+/// items show.
+fn drop_items<P: Params + Clone>(connection: &Connection, threads: &str, parameters: P) -> Vec<String> {
+    let dropped = shown_media(connection, &format!("thread_id IN ({threads})"), parameters.clone());
+    let _ = connection.execute(&format!("DELETE FROM items WHERE thread_id IN ({threads})"), parameters);
+    if dropped.is_empty() {
+        return Vec::new();
+    }
+    let left = shown_media(connection, "1", []);
+    dropped.difference(&left).cloned().collect()
+}
+
+/// The ids and posters of the files the items `filter` selects show.
+fn shown_media<P: Params>(connection: &Connection, filter: &str, parameters: P) -> HashSet<String> {
+    let query = format!(
+        "SELECT json_extract(m.value, '$.id'), json_extract(m.value, '$.poster')
+         FROM items, json_each(items.payload, '$.media') AS m
+         WHERE instr(items.payload, '\"media\":[') > 0 AND {filter}"
+    );
+    let Ok(mut statement) = connection.prepare(&query) else { return HashSet::new() };
+    let Ok(rows) = statement.query_map(parameters, |row| Ok([row.get::<_, Option<String>>(0)?, row.get(1)?])) else {
+        return HashSet::new();
+    };
+    rows.flatten().flatten().flatten().collect()
+}
+
 fn upsert_thread(connection: &Connection, server_id: &str, thread: &Thread) -> rusqlite::Result<usize> {
     connection.execute(
         "INSERT INTO threads (server_id, id, payload) VALUES (?1, ?2, ?3)
@@ -492,6 +542,60 @@ mod tests {
         cache.save_items("t", &[], Some(5));
         drop(cache);
         assert_eq!(Cache::open(&path).unwrap().synced_rev("t"), 5);
+    }
+
+    fn thread_showing(cache: &Cache, server_id: &str, id: &str, media: &[&str]) -> Thread {
+        let thread: Thread = serde_json::from_value(serde_json::json!({
+            "id": id, "title": "T", "project_id": "p", "cwd": "/srv", "agent": "claude", "model": null,
+            "effort": null, "access": "full", "created_at": 1.0, "updated_at": 2.0, "running": false,
+            "needs_approval": false, "turn_ended_at": null, "rev": 1
+        }))
+        .unwrap();
+        let media: Vec<_> = media
+            .iter()
+            .map(|file| serde_json::json!({ "id": file, "src": file, "video": false, "size": 1, "poster": "poster.png" }))
+            .collect();
+        let item: Item = serde_json::from_value(serde_json::json!({
+            "id": "a", "seq": 1, "rev": 1, "created_at": 1.0, "type": "assistant", "text": "Look", "media": media
+        }))
+        .unwrap();
+        cache.upsert_thread(server_id, &thread);
+        cache.save_items(id, &[&item], Some(1));
+        thread
+    }
+
+    fn sorted(mut files: Vec<String>) -> Vec<String> {
+        files.sort();
+        files
+    }
+
+    #[test]
+    fn a_thread_that_goes_says_which_files_no_other_thread_shows() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::open(&dir.path().join("cache.sqlite")).unwrap();
+        let kept = thread_showing(&cache, "s", "kept", &["shared.png"]);
+        thread_showing(&cache, "s", "listed", &["listed.png", "shared.png"]);
+        thread_showing(&cache, "s", "deleted", &["deleted.png"]);
+        thread_showing(&cache, "removed", "elsewhere", &["elsewhere.png"]);
+
+        assert_eq!(cache.remove_thread("deleted"), ["deleted.png"]);
+        assert_eq!(cache.set_threads("s", &[kept]), ["listed.png"]);
+        assert_eq!(sorted(cache.remove_server("removed")), ["elsewhere.png"]);
+        assert_eq!(sorted(cache.remove_server("s")), ["poster.png", "shared.png"]);
+    }
+
+    #[test]
+    fn the_files_no_thread_shows_are_swept_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cache.sqlite");
+        thread_showing(&Cache::open(&path).unwrap(), "s", "t", &["shown.png"]);
+
+        let mut swept = Vec::new();
+        sweep_media_once(&path, |shown| swept.push(shown.clone())).unwrap();
+        sweep_media_once(&path, |shown| swept.push(shown.clone())).unwrap();
+
+        let shown = HashSet::from(["shown.png", "poster.png"].map(String::from));
+        assert_eq!(swept, [shown]);
     }
 
     #[test]
