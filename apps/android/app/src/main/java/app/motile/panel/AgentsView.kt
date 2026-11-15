@@ -56,6 +56,7 @@ import app.motile.ui.color
 import app.motile.ui.pressPosition
 import app.motile.ui.proxied
 import app.motile.ui.rememberMenuState
+import app.motile.usage.cost
 import kotlinx.coroutines.delay
 
 /** The space between the right panel's list rows, split around each: it looks empty but is the row's. */
@@ -108,15 +109,15 @@ fun AgentsSurface() {
 }
 
 object AgentsSummary {
-    /** "1 waiting · 2 working · 1 done · 48k tokens", leaving out what there is none of, each count with its state. */
+    /** "1 waiting · 2 working · 1 done · $4.20", leaving out what there is none of, each count with its state. */
     fun parts(agents: List<AgentInfo>): List<Pair<String, AgentState?>> {
         if (agents.isEmpty()) return listOf("No agents" to null)
         val counts = listOf(AgentState.Waiting, AgentState.Working, AgentState.Limited, AgentState.Done, AgentState.Failed, AgentState.Stopped)
             .map { state -> agents.count { it.state == state } to state }
             .filter { it.first > 0 }
             .map { (count, state) -> "$count ${state.raw}" to state }
-        val spent = agents.mapNotNull { it.tokens }
-        val total = if (spent.isEmpty()) emptyList() else listOf(AgentInfo.tokens(spent.sum()) to null)
+        val spent = agents.mapNotNull { it.costUSD }
+        val total = if (spent.isEmpty()) emptyList() else listOf(cost(spent.sum()) to null)
         return counts + total
     }
 
@@ -180,7 +181,7 @@ private fun AgentRow(agent: AgentInfo) {
         store.rightPanel.visit(agent.id)
         if (threadID != null) store.openStartedThread(threadID) else store.rightPanel.showAgent(agent.id)
     }
-    // "6.1-Sol · work · 3 tools · 21k tokens", as far as each is known, with the gateway's symbol after the model of one that runs through the gateway.
+    // "6.1-Sol · work · 3 tools · 21K context", as far as each is known, with the gateway's symbol after the model of one that runs through the gateway.
     val runsOn = listOfNotNull(agent.model, agent.account).joinToString(" · ")
     val facts = buildAnnotatedString {
         append(AnnotatedString(runsOn).proxied(agent.gateway && runsOn.isNotEmpty(), agent.pinned))

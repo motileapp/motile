@@ -9,6 +9,8 @@ use motile_protocol::wire::{TokenCosts, Tokens, UsageBucket};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::agents::ModelUsage;
+
 pub const LIST_URL: &str =
     "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
 const PROVIDERS: [&str; 2] = ["anthropic", "openai"];
@@ -68,18 +70,19 @@ impl Prices {
         self.rates(model)?.context_window
     }
 
+    /// What the tokens cost: what the agent said they did, or else what the list's prices make them.
+    pub fn cost(&self, usage: &ModelUsage) -> Option<f64> {
+        let priced = || self.rates(&usage.model).map(|rates| total(&listed(&rates, &usage.tokens)));
+        usage.cost_usd.or_else(priced)
+    }
+
     /// Fills in what the bucket's tokens cost. What the agent said they cost stands, and is
     /// divided among the kinds of token as the list's prices divide it.
     pub fn price(&self, bucket: &mut UsageBucket) {
         let Some(rates) = self.rates(&bucket.model) else { return };
-        let Tokens { input, cache_read, cache_write, output } = bucket.tokens;
-        let listed = TokenCosts {
-            input: input as f64 * rates.input,
-            cache_read: cache_read as f64 * rates.cache_read,
-            cache_write: cache_write as f64 * rates.cache_write,
-            output: output as f64 * rates.output,
-        };
-        let listed_total = listed.input + listed.cache_read + listed.cache_write + listed.output;
+        let listed = listed(&rates, &bucket.tokens);
+        let listed_total = total(&listed);
+        let cache_read = bucket.tokens.cache_read;
         let cost = bucket.cost_usd.unwrap_or(listed_total);
         let scale = if listed_total > 0.0 { cost / listed_total } else { 1.0 };
         bucket.cost_usd = Some(cost);
@@ -91,6 +94,19 @@ impl Prices {
         });
         bucket.cache_savings_usd = cache_read as f64 * (rates.input - rates.cache_read).max(0.0);
     }
+}
+
+fn listed(rates: &Rates, tokens: &Tokens) -> TokenCosts {
+    TokenCosts {
+        input: tokens.input as f64 * rates.input,
+        cache_read: tokens.cache_read as f64 * rates.cache_read,
+        cache_write: tokens.cache_write as f64 * rates.cache_write,
+        output: tokens.output as f64 * rates.output,
+    }
+}
+
+fn total(costs: &TokenCosts) -> f64 {
+    costs.input + costs.cache_read + costs.cache_write + costs.output
 }
 
 pub async fn fetch(url: &str) -> anyhow::Result<Prices> {

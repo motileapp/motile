@@ -1977,12 +1977,12 @@ pub fn agent_time(agent: &AgentView, cx: &App) -> AnyElement {
     }
 }
 
-/// "1 waiting · 2 working · 1 done · 48K tokens", leaving out what there is none of, each count
+/// "1 waiting · 2 working · 1 done · $4.20", leaving out what there is none of, each count
 /// in its state's colour.
 fn summary(agents: &[AgentView], c: &Colors) -> StyledText {
     let count = |state: AgentState| agents.iter().filter(|agent| agent.state == state).count();
-    let spent: Vec<u64> = agents.iter().filter_map(|agent| agent.tokens).collect();
-    let total = (!spent.is_empty()).then(|| (crate::models::tokens(spent.iter().sum()), None));
+    let spent: Vec<f64> = agents.iter().filter_map(|agent| agent.cost_usd).collect();
+    let total = (!spent.is_empty()).then(|| (crate::format::usd(spent.iter().sum()), None));
     let parts = [
         (AgentState::Waiting, "waiting"),
         (AgentState::Working, "working"),

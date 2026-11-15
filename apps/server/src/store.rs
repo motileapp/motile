@@ -39,6 +39,7 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0027_ui_photos_named.sql"),
     include_str!("../migrations/0028_engaged.sql"),
     include_str!("../migrations/0029_turns_updated.sql"),
+    include_str!("../migrations/0030_usage_by_thread.sql"),
 ];
 
 pub struct Store {
@@ -619,6 +620,19 @@ impl Store {
             insert_usage(&connection, at, thread_id.unwrap_or_default(), project_id, spender, purpose, usage)?;
         }
         Ok(())
+    }
+
+    /// What the thread's agents spent on each model, with what they said it cost.
+    pub fn thread_usage(&self, thread_id: &str) -> rusqlite::Result<Vec<ModelUsage>> {
+        let connection = self.connection();
+        let mut statement = connection.prepare(
+            "SELECT model, SUM(input), SUM(cache_read), SUM(cache_write), SUM(output), SUM(cost_usd)
+             FROM usage WHERE thread_id = ?1 GROUP BY model",
+        )?;
+        let usage = statement.query_map([thread_id], |row| {
+            Ok(ModelUsage { model: row.get(0)?, tokens: tokens_at(row, 1)?, cost_usd: row.get(5)? })
+        })?;
+        usage.collect()
     }
 
     /// What was spent from `since` until `until`, by account, model and project, in buckets of

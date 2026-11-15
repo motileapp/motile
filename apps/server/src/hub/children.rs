@@ -450,6 +450,7 @@ impl Hub {
             tokens: None,
             tool_uses: None,
             duration_ms: None,
+            cost_usd: None,
             workflow: None,
             runs_on: Some(Box::new(runs_on)),
             waits: None,
@@ -774,7 +775,7 @@ impl Hub {
         let (agent, notice) = {
             let Some(mut child) = self.live(child_id).await else { return Ok(()) };
             let state = self.state_of(&mut child)?;
-            let agent = self.subagent_of(&child, &state);
+            let agent = self.subagent_of(&child, &state)?;
             if state.status != Status::WaitingForUsageLimit {
                 child.told_limit = false;
             }
@@ -834,14 +835,14 @@ impl Hub {
         Ok(Some(ContextUse { tokens, window, percent: window.map(|window| (tokens * 100 + window / 2) / window) }))
     }
 
-    fn subagent_of(&self, live: &Live, state: &ChildState) -> Subagent {
+    fn subagent_of(&self, live: &Live, state: &ChildState) -> anyhow::Result<Subagent> {
         let thread = &live.stored.thread;
         let status = match state.status {
             Status::Finished => ToolStatus::Succeeded,
             Status::Failed | Status::Stopped => ToolStatus::Failed,
             _ => ToolStatus::Running,
         };
-        Subagent {
+        Ok(Subagent {
             kind: None,
             status,
             // What it waits for the clients read from its thread; this says what it is doing.
@@ -851,6 +852,7 @@ impl Hub {
             tool_uses: Some(state.work.tools),
             duration_ms: (state.status.settled() || state.status == Status::WaitingForUsageLimit)
                 .then(|| (worked_secs(thread, false) * 1000.0) as u64),
+            cost_usd: self.spent_in(&thread.id)?,
             workflow: None,
             runs_on: Some(Box::new(RunsOn {
                 model: state.model.clone().map(|model| self.model_name(thread.agent, &model).unwrap_or(model)),
@@ -864,7 +866,14 @@ impl Hub {
             },
             stopped: state.status == Status::Stopped,
             limited: state.status == Status::WaitingForUsageLimit,
-        }
+        })
+    }
+
+    /// What the thread's agents have spent at the API's prices, as far as the price list knows.
+    fn spent_in(&self, thread_id: &str) -> rusqlite::Result<Option<f64>> {
+        let usage = self.store.thread_usage(thread_id)?;
+        let prices = self.prices.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        Ok(usage.iter().filter_map(|usage| prices.cost(usage)).reduce(|total, cost| total + cost))
     }
 
     /// What the agent that started the thread is to be told of it now, once.
