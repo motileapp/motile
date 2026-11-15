@@ -4,6 +4,7 @@ import android.webkit.MimeTypeMap
 import app.motile.platform.Symbol
 import app.motile.usage.cost
 import java.io.File
+import java.text.NumberFormat
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -1179,11 +1180,11 @@ data class AgentInfo(
 
     val working: Boolean get() = status == ToolStatus.Running
 
-    /** "3 tools · 21K context · $4.20", as far as each is known. */
+    /** "21K context · $4.20 · 4,262 tools", as far as each is known. */
     val usage: String?
         get() {
-            val tools = toolUses?.let { "$it ${if (it == 1) "tool" else "tools"}" }
-            val parts = listOfNotNull(tools, tokens?.let { "${it.toLong().abbreviated} context" }, costUSD?.let(::cost))
+            val tools = toolUses?.let { "${it.grouped} ${if (it == 1) "tool" else "tools"}" }
+            val parts = listOfNotNull(tokens?.let { "${it.toLong().abbreviated} context" }, costUSD?.let(::cost), tools)
             return if (parts.isEmpty()) null else parts.joinToString(" · ")
         }
 }
@@ -1545,6 +1546,11 @@ val Long.abbreviated: String
     }
 
 val Int.abbreviated: String get() = toLong().abbreviated
+
+private val integers = NumberFormat.getIntegerInstance()
+
+/** "4,262", with the thousands set apart as the user's region does. */
+val Int.grouped: String get() = integers.format(this)
 
 object Time {
     fun now(): Double = System.currentTimeMillis() / 1000.0

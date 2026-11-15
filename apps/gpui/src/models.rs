@@ -811,12 +811,14 @@ impl AgentViewExt for AgentView {
         self.status == motile_protocol::wire::ToolStatus::Running
     }
 
-    /// "3 tools · 21.4K context · $4.20", as far as each is known.
+    /// "21.4K context · $4.20 · 4,262 tools", as far as each is known.
     fn usage(&self) -> Option<String> {
-        let tools = self.tool_uses.map(|count| format!("{count} {}", if count == 1 { "tool" } else { "tools" }));
+        let tools = self.tool_uses.map(|count| {
+            format!("{} {}", motile_core::activity::number(count as u32), if count == 1 { "tool" } else { "tools" })
+        });
         let context = self.tokens.map(|count| format!("{} context", crate::format::abbreviated(count)));
         let cost = self.cost_usd.map(crate::format::usd);
-        let parts: Vec<String> = [tools, context, cost].into_iter().flatten().collect();
+        let parts: Vec<String> = [context, cost, tools].into_iter().flatten().collect();
         (!parts.is_empty()).then(|| parts.join(" · "))
     }
 
@@ -826,7 +828,7 @@ impl AgentViewExt for AgentView {
         (!parts.is_empty()).then(|| parts.join(" · "))
     }
 
-    /// "6.1-Sol · work · 3 tools · 21.4K context · $4.20", as far as each is known.
+    /// "6.1-Sol · work · 21.4K context · $4.20 · 3 tools", as far as each is known.
     fn facts(&self) -> Option<String> {
         let parts: Vec<String> = [self.runs_on(), self.usage()].into_iter().flatten().collect();
         (!parts.is_empty()).then(|| parts.join(" · "))

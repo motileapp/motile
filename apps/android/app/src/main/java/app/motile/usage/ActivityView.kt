@@ -51,6 +51,7 @@ import app.motile.core.ActivityReport
 import app.motile.core.Preferences
 import app.motile.core.Server
 import app.motile.core.Time
+import app.motile.core.grouped
 import app.motile.core.UsageModel
 import app.motile.platform.scaled
 import app.motile.theme.ControlSize
@@ -77,7 +78,6 @@ import app.motile.ui.dotted
 import app.motile.ui.pulse
 import app.motile.ui.pulsing
 import app.motile.ui.reaching
-import java.text.NumberFormat
 
 private enum class ActivityMeasure(val raw: String, val label: String) {
     Messages("messages", "Messages"), Turns("turns", "Turns"), Yours("engaged", "Your time"), Time("time", "Agent time");
@@ -151,8 +151,6 @@ private fun Hours(report: ActivityReport, beside: Boolean) {
 /** Narrower than this, the tiles go two to a row and the turns' cards under each other. */
 private val besideWidth = 640.dp
 
-private val integers = NumberFormat.getIntegerInstance()
-private val Int.grouped: String get() = integers.format(this)
 
 /**
  * What the user and the agents did on the servers counted, the Activity tab: the headline numbers,

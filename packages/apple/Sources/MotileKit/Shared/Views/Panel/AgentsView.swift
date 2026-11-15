@@ -239,7 +239,7 @@ private struct AgentRow: View {
         }
     }
 
-    /// "6.1-Sol · work · 3 tools · 21K context", as far as each is known, with the gateway's symbol
+    /// "6.1-Sol · work · 21K context · $4.20 · 3 tools", as far as each is known, with the gateway's symbol
     /// after the model of one that runs through the gateway.
     @ViewBuilder private var facts: some View {
         let runsOn = [agent.model, agent.account].compactMap { $0 }
