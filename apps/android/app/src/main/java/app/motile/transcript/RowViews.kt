@@ -117,8 +117,8 @@ fun TranscriptRow(row: RowModel) {
         is RowModel.Kind.Error -> ErrorRow(row, kind.message)
         is RowModel.Kind.Changes -> ChangesRow(row, kind.content)
         is RowModel.Kind.TurnEnd -> TurnEndRow(row, kind.content)
-        is RowModel.Kind.Handoff -> HandoffRow(kind.content)
-        is RowModel.Kind.Compaction -> CompactionRow(kind.label)
+        is RowModel.Kind.Handoff -> HandoffRow(row, kind.content)
+        is RowModel.Kind.Compaction -> CompactionRow(row, kind.label)
         RowModel.Kind.Unknown -> {}
     }
 }
@@ -803,13 +803,18 @@ private fun ChangesRow(row: RowModel, changes: ChangesContent) {
                     margin = PaddingValues(start = 2.dp, end = buttonMargin, top = buttonMargin, bottom = buttonMargin),
                 ) { actions.openDiff(row.itemID, null) }
             }
-            for (entry in changes.entries) ChangeEntryRow(row, entry)
+            val marks = actions.model.found[row.id]
+            var offset = 0
+            for (entry in changes.entries) {
+                ChangeEntryRow(row, entry, marks.within(offset, entry.name.length))
+                offset += entry.name.length + 1
+            }
         }
     }
 }
 
 @Composable
-private fun ChangeEntryRow(row: RowModel, entry: ChangesContent.Entry) {
+private fun ChangeEntryRow(row: RowModel, entry: ChangesContent.Entry, found: List<FoundSpan>) {
     val palette = LocalPalette.current
     val actions = LocalTranscript.current
     val x = 12 + entry.depth * 16
@@ -829,10 +834,12 @@ private fun ChangeEntryRow(row: RowModel, entry: ChangesContent.Entry) {
             Box(Modifier.width(24.dp)) {
                 Icon(if (entry.folder) Symbol.Folder else FileSymbol.symbol(entry.path), iconSize(text = TextSize.Xs), color = palette.mutedForeground)
             }
-            Text(
-                entry.name, Modifier.weight(1f).padding(end = 12.dp), style = Theme.smallMono,
-                color = if (entry.folder) palette.mutedForeground else palette.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
-            )
+            Box(Modifier.weight(1f).padding(end = 12.dp)) {
+                MarkedText(
+                    AnnotatedString(entry.name), Theme.smallMono, found = found, onCurrent = { _, window -> actions.currentMatch(row.id, window) },
+                    color = if (entry.folder) palette.mutedForeground else palette.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
+                )
+            }
             val counts = remember(entry, palette) { Typesetter.lineCounts(entry.added, entry.removed, palette) }
             Text(counts, style = Theme.uiDigits(TextSize.Xs, androidx.compose.ui.text.font.FontWeight.Medium), maxLines = 1)
         }
@@ -871,13 +878,15 @@ object MessageMeta {
 
 /** Where the thread went on with another agent or account: a line across, broken by the model it left and the one it went on with. */
 @Composable
-private fun HandoffRow(handoff: HandoffContent) {
+private fun HandoffRow(row: RowModel, handoff: HandoffContent) {
     val palette = LocalPalette.current
+    val actions = LocalTranscript.current
+    val marks = actions.model.found[row.id]
     val lineGap = ControlSize.Regular.padding
     val labelGap = ControlSize.Regular.gap
     val arrowGap = ControlSize.Small.padding
     @Composable
-    fun End(end: HandoffContent.End) {
+    fun End(end: HandoffContent.End, offset: Int) {
         AgentIcon(end.agent, size = ControlSize.Regular.symbol)
         Spacer(Modifier.width(labelGap))
         val label = buildAnnotatedString {
@@ -887,28 +896,44 @@ private fun HandoffRow(handoff: HandoffContent) {
                 append(account)
             }
         }.proxied(end.gateway, end.pinned)
-        Text(label, style = Theme.smallFont, color = palette.foreground, maxLines = 1, inlineContent = GatewayMark.content(palette.foreground, TextSize.Xs, ControlSize.Regular.symbol))
+        val account = end.account.orEmpty()
+        val found = marks.within(offset, end.label.length) +
+            marks.within(offset + end.label.length + 1, account.length).shifted(label.length - account.length)
+        MarkedText(
+            label, Theme.smallFont, found = found, onCurrent = { _, window -> actions.currentMatch(row.id, window) },
+            color = palette.foreground, maxLines = 1, inlineContent = GatewayMark.content(palette.foreground, TextSize.Xs, ControlSize.Regular.symbol),
+        )
     }
     Row(Modifier.fillMaxWidth().height(ControlSize.Large.height), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))
         Spacer(Modifier.width(lineGap))
-        End(handoff.from)
+        End(handoff.from, 0)
         Spacer(Modifier.width(arrowGap))
         Icon(Symbol.ArrowRight, ControlSize.Regular.smallSymbol, color = palette.mutedStrongerForeground)
         Spacer(Modifier.width(arrowGap))
-        End(handoff.to)
+        End(handoff.to, handoff.from.label.length + handoff.from.account.orEmpty().length + 2)
         Spacer(Modifier.width(lineGap))
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))
     }
 }
 
-/** Where the agent summarized its conversation: a line across, broken by what it shrank its context from and to. */
+/** Where the agent summarized its conversation: a line across, broken by a symbol and what it shrank its context from and to. */
 @Composable
-private fun CompactionRow(label: String) {
+private fun CompactionRow(row: RowModel, label: String) {
     val palette = LocalPalette.current
+    val actions = LocalTranscript.current
+    val found = actions.model.found[row.id].within(0, label.length)
+    val lineGap = ControlSize.Regular.padding
     Row(Modifier.fillMaxWidth().height(ControlSize.Large.height), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))
-        Text(label, Modifier.padding(horizontal = ControlSize.Regular.padding), style = Theme.smallFont, color = palette.mutedStrongerForeground, maxLines = 1)
+        Spacer(Modifier.width(lineGap))
+        Icon(Symbol.SquareText, ControlSize.Regular.symbol, color = palette.mutedStrongerForeground)
+        Spacer(Modifier.width(ControlSize.Regular.gap))
+        MarkedText(
+            AnnotatedString(label), Theme.smallFont, found = found, onCurrent = { _, window -> actions.currentMatch(row.id, window) },
+            color = palette.mutedStrongerForeground, maxLines = 1,
+        )
+        Spacer(Modifier.width(lineGap))
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))
     }
 }

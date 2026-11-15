@@ -8,26 +8,25 @@ import app.motile.platform.Symbol
 /** What the usage route shows, kept while it is closed so that it opens with what was last read. */
 class UsageModel {
     enum class Tab(val raw: String) {
-        Activity("activity"), Spend("spend"), Limits("limits");
+        Spend("spend"), Limits("limits"), Activity("activity");
 
         val label: String
             get() = when (this) {
-                Activity -> "Activity"
                 Spend -> "Spend"
                 Limits -> "Limits"
+                Activity -> "Activity"
             }
 
         val symbol: Symbol
             get() = when (this) {
-                Activity -> Symbol.Activity
                 Spend -> Symbol.Coins
                 Limits -> Symbol.Gauge
+                Activity -> Symbol.Activity
             }
 
         companion object {
-            /** The tab kept, where the cost and the tokens were tabs of their own before Spend. */
-            fun kept(raw: String?): Tab =
-                entries.firstOrNull { it.raw == raw } ?: if (Measure.entries.any { it.raw == raw }) Spend else Activity
+            /** The tab kept, or Spend, where the cost and the tokens were tabs of their own before. */
+            fun kept(raw: String?): Tab = entries.firstOrNull { it.raw == raw } ?: Spend
         }
     }
 

@@ -237,6 +237,7 @@ class GestureTests {
         openSidebar()
         device.findObject(By.desc("Account")).click()
         device.wait(Until.findObject(By.text("Usage")), 3_000).click()
+        device.wait(Until.findObject(By.text("Activity")), 3_000).click()
         val heading = device.wait(Until.findObject(By.text("Over time")), 10_000) ?: return fail("no chart")
         val below = device.wait(Until.findObject(By.text("When you work")), 10_000) ?: return fail("no heatmap")
         device.wait(Until.findObject(By.text(Pattern.compile("^You('re in Motile| send) the most.*"))), 10_000) ?: return fail("no activity")

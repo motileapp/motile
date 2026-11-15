@@ -1206,6 +1206,22 @@ final class ChangesRowView: RowView {
         openButton.dim()
     }
 
+    override func mark(_ marks: FoundMarks?) { list.marks = marks }
+
+    override func rect(of range: NSRange) -> CGRect? {
+        guard let entries = list.content?.entries else { return nil }
+        var start = 0
+        for (index, entry) in entries.enumerated() {
+            let end = start + entry.name.length
+            if range.location <= end {
+                let y = Self.topMargin + Self.headHeight + CGFloat(index) * Self.entryHeight
+                return CGRect(x: 0, y: y, width: bounds.width, height: Self.entryHeight)
+            }
+            start = end + 1
+        }
+        return nil
+    }
+
     override func layout(width: CGFloat) -> CGFloat {
         let entries = list.content?.entries.count ?? 0
         let height = Self.headHeight + CGFloat(entries) * Self.entryHeight + Self.bottomPadding
@@ -1220,6 +1236,12 @@ final class ChangesRowView: RowView {
         var content: ChangesContent? {
             didSet {
                 hovered = nil
+                redraw()
+            }
+        }
+        var marks: FoundMarks? {
+            didSet {
+                guard marks != oldValue else { return }
                 redraw()
             }
         }
@@ -1247,6 +1269,7 @@ final class ChangesRowView: RowView {
             guard let content else { return }
             let titleSize = content.title.size()
             content.title.draw(at: CGPoint(x: 14, y: ((headHeight - titleSize.height) / 2).rounded()))
+            let found = marks?.split(content.entries.map { $0.name.length })
             for (index, entry) in content.entries.enumerated() {
                 let row = CGRect(x: 0, y: headHeight + CGFloat(index) * entryHeight, width: bounds.width, height: entryHeight)
                 guard row.intersects(dirtyRect) else { continue }
@@ -1269,8 +1292,8 @@ final class ChangesRowView: RowView {
                 let countsX = bounds.width - 14 - counts.width
                 entry.counts.draw(at: CGPoint(x: countsX, y: row.minY + ((row.height - counts.height) / 2).rounded()))
                 let height = ceil(entry.name.size().height)
-                entry.name.drawTruncated(
-                    in: CGRect(x: x, y: row.minY + ((row.height - height) / 2).rounded(), width: max(0, countsX - 12 - x), height: height))
+                let name = CGRect(x: x, y: row.minY + ((row.height - height) / 2).rounded(), width: max(0, countsX - 12 - x), height: height)
+                FoundLabel.draw(entry.name, found: found?[index] ?? [], in: name)
             }
         }
 
@@ -1686,12 +1709,25 @@ final class HandoffRowView: RowView {
     })
 
     private var content: HandoffContent?
+    private var marks: FoundMarks?
 
     override func configure(_ row: RowModel) {
         super.configure(row)
         guard case .handoff(let content) = row.kind else { return }
         self.content = content
         redraw()
+    }
+
+    override func mark(_ marks: FoundMarks?) {
+        guard marks != self.marks else { return }
+        self.marks = marks
+        redraw()
+    }
+
+    /// The matches in an end's label, from those in its model's name and its account's.
+    private static func found(in label: NSAttributedString, account: String?, _ model: [FoundRange], _ inAccount: [FoundRange]) -> [FoundRange] {
+        let accountStart = label.length - ((account ?? "") as NSString).length
+        return model + inAccount.map { (NSRange(location: $0.range.location + accountStart, length: $0.range.length), $0.current) }
     }
 
     override func layout(width: CGFloat) -> CGFloat { Self.height }
@@ -1741,32 +1777,43 @@ final class HandoffRowView: RowView {
         let rightLine = x + middle + Self.lineGap
         CGRect(x: rightLine, y: lineY, width: max(0, bounds.width - rightLine), height: 1).fillCurrent()
 
-        let drawEnd = { (end: HandoffContent.End, label: NSAttributedString, width: CGFloat) in
+        let length = { (string: String?) in ((string ?? "") as NSString).length }
+        let ends = [content.from, content.to]
+        let found = marks?.split(ends.flatMap { [length($0.label), length($0.account)] }) ?? []
+        let foundIn = { (end: Int, label: NSAttributedString) -> [FoundRange] in
+            guard found.count == 4 else { return [] }
+            return Self.found(in: label, account: ends[end].account, found[end * 2], found[end * 2 + 1])
+        }
+        let drawEnd = { (end: HandoffContent.End, label: NSAttributedString, width: CGFloat, found: [FoundRange]) in
             if let logo = Self.logos[end.agent] {
                 let side = Self.logoSide
                 logo.drawUpright(in: CGRect(x: x, y: (midY - side / 2).rounded(), width: side, height: side))
             }
             x += Self.logoSide + Self.labelGap
             let height = ceil(label.size().height)
-            label.drawTruncated(in: CGRect(x: x, y: (midY - height / 2).rounded(), width: width, height: height))
+            FoundLabel.draw(label, found: found, in: CGRect(x: x, y: (midY - height / 2).rounded(), width: width, height: height))
             x += width
         }
-        drawEnd(content.from, from, fromWidth)
+        drawEnd(content.from, from, fromWidth, foundIn(0, from))
         x += Self.arrowGap
         let arrow = CGRect(x: x, y: 0, width: arrowSide, height: bounds.height)
         TintedSymbol.draw(.arrowRight, size: Self.arrowSize, color: Theme.mutedStrongerForeground, in: arrow)
         x += arrowSide + Self.arrowGap
-        drawEnd(content.to, to, toWidth)
+        drawEnd(content.to, to, toWidth, foundIn(1, to))
     }
 }
 
-/// Where the agent summarized its conversation: a line across, broken by how far the context shrank.
+/// Where the agent summarized its conversation: a line across, broken by a symbol and how far the
+/// context shrank.
 final class CompactionRowView: RowView {
     static let height = ControlSize.large.height
 
     private static let lineGap = ControlSize.regular.padding
+    private static let symbolSize = ControlSize.regular.symbol
+    private static let symbolGap = ControlSize.regular.gap
 
     private var label: String?
+    private var marks: FoundMarks?
 
     override func configure(_ row: RowModel) {
         super.configure(row)
@@ -1775,24 +1822,35 @@ final class CompactionRowView: RowView {
         redraw()
     }
 
+    override func mark(_ marks: FoundMarks?) {
+        guard marks != self.marks else { return }
+        self.marks = marks
+        redraw()
+    }
+
     override func layout(width: CGFloat) -> CGFloat { Self.height }
 
     override func draw(_ dirtyRect: CGRect) {
         guard let label else { return }
         let text = NSAttributedString(string: label, attributes: [.font: Theme.smallFont, .foregroundColor: Theme.mutedStrongerForeground])
-        let room = max(0, bounds.width - Self.lineGap * 4)
+        let symbolSide = PlatformImage.symbolSide(Self.symbolSize)
+        let fixed = symbolSide + Self.symbolGap
+        let room = max(0, bounds.width - Self.lineGap * 4 - fixed)
         let size = text.size()
         let width = min(ceil(size.width), room)
         let height = ceil(size.height)
-        let x = ((bounds.width - width) / 2).rounded()
+        let x = ((bounds.width - fixed - width) / 2).rounded()
 
         Theme.border.setFill()
         let lineY = (bounds.height / 2).rounded()
         CGRect(x: 0, y: lineY, width: max(0, x - Self.lineGap), height: 1).fillCurrent()
-        let rightLine = x + width + Self.lineGap
+        let rightLine = x + fixed + width + Self.lineGap
         CGRect(x: rightLine, y: lineY, width: max(0, bounds.width - rightLine), height: 1).fillCurrent()
 
-        text.drawTruncated(in: CGRect(x: x, y: ((bounds.height - height) / 2).rounded(), width: width, height: height))
+        let symbol = CGRect(x: x, y: 0, width: symbolSide, height: bounds.height)
+        TintedSymbol.draw(.squareText, size: Self.symbolSize, color: Theme.mutedStrongerForeground, in: symbol)
+        let found = marks?.split([text.length]).first ?? []
+        FoundLabel.draw(text, found: found, in: CGRect(x: x + fixed, y: ((bounds.height - height) / 2).rounded(), width: width, height: height))
     }
 }
 

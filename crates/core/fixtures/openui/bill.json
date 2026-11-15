@@ -424,8 +424,8 @@
                   },
                   "component": "IconButton",
                   "icon": {
-                    "name": "trash-2",
-                    "glyph": ""
+                    "name": "trash",
+                    "glyph": ""
                   },
                   "label": "Remove Burrata & sourdough",
                   "tooltip": "Remove Burrata & sourdough",
@@ -651,8 +651,8 @@
                   },
                   "component": "IconButton",
                   "icon": {
-                    "name": "trash-2",
-                    "glyph": ""
+                    "name": "trash",
+                    "glyph": ""
                   },
                   "label": "Remove Mains",
                   "tooltip": "Remove Mains",
@@ -878,8 +878,8 @@
                   },
                   "component": "IconButton",
                   "icon": {
-                    "name": "trash-2",
-                    "glyph": ""
+                    "name": "trash",
+                    "glyph": ""
                   },
                   "label": "Remove A bottle of red",
                   "tooltip": "Remove A bottle of red",

@@ -1487,11 +1487,31 @@ pub fn rendered(item: &Item, cwd: &str) -> Vec<Row> {
     render(item, cwd, &Started::default(), None)
 }
 
-/// The text a row reads as, where it is a message's: what finding in a thread searches.
-pub fn searched_text(row: &Row) -> Option<&str> {
+/// The rows of an item that finding in a thread searches, the changes a turn made among them with
+/// its folders as they first show.
+pub fn searched_rows(item: &Item, cwd: &str) -> Vec<Row> {
+    let mut rows: Vec<Row> = changes_row(item, &HashSet::new()).into_iter().collect();
+    rows.extend(rendered(item, cwd));
+    rows
+}
+
+/// The text a row reads as, where it is read: what finding in a thread searches. A row of several
+/// labels has them one per line: a handoff's model and account on each side, a turn's changes the
+/// names of the files and folders it shows.
+pub fn searched_text(row: &Row) -> Option<Cow<'_, str>> {
     match &row.kind {
-        RowKind::User { text, .. } | RowKind::Code { code: text, .. } | RowKind::Error { message: text } => Some(text),
-        RowKind::Prose { prose } => Some(&prose.text),
+        RowKind::User { text, .. } | RowKind::Code { code: text, .. } | RowKind::Error { message: text } => {
+            Some(Cow::Borrowed(text))
+        }
+        RowKind::Prose { prose } => Some(Cow::Borrowed(&prose.text)),
+        RowKind::Compaction { label } => Some(Cow::Borrowed(label)),
+        RowKind::Handoff { from, to } => {
+            let account = |end: &HandoffLabel| end.account.clone().unwrap_or_default();
+            Some(Cow::Owned([from.label.clone(), account(from), to.label.clone(), account(to)].join("\n")))
+        }
+        RowKind::Changes { entries, .. } => {
+            Some(Cow::Owned(entries.iter().map(|entry| entry.name.as_str()).collect::<Vec<_>>().join("\n")))
+        }
         _ => None,
     }
 }

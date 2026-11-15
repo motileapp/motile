@@ -128,6 +128,16 @@ fn run(len: usize, font: Font, color: Hsla) -> TextRun {
     TextRun { len, font, color, background_color: None, underline: None, strikethrough: None }
 }
 
+/// A label in one font and colour, with what finding found in it set off once it found something.
+fn marked(id: String, text: &str, font: Font, color: Hsla, found: Vec<(Range<usize>, bool)>, cx: &App) -> AnyElement {
+    let text = SharedString::from(text.to_owned());
+    if found.is_empty() {
+        return text.into_any_element();
+    }
+    let runs = vec![run(text.len(), font, color)];
+    crate::ui::rich_text::RichText::with_runs(id, text, runs).in_control(true).found(found, cx).into_any_element()
+}
+
 /// The time of day, with the date before it when that isn't today, as the user's region writes
 /// them: "2:03 PM", "Oct 14, 2026 at 2:03 PM".
 pub fn stamp(at: f64) -> String {
@@ -1845,7 +1855,11 @@ fn changes_row(
                             }),
                         ),
                 )
-                .children(entries.iter().map(|entry| change_entry(entry, &item, ctx, cx))),
+                .children({
+                    let names: Vec<&str> = entries.iter().map(|entry| entry.name.as_str()).collect();
+                    let found = find::in_lines(ctx.found.get(&row_id), &names);
+                    entries.iter().zip(found).map(|(entry, found)| change_entry(entry, &item, found, ctx, cx))
+                }),
         )
         .into_any_element()
 }
@@ -1855,7 +1869,13 @@ const CHANGES_ENTRY: f32 = ControlSize::Small.height() + 2.;
 const CHANGES_BOTTOM: f32 = 6.;
 
 /// One file a turn changed, or a folder of them, lit under the pointer from where it stands in.
-fn change_entry(entry: &ChangeEntry, item: &str, ctx: &RowContext, cx: &App) -> impl IntoElement {
+fn change_entry(
+    entry: &ChangeEntry,
+    item: &str,
+    found: Vec<(Range<usize>, bool)>,
+    ctx: &RowContext,
+    cx: &App,
+) -> impl IntoElement {
     let c = colors(cx);
     let group: SharedString = format!("entry-{item}-{}", entry.id).into();
     let (store, view) = (ctx.store.clone(), ctx.view.clone());
@@ -1910,13 +1930,21 @@ fn change_entry(entry: &ChangeEntry, item: &str, ctx: &RowContext, cx: &App) -> 
                             .child(icons::symbol(symbol, IconSize::Sm).text_color(c.muted_foreground)),
                     ),
                 )
-                .child(
-                    crate::ui::middle_truncated(entry.name.clone())
+                .child({
+                    let color = if entry.folder { c.muted_foreground } else { c.foreground };
+                    let mono = font(theme::MONO_FONT, FontWeight::NORMAL, false);
+                    let name = marked(format!("{item}-{}-name", entry.id), &entry.name, mono, color, found, cx);
+                    div()
+                        .min_w_0()
+                        .whitespace_nowrap()
+                        .overflow_hidden()
+                        .text_ellipsis_middle()
+                        .child(name)
                         .flex_1()
                         .font_family(theme::MONO_FONT)
                         .text_size(TextSize::Xs)
-                        .text_color(if entry.folder { c.muted_foreground } else { c.foreground }),
-                )
+                        .text_color(color)
+                })
                 .child(div().ml(px(12.)).flex_none().child(line_counts(entry.added, entry.removed, cx))),
         )
         .on_click(move |_, _, cx| {
@@ -2068,8 +2096,21 @@ pub fn working_line(activity: &crate::models::Activity, cx: &App) -> AnyElement 
 
 /// Where the thread went on with another agent or account: a line across, broken by the model it
 /// left and the one it went on with.
-fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window: &mut Window, cx: &App) -> AnyElement {
+fn handoff_row(
+    model: &RowModel,
+    from: &HandoffLabel,
+    to: &HandoffLabel,
+    ctx: &RowContext,
+    window: &mut Window,
+    cx: &App,
+) -> AnyElement {
     let c = colors(cx);
+    let account = |end: &HandoffLabel| end.account.clone().unwrap_or_default();
+    let (from_account, to_account) = (account(from), account(to));
+    let mut found =
+        find::in_lines(ctx.found.get(&model.row.id), &[&from.label, &from_account, &to.label, &to_account]).into_iter();
+    let mut next_found = || found.next().unwrap_or_default();
+    let found = [(next_found(), next_found()), (next_found(), next_found())];
     let logo = ControlSize::Regular.symbol();
     let arrow = ControlSize::Regular.small_symbol();
     let (label_gap, arrow_gap, line_gap) =
@@ -2094,18 +2135,17 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
     let fixed = (logo.side() + label_gap) * 2. + arrow_gap * 2. + arrow.side();
     let room = (ctx.width - line_gap * 4. - fixed).max(0.);
     let (from_width, to_width) = fitted(from_width, to_width, room);
-    let end = |end: &HandoffLabel, width: f32| {
+    let end = |end: &HandoffLabel, side: &str, (label_found, account_found): (Vec<_>, Vec<_>), width: f32| {
         let plain = font(theme::UI_FONT, FontWeight::NORMAL, false);
+        let id = format!("{}-{side}", model.row.id);
         let account = end.account.as_ref().map(|account| {
-            let runs = vec![
-                run(" · ".len(), plain.clone(), c.muted_stronger_foreground),
-                run(account.len(), plain.clone(), c.foreground),
-            ];
-            div().min_w_0().truncate().child(StyledText::new(format!(" · {account}")).with_runs(runs))
+            let dot = div().flex_none().text_color(c.muted_stronger_foreground).child(" · ");
+            let name = marked(format!("{id}-account"), account, plain.clone(), c.foreground, account_found, cx);
+            div().min_w_0().flex().child(dot).child(div().min_w_0().truncate().child(name))
         });
-        let label =
-            crate::ui::proxied_as(end.label.clone(), GatewayMark::of(end.gateway, end.pinned), TextSize::Xs, logo)
-                .children(account);
+        let words = marked(format!("{id}-label"), &end.label, plain.clone(), c.foreground, label_found, cx);
+        let label = crate::ui::proxied_as(words, GatewayMark::of(end.gateway, end.pinned), TextSize::Xs, logo)
+            .children(account);
         div()
             .flex()
             .flex_none()
@@ -2126,21 +2166,24 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
                 .flex()
                 .flex_none()
                 .items_center()
-                .child(end(from, from_width))
+                .child(end(from, "from", found[0].clone(), from_width))
                 .child(
                     div()
                         .mx(px(arrow_gap))
                         .child(icons::symbol("arrow-right", arrow).text_color(c.muted_stronger_foreground)),
                 )
-                .child(end(to, to_width)),
+                .child(end(to, "to", found[1].clone(), to_width)),
         )
         .child(rule())
         .into_any_element()
 }
 
-/// Where the agent summarized its conversation: a line across, broken by what it came to.
-fn compaction_row(label: &str, cx: &App) -> AnyElement {
+/// Where the agent summarized its conversation: a line across, broken by a symbol and what it came to.
+fn compaction_row(model: &RowModel, label: &str, ctx: &RowContext, cx: &App) -> AnyElement {
     let c = colors(cx);
+    let found = find::in_lines(ctx.found.get(&model.row.id), &[label]).pop().unwrap_or_default();
+    let plain = font(theme::UI_FONT, FontWeight::NORMAL, false);
+    let text = marked(format!("{}-label", model.row.id), label, plain, c.muted_stronger_foreground, found, cx);
     let rule = || div().flex_1().h(px(1.)).bg(c.border);
     div()
         .h(px(ControlSize::Large.height()))
@@ -2151,10 +2194,20 @@ fn compaction_row(label: &str, cx: &App) -> AnyElement {
         .child(
             div()
                 .min_w_0()
-                .truncate()
-                .text_size(TextSize::Xs)
-                .text_color(c.muted_stronger_foreground)
-                .child(SharedString::from(label.to_owned())),
+                .flex()
+                .items_center()
+                .gap(px(ControlSize::Regular.gap()))
+                .child(
+                    icons::symbol("square-text", ControlSize::Regular.symbol()).text_color(c.muted_stronger_foreground),
+                )
+                .child(
+                    div()
+                        .min_w_0()
+                        .truncate()
+                        .text_size(TextSize::Xs)
+                        .text_color(c.muted_stronger_foreground)
+                        .child(text),
+                ),
         )
         .child(rule())
         .into_any_element()
@@ -2201,8 +2254,8 @@ pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &
         RowKind::TurnEnd { duration_ms, stopped, folded, at, .. } => {
             turn_end_row(model, *stopped, *duration_ms, *folded, *at, ctx, cx)
         }
-        RowKind::Handoff { from, to } => handoff_row(from, to, ctx, window, cx),
-        RowKind::Compaction { label } => compaction_row(label, cx),
+        RowKind::Handoff { from, to } => handoff_row(model, from, to, ctx, window, cx),
+        RowKind::Compaction { label } => compaction_row(model, label, ctx, cx),
         RowKind::Queued { text, skills, attachments, status } => {
             let files: Vec<AttachedFile> = attachments.iter().map(AttachedFile::from).collect();
             let message = Message { text, links: Vec::new(), skills: prose::skill_ranges(text, skills) };

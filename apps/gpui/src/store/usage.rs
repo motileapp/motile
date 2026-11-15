@@ -413,22 +413,22 @@ pub enum Tone {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UsageTab {
-    #[default]
-    Activity,
     /// The cost and the tokens were tabs of their own before.
+    #[default]
     #[serde(alias = "cost", alias = "tokens")]
     Spend,
     Limits,
+    Activity,
 }
 
 impl UsageTab {
-    pub const ALL: [UsageTab; 3] = [UsageTab::Activity, UsageTab::Spend, UsageTab::Limits];
+    pub const ALL: [UsageTab; 3] = [UsageTab::Spend, UsageTab::Limits, UsageTab::Activity];
 
     pub fn label(self) -> &'static str {
         match self {
-            UsageTab::Activity => "Activity",
             UsageTab::Spend => "Spend",
             UsageTab::Limits => "Limits",
+            UsageTab::Activity => "Activity",
         }
     }
 }

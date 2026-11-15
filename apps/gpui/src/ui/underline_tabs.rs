@@ -47,8 +47,7 @@ impl RenderOnce for UnderlineTabs {
         let size = self.size;
         let count = self.options.len();
         let on_select = self.on_select.filter(|_| !crate::ui::inert(cx));
-        let (light, pressed) =
-            (Surface::Background.layer(Layer::Control, c), Surface::Background.layer(Layer::ControlLit, c));
+        let light = Surface::Background.layer(Layer::Control, c);
         let foreground = c.foreground;
         div()
             .id(self.id.clone())
@@ -66,8 +65,7 @@ impl RenderOnce for UnderlineTabs {
                     .absolute()
                     .inset_0()
                     .rounded(px(size.radius()))
-                    .group_hover(group.clone(), move |lit| lit.bg(light))
-                    .group_active(group.clone(), move |lit| lit.bg(pressed));
+                    .group_hover(group.clone(), move |lit| lit.bg(light));
                 let words = div()
                     .relative()
                     .h(px(size.height()))

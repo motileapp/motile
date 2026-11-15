@@ -48,6 +48,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.PathEffect
@@ -67,6 +68,7 @@ import app.motile.platform.Platform
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
 import app.motile.theme.LocalDark
+import app.motile.theme.LocalForeground
 import app.motile.theme.LocalPalette
 import app.motile.theme.Opacity
 import app.motile.theme.Palette
@@ -306,6 +308,10 @@ fun MarkedText(
     found: List<FoundSpan> = emptyList(),
     onCurrent: ((Rect, Rect) -> Unit)? = null,
     sent: ((Int) -> Int)? = null,
+    color: Color = LocalForeground.current,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Ellipsis,
+    inlineContent: Map<String, InlineTextContent> = emptyMap(),
 ) {
     val piece = rememberTextPiece(sent)
     val palette = LocalPalette.current
@@ -323,12 +329,16 @@ fun MarkedText(
     }
     Text(
         shown, drawn.reportsCurrent(found, style, density, { layout }, onCurrent).placesPiece(piece), style = style,
+        color = color, maxLines = maxLines, overflow = overflow, inlineContent = inlineContent,
         onTextLayout = {
             layout = it
             piece?.layout = it
         },
     )
 }
+
+/** The matches moved `by` characters along, to where their piece starts in the text shown. */
+fun List<FoundSpan>.shifted(by: Int): List<FoundSpan> = map { it.copy(start = it.start + by, end = it.end + by) }
 
 /** Tells `onCurrent` where the current match is once the text is laid out and placed. */
 fun Modifier.reportsCurrent(

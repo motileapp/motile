@@ -45,6 +45,30 @@ impl Marks {
     }
 }
 
+/// What was found in each of the lines of a row whose text is its labels one per line, as bytes of
+/// each line.
+pub fn in_lines(marks: Option<&Marks>, lines: &[&str]) -> Vec<Vec<(Range<usize>, bool)>> {
+    let mut at = 0;
+    lines
+        .iter()
+        .map(|line| {
+            let start = at;
+            let end = start + line.encode_utf16().count() as u32;
+            at = end + 1;
+            let Some(marks) = marks else { return Vec::new() };
+            let inside = |[from, len]: &[u32; 2]| *from >= start && from + len <= end;
+            let in_line = Marks {
+                ranges: marks.ranges.iter().filter(|range| inside(range)).copied().collect(),
+                current: marks
+                    .current
+                    .filter(|&current| marks.ranges.get(current).is_some_and(inside))
+                    .map(|current| marks.ranges[..current].iter().filter(|range| inside(range)).count()),
+            };
+            in_line.in_text(line, start)
+        })
+        .collect()
+}
+
 /// The UTF-16 units of `text` before its byte `byte`.
 pub fn units_before(text: &str, byte: usize) -> u32 {
     text.char_indices().take_while(|(at, _)| *at < byte).map(|(_, character)| character.len_utf16() as u32).sum()
@@ -65,6 +89,15 @@ mod tests {
         assert_eq!(marks.in_text("café au lait", 0), vec![(2..7, false), (10..13, true)]);
         assert_eq!(marks.in_text("lait", 8), vec![(1..4, true)], "a stretch further on");
         assert!(marks.in_text("ca", 0).iter().all(|(range, _)| range.end <= 2), "cut at the stretch's end");
+    }
+
+    #[test]
+    fn a_match_falls_in_the_line_it_is_in() {
+        let marks = Marks { ranges: vec![[0, 4], [11, 4]], current: Some(1) };
+        let found = in_lines(Some(&marks), &["Opus", "Work", "Sonnet", ""]);
+        assert_eq!(found, vec![vec![(0..4, false)], vec![], vec![(1..5, true)], vec![]]);
+        let marks = Marks { ranges: vec![[5, 4]], current: Some(0) };
+        assert_eq!(in_lines(Some(&marks), &["src", "hub.rs"]), vec![vec![], vec![(1..5, true)]]);
     }
 
     #[test]

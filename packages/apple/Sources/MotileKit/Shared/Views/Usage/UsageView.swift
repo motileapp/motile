@@ -6,29 +6,29 @@ import SwiftUI
 @Observable
 final class UsageModel {
     enum Tab: String, CaseIterable, Identifiable {
-        case activity, spend, limits
+        case spend, limits, activity
 
         var id: Self { self }
 
         var label: String {
             switch self {
-            case .activity: "Activity"
             case .spend: "Spend"
             case .limits: "Limits"
+            case .activity: "Activity"
             }
         }
 
         var symbol: Symbol {
             switch self {
-            case .activity: .activity
             case .spend: .coins
             case .limits: .gauge
+            case .activity: .activity
             }
         }
 
-        /// The tab kept, where the cost and the tokens were tabs of their own before Spend.
+        /// The tab kept, or Spend, where the cost and the tokens were tabs of their own before.
         init(kept: String) {
-            self = Tab(rawValue: kept) ?? (Measure(rawValue: kept) == nil ? .activity : .spend)
+            self = Tab(rawValue: kept) ?? .spend
         }
     }
 
