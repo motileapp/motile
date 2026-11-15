@@ -4516,6 +4516,17 @@ async fn agents_started_in_the_background_wake_the_agent_that_started_them() {
     assert!(spent[&Agent::Claude].is_some_and(|cost| cost >= 0.0138), "{spent:?}");
     assert_eq!(spent[&Agent::Codex], None, "no price names the fake Codex's model");
 
+    let price = json!({"litellm_provider": "openai", "input_cost_per_token": 1e-6, "output_cost_per_token": 1e-5});
+    harness.hub.set_prices(motile_server::pricing::Prices::from_list(&json!({"gpt-6.1-sol": price})));
+    harness.hub.price_started_agents().await;
+    let priced = transcript_once(&connection, &parent, |transcript| {
+        started_agents(transcript).values().all(|agent| agent.cost_usd.is_some())
+    })
+    .await;
+    let codex =
+        started_agents(&priced).into_values().find(|agent| agent.runs_on.as_ref().unwrap().agent == Agent::Codex);
+    assert!(codex.and_then(|agent| agent.cost_usd).is_some_and(|cost| cost > 0.0), "once the price is known");
+
     let children: Vec<Thread> = [thread_where(&mut list, |thread| thread.parent.is_some()).await].into();
     assert!(children.iter().all(|child| child.parent.as_ref().unwrap().thread_id == parent));
 }
