@@ -75,11 +75,11 @@ const READING_THE_GUIDE: &str = "\n\nBefore you write a program, read the motile
 /// How the agents start agents on the server's other accounts, and reach its other threads.
 const STARTING_AGENTS: &str = "\n\nYou can start agents on the other accounts of the user's server, other Claude Code \
      logins or Codex, with the motile tools: list_accounts, start_agent, agent_status, message_agent, answer_agent, \
-     approve_agent and stop_agent. Use them when the user asks for another account, agent or model, or for work that \
+     approve_agent, stop_agent and compact_agent. Use them when the user asks for another account, agent or model, or for work that \
      goes better apart while you go on. For work your own subagents do as well, use those. Each agent is given only the \
      prompt you write. You are told when one finishes, asks something or waits for a tool call to be allowed, so end your \
      turn instead of checking on it, unless you need its result to go on, which start_agent's and agent_status's wait is \
-     for. The same tools reach the server's other threads (approve_agent only those you started and theirs), and \
+     for. agent_status also says how full each one's context is; compact_agent frees it. The same tools reach the server's other threads (approve_agent only those you started and theirs), and \
      create_thread, list_threads, update_thread, thread_queue, list_projects, add_project, read_pull_request, \
      link_pull_request and git_status start, find and change threads, projects and pull requests when the user asks. A motile tool that isn't listed may load only when first used: look \
      it up with your tool search, or call it by name, before you decide it's missing.";
@@ -197,6 +197,11 @@ pub enum AgentEvent {
     Compacting {
         active: bool,
     },
+    /// It summarized its conversation so far: from `before` tokens of context to `after`.
+    Compacted {
+        before: Option<u64>,
+        after: Option<u64>,
+    },
     /// What the agent has running in the background, whenever that changes.
     Background(Background),
     /// Another turn started in the same process: for a prompt it was given, or by itself for
@@ -283,6 +288,14 @@ impl Turn<'_> {
             Agent::Codex => codex::arguments(),
         }
     }
+}
+
+/// What the agents are given to summarize their conversation so far, which frees their context.
+pub const COMPACT: &str = "/compact";
+
+/// Whether a message is the command that compacts the context, as typed or picked from the menu.
+pub fn compacts(text: &str, attachments: &[String]) -> bool {
+    attachments.is_empty() && matches!(text.trim(), "/compact" | "$compact")
 }
 
 /// The first line a new process is given. Claude Code takes the prompt at once; Codex is given

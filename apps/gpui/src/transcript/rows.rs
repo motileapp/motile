@@ -2138,6 +2138,28 @@ fn handoff_row(from: &HandoffLabel, to: &HandoffLabel, ctx: &RowContext, window:
         .into_any_element()
 }
 
+/// Where the agent summarized its conversation: a line across, broken by what it came to.
+fn compaction_row(label: &str, cx: &App) -> AnyElement {
+    let c = colors(cx);
+    let rule = || div().flex_1().h(px(1.)).bg(c.border);
+    div()
+        .h(px(ControlSize::Large.height()))
+        .flex()
+        .items_center()
+        .gap(px(ControlSize::Regular.padding()))
+        .child(rule())
+        .child(
+            div()
+                .min_w_0()
+                .truncate()
+                .text_size(TextSize::Xs)
+                .text_color(c.muted_stronger_foreground)
+                .child(SharedString::from(label.to_owned())),
+        )
+        .child(rule())
+        .into_any_element()
+}
+
 /// The widths of the two labels: as wide as they are where they fit, else the shorter one whole
 /// and the other what is left, or each half.
 fn fitted(from: f32, to: f32, room: f32) -> (f32, f32) {
@@ -2180,6 +2202,7 @@ pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &
             turn_end_row(model, *stopped, *duration_ms, *folded, *at, ctx, cx)
         }
         RowKind::Handoff { from, to } => handoff_row(from, to, ctx, window, cx),
+        RowKind::Compaction { label } => compaction_row(label, cx),
         RowKind::Queued { text, skills, attachments, status } => {
             let files: Vec<AttachedFile> = attachments.iter().map(AttachedFile::from).collect();
             let message = Message { text, links: Vec::new(), skills: prose::skill_ranges(text, skills) };

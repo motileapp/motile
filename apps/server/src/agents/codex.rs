@@ -23,6 +23,8 @@ const FIRST_TURN: u64 = 4;
 const METHOD_NOT_FOUND: i64 = -32601;
 /// How the id of a message steered into a running turn starts.
 const STEER: &str = "steer:";
+/// How the id of the command that compacts the thread starts.
+const COMPACT: &str = "compact:";
 
 pub fn arguments() -> Vec<String> {
     vec!["app-server".to_string()]
@@ -45,6 +47,9 @@ fn turn_params(thread_id: &str, prompt: &str, id: &str) -> Value {
 
 /// A prompt for a process whose turn has ended; it starts the next one with the thread's settings.
 pub fn input(thread_id: &str, prompt: &str, id: &str, settings: Settings) -> String {
+    if prompt == super::COMPACT {
+        return compact(&format!("{COMPACT}{id}"), thread_id);
+    }
     let mut params = turn_params(thread_id, prompt, id);
     with_settings(&mut params, settings);
     line(json!({"id": format!("message:{id}"), "method": "turn/start", "params": params}))
@@ -65,6 +70,11 @@ pub fn steer(thread_id: &str, turn_id: &str, prompt: &str, id: &str) -> String {
     let mut params = turn_params(thread_id, prompt, id);
     params["expectedTurnId"] = json!(turn_id);
     line(json!({"id": format!("{STEER}{id}"), "method": "turn/steer", "params": params}))
+}
+
+/// Has Codex summarize the thread so far in a turn of its own, which frees its context.
+fn compact(id: &str, thread_id: &str) -> String {
+    line(json!({"id": id, "method": "thread/compact/start", "params": {"threadId": thread_id}}))
 }
 
 pub fn stop(thread_id: &str, turn_id: &str) -> String {
@@ -194,6 +204,8 @@ pub struct Parser {
     limited: bool,
     /// When the usage limits that ran out reset, as Codex last said.
     resets_at: Option<f64>,
+    /// How large its own thread's conversation was at its last answer, until it is compacted.
+    context_used: Option<u64>,
 }
 
 impl Parser {
@@ -251,6 +263,7 @@ impl Parser {
             reasoned: None,
             limited: false,
             resets_at: None,
+            context_used: None,
         }
     }
 
@@ -272,6 +285,13 @@ impl Parser {
                 return vec![];
             }
             return vec![AgentEvent::TooLate { id: steered.to_string() }];
+        }
+        // It has no message of its own to come back as taken; its answer says it was.
+        if let Some(compacted) = id.as_str().and_then(|id| id.strip_prefix(COMPACT)) {
+            return match message["error"]["message"].as_str() {
+                Some(error) => vec![AgentEvent::Failed { message: error.to_string() }],
+                None => vec![AgentEvent::Taken { id: compacted.to_string() }],
+            };
         }
         let Some(id) = id.as_u64() else { return vec![] };
         if let Some(error) = message["error"]["message"].as_str() {
@@ -319,6 +339,9 @@ impl Parser {
 
     fn first_turn(&self, prompt: &str) -> String {
         let Some(thread_id) = self.thread_id.as_deref() else { return String::new() };
+        if prompt == super::COMPACT {
+            return compact(&format!("{COMPACT}{}", self.prompt_id), thread_id);
+        }
         let mut params = turn_params(thread_id, prompt, &self.prompt_id);
         let settings = Settings { model: self.model.as_deref(), effort: self.effort.as_deref() };
         with_settings(&mut params, settings);
@@ -421,6 +444,7 @@ impl Parser {
         // Codex counts what it read from the cache and wrote to it as input too.
         let size = Some(last[0] + last[3]).filter(|size| *size > 0);
         let context_used = size.filter(|_| own);
+        self.context_used = context_used.or(self.context_used);
         let grown = size.filter(|_| !own).and_then(|size| self.grow_agent(thread_id, size));
         let known = self.spent.insert(thread_id.to_string(), total);
         let [input, cache_read, cache_write, output] = match known {
@@ -526,6 +550,11 @@ impl Parser {
                 Some(message_id) if !completed => vec![AgentEvent::Taken { id: message_id.to_string() }],
                 _ => vec![],
             },
+            Some("contextCompaction") if !completed => vec![AgentEvent::Compacting { active: true }],
+            Some("contextCompaction") => vec![
+                AgentEvent::Compacting { active: false },
+                AgentEvent::Compacted { before: self.context_used.take(), after: None },
+            ],
             Some("agentMessage") if !completed => vec![AgentEvent::TextStarted { id }],
             Some("agentMessage") => {
                 let text = item["text"].as_str().unwrap_or_default().to_string();
@@ -1049,6 +1078,32 @@ mod tests {
         assert_eq!((&params["model"], &params["effort"]), (&json!("gpt-6.1-sol"), &json!("low")));
         assert_eq!(params["collaborationMode"]["mode"], "default");
         assert_eq!(params["collaborationMode"]["settings"]["reasoning_effort"], "low");
+    }
+
+    #[test]
+    fn compacting_asks_codex_for_a_compaction_and_says_how_large_the_context_was() {
+        let settings = Settings { model: None, effort: None };
+        let request: Value = serde_json::from_str(&input("thread1", "/compact", "m2", settings)).unwrap();
+        assert_eq!(
+            (&request["method"], &request["params"]),
+            (&json!("thread/compact/start"), &json!({"threadId": "thread1"}))
+        );
+
+        let mut parser = parser(turn(Access::Full));
+        let started = format!(r#"{{"id":{},"result":{{}}}}"#, request["id"]);
+        assert_eq!(parser.parse(&started), vec![AgentEvent::Taken { id: "m2".into() }]);
+        let usage = r#"{"method":"thread/tokenUsage/updated","params":{"threadId":"thread1","tokenUsage":{"total":{},"last":{"inputTokens":14800,"outputTokens":240}}}}"#;
+        parser.parse(usage);
+        let item = |method: &str| {
+            format!(r#"{{"method":"{method}","params":{{"item":{{"type":"contextCompaction","id":"c1"}}}}}}"#)
+        };
+        assert_eq!(parser.parse(&item("item/started")), vec![AgentEvent::Compacting { active: true }]);
+        assert_eq!(
+            parser.parse(&item("item/completed")),
+            vec![AgentEvent::Compacting { active: false }, AgentEvent::Compacted { before: Some(15040), after: None }]
+        );
+        let refused = format!(r#"{{"id":{},"error":{{"message":"no rollout"}}}}"#, request["id"]);
+        assert_eq!(parser.parse(&refused), vec![AgentEvent::Failed { message: "no rollout".into() }]);
     }
 
     #[test]

@@ -119,6 +119,8 @@ const UNSENT_UPLOADS_STAY: Duration = Duration::from_secs(24 * 3600);
 const SWEEP_FILES_EVERY: Duration = Duration::from_secs(3600);
 /// How long a file kept for a thread waits for the thread to show it.
 const UNSHOWN_MEDIA_STAYS: Duration = Duration::from_secs(3600);
+const NOTHING_TO_COMPACT: &str =
+    "There is nothing to compact yet: the thread's agent has no conversation here to summarize.";
 const NO_ROOM_FOR_HANDOFF: &str = "There isn't room in this model's context for what was said before. Pick a model \
      with a larger context, or start a new thread.";
 
@@ -1331,6 +1333,10 @@ impl Hub {
         if let Some(gone) = attachments.iter().find(|path| !Path::new(path).is_file()) {
             bail!("{} is no longer on your server. Attach it again.", file_name(gone));
         }
+        let compacts = agents::compacts(&text, &attachments);
+        if compacts && thread_id.is_none() {
+            bail!("{NOTHING_TO_COMPACT}");
+        }
         if !motile_protocol::skills::mentions(&text).is_empty() {
             self.list_skills_once(thread_id.as_deref(), new_thread.as_ref()).await;
         }
@@ -1374,6 +1380,9 @@ impl Hub {
             && self.has_message(&live, message_id)?
         {
             return Ok(thread_id);
+        }
+        if compacts && self.saved_session(&live.stored.thread)?.is_none() {
+            bail!("{NOTHING_TO_COMPACT}");
         }
         let live = &mut *live;
         // A message goes on with the thread, so it no longer waits to be continued.
@@ -4118,6 +4127,12 @@ impl Hub {
                     live.send_activity();
                 }
             }
+            AgentEvent::Compacted { before, after } => {
+                let thread = &live.stored.thread;
+                let session = self.store.session(&thread.id, &self.continuation(thread))?;
+                let before = before.or_else(|| session.and_then(|session| session.context_used));
+                live.append(store, ItemKind::Compaction { before, after })?;
+            }
             AgentEvent::Usage { spent, total, context_window, context_used } => {
                 let thread = &live.stored.thread;
                 let session_id = live.stored.session_id.as_deref().unwrap_or(&thread.id);
@@ -4760,6 +4775,10 @@ impl Live {
     /// Writes the queued message to the turn that runs, which takes it at once. `false` when the
     /// agent can't take it.
     fn steer(&mut self, store: &Store, index: usize) -> anyhow::Result<bool> {
+        // Compacting summarizes a conversation that has stopped, so it waits for the turn to end.
+        if agents::compacts(&self.queued[index].text, &self.queued[index].attachments) {
+            return Ok(false);
+        }
         self.note_skills(&self.queued[index].skills.clone());
         let queued = &self.queued[index];
         let thread = &self.stored.thread;
@@ -5547,6 +5566,9 @@ fn activity_uses(
 }
 
 fn prompt(message: &Queued) -> String {
+    if agents::compacts(&message.text, &message.attachments) {
+        return agents::COMPACT.to_string();
+    }
     let text = ui::told(&message.text, message.context.as_ref(), &message.programs);
     with_attachments(&text, &message.attachments)
 }

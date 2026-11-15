@@ -254,6 +254,10 @@ pub enum RowKind {
         from: HandoffLabel,
         to: HandoffLabel,
     },
+    /// The agent summarized its conversation so far: "Context compacted · 21k → 2.9k tokens".
+    Compaction {
+        label: String,
+    },
     /// An agent the thread's agent started, or what it was told of one, which opens from the row.
     Agent {
         #[serde(flatten)]
@@ -1454,6 +1458,9 @@ fn render(item: &Item, cwd: &str, started: &Started, streaming: Option<&mut Hash
         ItemKind::Handoff { from, to, .. } => {
             vec![row(0, RowKind::Handoff { from: HandoffLabel::new(from), to: HandoffLabel::new(to) })]
         }
+        ItemKind::Compaction { before, after } => {
+            vec![row(0, RowKind::Compaction { label: compaction_label(*before, *after) })]
+        }
         ItemKind::Notice { notice, .. } => {
             let now = started.views.get(&notice.thread_id).filter(|now| agents::worked_since(now, item.created_at));
             let agent = match now {
@@ -1463,6 +1470,15 @@ fn render(item: &Item, cwd: &str, started: &Started, streaming: Option<&mut Hash
             vec![row(0, RowKind::Agent { agent })]
         }
         ItemKind::Unknown => Vec::new(),
+    }
+}
+
+fn compaction_label(before: Option<u64>, after: Option<u64>) -> String {
+    let count = crate::gateway::count;
+    match (before, after) {
+        (Some(before), Some(after)) => format!("Context compacted · {} → {} tokens", count(before), count(after)),
+        (Some(before), None) => format!("Context compacted · {} tokens before", count(before)),
+        _ => "Context compacted".to_string(),
     }
 }
 
@@ -2255,6 +2271,7 @@ mod tests {
             RowKind::Fold { open, .. } => format!("fold{}", if *open { " open" } else { "" }),
             RowKind::TurnEnd { folded, .. } => format!("end{}", if *folded { " folded" } else { "" }),
             RowKind::Handoff { from, to } => format!("{} -> {}", from.label, to.label),
+            RowKind::Compaction { label } => label.clone(),
             RowKind::Agent { agent } => {
                 let card = agent.card.map(|card| format!(" {card:?}")).unwrap_or_default();
                 format!("({}: {}{card})", agent.title, agent.label)
@@ -2731,6 +2748,34 @@ mod tests {
         assert_eq!(
             listed(&transcript),
             ["apps/server/src +50", "crates/core/src/render +5", "  rows.rs +5", "README.md +1"]
+        );
+    }
+
+    #[test]
+    fn a_compaction_says_how_far_it_shrank_the_context_in_a_row_of_its_own() {
+        use motile_protocol::wire::TurnSummary;
+        let compaction = |before, after| ItemKind::Compaction { before, after };
+        let mut transcript = Transcript::new("/srv/api");
+        transcript.load(vec![
+            item("u1", 0, said("$compact")),
+            item("c1", 1, compaction(Some(21_438), Some(2_856))),
+            item("e1", 2, ItemKind::TurnEnd { summary: TurnSummary::default() }),
+            item("u2", 3, said("$compact")),
+            item("c2", 4, compaction(Some(15_040), None)),
+            item("c3", 5, compaction(None, None)),
+            item("e2", 6, ItemKind::TurnEnd { summary: TurnSummary::default() }),
+        ]);
+        assert_eq!(
+            outline(&transcript),
+            [
+                "user",
+                "Context compacted · 21k → 2.9k tokens",
+                "end",
+                "user",
+                "Context compacted · 15k tokens before",
+                "Context compacted",
+                "end"
+            ]
         );
     }
 

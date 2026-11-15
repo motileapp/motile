@@ -34,7 +34,7 @@ use crate::ui;
 
 pub const SERVER_NAME: &str = "motile";
 /// The tools as the agents name them.
-pub const TOOLS: [&str; 19] = [
+pub const TOOLS: [&str; 20] = [
     "mcp__motile__read_thread",
     "mcp__motile__list_accounts",
     "mcp__motile__start_agent",
@@ -43,6 +43,7 @@ pub const TOOLS: [&str; 19] = [
     "mcp__motile__answer_agent",
     "mcp__motile__approve_agent",
     "mcp__motile__stop_agent",
+    "mcp__motile__compact_agent",
     "mcp__motile__create_thread",
     "mcp__motile__list_threads",
     "mcp__motile__update_thread",
@@ -250,8 +251,10 @@ impl Tools {
     }
 
     /// How the agents you started are doing, or any threads of your server, with the last reply of
-    /// each that has finished, and the questions or the tool call each waits with. With `wait`,
-    /// returns once all of them have finished, one asks something, or `timeout_seconds` pass.
+    /// each that has finished, and the questions or the tool call each waits with. Each says what
+    /// it does now, its tool calls, how long it has worked, and how full its context is when its
+    /// agent has said. With `wait`, returns once all of them have finished, one asks something, or
+    /// `timeout_seconds` pass.
     #[tool(name = "agent_status", annotations(title = "Check on agents", read_only_hint = true))]
     async fn agent_status(
         &self,
@@ -326,6 +329,23 @@ impl Tools {
         answered(state.await)
     }
 
+    /// Compacts the context of an agent you started, or of any thread of your server with no more
+    /// access than you: its agent summarizes its conversation so far, which frees the context that
+    /// agent_status says is full. An agent at work compacts once its turn ends. You are told when
+    /// it has, as for a message.
+    #[tool(name = "compact_agent", annotations(title = "Compact an agent's context"))]
+    async fn compact_agent(
+        &self,
+        Extension(parts): Extension<Parts>,
+        Parameters(request): Parameters<CompactAgent>,
+    ) -> CallToolResult {
+        let state = async {
+            let hub = self.hub()?;
+            hub.message_child(&caller(&parts)?, &self.thread_id(&request.id)?, crate::agents::COMPACT.to_string()).await
+        };
+        answered(state.await)
+    }
+
     /// Starts a thread of its own, which the user's sidebar lists, as the user starts one: not an
     /// agent of yours, so you aren't told how it does. Follow it with agent_status if you need to.
     /// It works in its project's folder unless `worktree` is set.
@@ -340,7 +360,7 @@ impl Tools {
     }
 
     /// Lists your server's threads, the last active first, or with `query` those whose messages
-    /// have its words, the best first.
+    /// have its words, the best first, each with what agent_status says of its work.
     #[tool(name = "list_threads", annotations(title = "List threads", read_only_hint = true))]
     async fn list_threads(&self, Parameters(request): Parameters<ListThreads>) -> CallToolResult {
         let listed = async { self.hub()?.list_threads(request).await };
@@ -519,6 +539,12 @@ struct MessageAgent {
     /// The thread's id, or its first 8 characters or more.
     id: String,
     text: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+struct CompactAgent {
+    /// The thread's id, or its first 8 characters or more.
+    id: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -779,6 +805,10 @@ fn described(item: &Item) -> (&'static str, &'static str, String) {
         ItemKind::TurnEnd { .. } => ("turn_end", "done", "Turn ended".to_string()),
         ItemKind::Handoff { from, to, .. } => ("handoff", "done", format!("{} → {}", end_name(from), end_name(to))),
         ItemKind::Notice { text, .. } => ("notice", "done", text.clone()),
+        ItemKind::Compaction { before, after } => {
+            let tokens = |count: &Option<u64>| count.map_or("?".to_string(), |count| count.to_string());
+            ("compaction", "done", format!("Context compacted from {} to {} tokens", tokens(before), tokens(after)))
+        }
         ItemKind::Unknown => ("unknown", "done", String::new()),
     }
 }

@@ -72,6 +72,8 @@ class RowModel(
         class Changes(val content: ChangesContent) : Kind
         class TurnEnd(val content: TurnEndContent) : Kind
         class Handoff(val content: HandoffContent) : Kind
+        /** Where the agent summarized its conversation, and how far that shrank its context. */
+        class Compaction(val label: String) : Kind
         /** An agent the thread's agent started, or what it was told of one. */
         class Agent(val content: AgentContent) : Kind
         /** Agents started one after the other, as one row that opens into a card of them. */
@@ -141,6 +143,7 @@ class RowModel(
                 "changes" -> Kind.Changes(ChangesContent(json))
                 "turn_end" -> Kind.TurnEnd(TurnEndContent(json))
                 "handoff" -> Kind.Handoff(HandoffContent(json))
+                "compaction" -> Kind.Compaction(json.string("label"))
                 "agent" -> Kind.Agent(AgentContent(json))
                 "agents" -> Kind.Agents(AgentsContent(json))
                 "queued" -> Kind.Queued(QueuedContent(MessageText(json, muted = true), json.objects("attachments").map(::AttachedFile), json.string("status")))

@@ -190,6 +190,11 @@ pub struct Parser {
     /// it still works.
     tasks: HashMap<String, (String, bool)>,
     compacting: bool,
+    /// The turn ran a command of Claude Code's own, such as `/compact`, which ends it with a result
+    /// of no turns.
+    local_command: bool,
+    /// The turn compacted the conversation, which says so in a row of its own.
+    compacted: bool,
     /// What Claude Code said about a failed API call, which it reports again as the turn's error.
     api_error: Option<String>,
     /// The failed API call was refused for the usage limit.
@@ -224,10 +229,10 @@ impl Parser {
                 let grown = self.note_context(&object["message"]["usage"]);
                 self.parse_assistant(&object["message"]).into_iter().chain(grown).collect()
             }
-            Some("user") if object["isReplay"] == true => match object["uuid"].as_str() {
-                Some(id) => vec![AgentEvent::Taken { id: id.to_string() }],
-                None => vec![],
-            },
+            Some("user") if object["isReplay"] == true => {
+                let taken = object["uuid"].as_str().map(|id| AgentEvent::Taken { id: id.to_string() });
+                taken.into_iter().chain(self.local_output(&object)).collect()
+            }
             // A message the next one cut off before the model answered it is never repeated.
             Some("command_lifecycle") if matches!(object["state"].as_str(), Some("started" | "completed")) => {
                 match object["command_uuid"].as_str() {
@@ -242,10 +247,12 @@ impl Parser {
                 vec![AgentEvent::ApprovalWithdrawn { id }]
             }
             // A resumed session whose monitor was cut off starts by ending a turn nobody took.
-            Some("result") if object["num_turns"] == 0 && object["is_error"] == false => vec![],
+            Some("result") if object["num_turns"] == 0 && object["is_error"] == false && !self.local_command => vec![],
             Some("result") if missing_session(&object) => vec![AgentEvent::SessionMissing],
             Some("result") => {
                 self.ended = true;
+                self.local_command = false;
+                self.compacted = false;
                 let usage = self.parse_usage(&object["modelUsage"]);
                 let limited = self.limit(&object);
                 let result = parse_result(&object, self.api_error.take());
@@ -370,13 +377,44 @@ impl Parser {
         vec![AgentEvent::Compacting { active }]
     }
 
+    /// The conversation was summarized: the row that says so, and the context it takes now.
+    fn compacted(&mut self, metadata: &Value) -> Vec<AgentEvent> {
+        self.local_command = true;
+        self.compacted = true;
+        let (before, after) = (metadata["pre_tokens"].as_u64(), metadata["post_tokens"].as_u64());
+        self.context_used = after.or(self.context_used);
+        let mut events = self.set_compacting(false);
+        events.push(AgentEvent::Compacted { before, after });
+        if let Some(after) = after {
+            events.push(AgentEvent::Usage {
+                spent: vec![],
+                total: false,
+                context_window: None,
+                context_used: Some(after),
+            });
+        }
+        events
+    }
+
+    /// A command of Claude Code's own that ran, and what it printed unless it compacted.
+    fn local_output(&mut self, object: &Value) -> Vec<AgentEvent> {
+        let content = content_text(&object["message"]["content"]);
+        let Some(output) = content.strip_prefix("<local-command-stdout>") else { return vec![] };
+        self.local_command = true;
+        let output = output.strip_suffix("</local-command-stdout>").unwrap_or(output).trim();
+        let Some(id) = object["uuid"].as_str().filter(|_| !self.compacted && !output.is_empty()) else {
+            return vec![];
+        };
+        vec![AgentEvent::Text { id: id.to_string(), text: output.to_string() }]
+    }
+
     fn parse_system(&mut self, object: &Value) -> Vec<AgentEvent> {
         match object["subtype"].as_str() {
             Some("task_started") => self.task_started(object),
             Some("task_progress") => self.task_progress(object),
             Some("task_notification") => self.task_ended(object),
             Some("status") => self.set_compacting(object["status"] == "compacting"),
-            Some("compact_boundary") => self.set_compacting(false),
+            Some("compact_boundary") => self.compacted(&object["compact_metadata"]),
             Some("init") => {
                 self.model = text(&object["model"]).or(self.model.take());
                 let session_id = object["session_id"].as_str();
@@ -830,6 +868,48 @@ mod tests {
     }
 
     #[test]
+    fn a_compact_command_ends_its_turn_with_how_far_it_shrank_the_context() {
+        let mut parser = Parser::default();
+        let lines = [
+            r#"{"type":"command_lifecycle","state":"started","command_uuid":"m2"}"#,
+            r#"{"type":"system","subtype":"status","status":"compacting"}"#,
+            r#"{"type":"system","subtype":"compact_boundary","compact_metadata":{"trigger":"manual","pre_tokens":21438,"post_tokens":2856}}"#,
+            r#"{"type":"user","uuid":"s1","isReplay":false,"message":{"role":"user","content":"This session is being continued"}}"#,
+            r#"{"type":"user","uuid":"r1","isReplay":true,"message":{"role":"user","content":"<local-command-stdout>Compacted </local-command-stdout>"}}"#,
+        ];
+        let events: Vec<AgentEvent> = lines.iter().flat_map(|line| parser.parse(line)).collect();
+        assert_eq!(
+            events,
+            [
+                AgentEvent::Taken { id: "m2".into() },
+                AgentEvent::Compacting { active: true },
+                AgentEvent::Compacting { active: false },
+                AgentEvent::Compacted { before: Some(21438), after: Some(2856) },
+                AgentEvent::Usage { spent: vec![], total: false, context_window: None, context_used: Some(2856) },
+                AgentEvent::Taken { id: "r1".into() },
+            ]
+        );
+        let ended = r#"{"type":"result","subtype":"success","is_error":false,"num_turns":0,"result":""}"#;
+        assert!(matches!(parser.parse(ended)[..], [AgentEvent::Completed { .. }]));
+    }
+
+    #[test]
+    fn what_a_command_of_claude_codes_own_prints_is_its_reply() {
+        let mut parser = Parser::default();
+        let printed = r#"{"type":"user","uuid":"r1","isReplay":true,"message":{"role":"user","content":"<local-command-stdout>Context: 12k of 200k</local-command-stdout>"}}"#;
+        assert_eq!(
+            parser.parse(printed),
+            [
+                AgentEvent::Taken { id: "r1".into() },
+                AgentEvent::Text { id: "r1".into(), text: "Context: 12k of 200k".into() }
+            ]
+        );
+        let ended = r#"{"type":"result","subtype":"success","is_error":false,"num_turns":0,"result":""}"#;
+        assert!(matches!(parser.parse(ended)[..], [AgentEvent::Completed { .. }]));
+        assert_eq!(parser.parse(ended), vec![], "the next empty result is a resumed session's again");
+    }
+
+    #[test]
     fn the_empty_turn_a_resumed_session_starts_with_is_left_out() {
         let mut parser = Parser::default();
         let empty = r#"{"type":"result","subtype":"success","is_error":false,"num_turns":0,"result":""}"#;
@@ -1072,7 +1152,7 @@ mod tests {
         assert!(pointed.contains("read the motile tool openui_guide"));
         assert!(pointed.ends_with("check_ui before you send it."));
         assert!(!pointed.contains("## Component Signatures"));
-        assert!(pointed.len() < 4 * 1024, "{} bytes", pointed.len());
+        assert!(pointed.len() < 5 * 1024, "{} bytes", pointed.len());
 
         let taught = super::super::instructions(&turn(None));
         assert!(!taught.contains("openui_guide") && !taught.contains("start_agent"));

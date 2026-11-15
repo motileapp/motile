@@ -96,6 +96,8 @@ final class RowModel {
         case changes(ChangesContent)
         case turnEnd(TurnEnd)
         case handoff(HandoffContent)
+        /// The agent summarized its conversation; the core's label says how far the context shrank.
+        case compaction(String)
         /// An agent the thread's agent started, or what it was told of one.
         case agent(AgentContent)
         /// Agents started one after the other, as one row that opens into a card of them.
@@ -172,6 +174,8 @@ final class RowModel {
             kind = .turnEnd(TurnEnd(json: json))
         case "handoff":
             kind = .handoff(HandoffContent(json: json))
+        case "compaction":
+            kind = .compaction(json.string("label"))
         case "agent":
             kind = .agent(AgentContent(json: json))
         case "agents":
