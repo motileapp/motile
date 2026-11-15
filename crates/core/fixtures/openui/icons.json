@@ -107,7 +107,7 @@
           },
           "component": "Icon",
           "icon": {
-            "name": "triangle-alert",
+            "name": "triangle-exclamation-point",
             "glyph": ""
           },
           "size": 24.0,

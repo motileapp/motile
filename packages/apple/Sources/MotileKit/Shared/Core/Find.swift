@@ -20,6 +20,25 @@ struct FoundMarks: Equatable {
     }
 }
 
+/// A match in a label, in UTF-16 units of the label as drawn, and whether it is the current one.
+typealias FoundRange = (range: NSRange, current: Bool)
+
+extension FoundMarks {
+    /// The matches in each of a row's labels, which the text the core sent has one per line.
+    func split(_ lengths: [Int]) -> [[FoundRange]] {
+        var start = 0
+        return lengths.map { length in
+            defer { start += length + 1 }
+            let label = NSRange(location: start, length: length)
+            return ranges.enumerated().compactMap { index, range in
+                let inLabel = NSIntersectionRange(range, label)
+                guard inLabel.length > 0 else { return nil }
+                return (NSRange(location: inLabel.location - start, length: inLabel.length), index == current)
+            }
+        }
+    }
+}
+
 /// Where finding in the thread starts: the first row that shows below the bars, and the first
 /// character of its first whole line there, in UTF-16 units of the text the core sent. A long
 /// reply is a single row, so its first match can be far above what shows.

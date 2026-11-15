@@ -10,7 +10,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const VERSION = "0.562.0";
+const VERSION = "1.73.0";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const font = join(root, "packages/apple/Sources/MotileKit/Fonts/lucide.ttf");
 const out = join(root, "crates/core/src/render/openui/tree/lucide.rs");
@@ -58,11 +58,11 @@ function characters(path) {
 }
 
 const info = JSON.parse(await fetchText(`https://cdn.jsdelivr.net/npm/lucide-static@${VERSION}/font/info.json`));
-const loader = await fetchText(`https://cdn.jsdelivr.net/npm/lucide-react@${VERSION}/dist/esm/dynamicIconImports.js`);
+const loader = await fetchText(`https://cdn.jsdelivr.net/npm/lucide-react@${VERSION}/dist/esm/dynamicIconImports.mjs`);
 const inFont = characters(font);
 
 const codepoints = new Map(Object.entries(info).map(([name, entry]) => [name, parseInt(entry.encodedCode.slice(1), 16)]));
-const names = [...loader.matchAll(/"([a-z0-9-]+)": \(\) => import\('\.\/icons\/([a-z0-9-]+)\.js'\)/g)].map(([, name, icon]) => [name, icon]);
+const names = [...loader.matchAll(/"([a-z0-9-]+)": \(\) => import\('\.\/icons\/([a-z0-9-]+)\.mjs'\)/g)].map(([, name, icon]) => [name, icon]);
 if (names.length < codepoints.size) throw new Error("lucide-react's names weren't found");
 
 const rows = names

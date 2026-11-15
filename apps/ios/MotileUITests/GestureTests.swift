@@ -208,6 +208,7 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(shown(newThread))
         app.buttons["Account"].tap()
         app.buttons["Usage"].tap()
+        app.buttons["Activity"].tap()
         let heading = app.staticTexts["Over time"]
         let below = app.staticTexts["When you work"]
         XCTAssertTrue(shown(heading))

@@ -495,6 +495,25 @@ extension PlatformImage {
     }
 }
 
+/// A label drawn on one line with what finding in the thread found in it lit, as in a row's text.
+enum FoundLabel {
+    static func draw(_ text: NSAttributedString, found: [FoundRange], in rect: CGRect) {
+        guard !found.isEmpty else { return text.drawTruncated(in: rect) }
+        let shown = NSMutableAttributedString(attributedString: text)
+        let width = { (end: Int) in text.attributedSubstring(from: NSRange(location: 0, length: end)).size().width }
+        for (range, current) in found where NSMaxRange(range) <= text.length {
+            let left = max(rect.minX, rect.minX + width(range.location) - 1)
+            let right = min(rect.maxX, rect.minX + width(NSMaxRange(range)) + 1)
+            guard right > left, let font = text.attribute(.font, at: range.location, effectiveRange: nil) as? PlatformFont else { continue }
+            (current ? Theme.findCurrent : Theme.findMatch).setFill()
+            let box = CGRect(x: left, y: rect.minY - 1, width: right - left, height: ceil(font.ascender - font.descender) + 2)
+            RoundedBox.fill(box, radius: Radius.xs)
+            if current { shown.addAttribute(.foregroundColor, value: Theme.findCurrentForeground, range: range) }
+        }
+        shown.drawTruncated(in: rect)
+    }
+}
+
 /// The lines added and removed, as they are written everywhere: `+12 −3`.
 enum LineCountText {
     static let font = PlatformFont.uiDigits(.xs, weight: .medium)

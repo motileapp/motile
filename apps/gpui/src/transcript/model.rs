@@ -508,7 +508,7 @@ impl Transcript {
             })?;
         let row = &self.rows[row].row;
         let offset = crate::ui::rich_text::first_line_below(super::rows::row_key(&row.id), top)
-            .or_else(|| searched_text(row).map(utf16_len))
+            .or_else(|| searched_text(row).map(|text| utf16_len(&text)))
             .unwrap_or(0);
         Some(FindFrom { row_id: row.id.clone(), offset })
     }

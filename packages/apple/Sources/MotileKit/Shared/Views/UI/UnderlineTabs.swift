@@ -49,7 +49,7 @@ struct UnderlineTabs<Value: Hashable>: View {
 }
 
 /// The tab that is on has its words in the foreground and the line under it; another lights
-/// while the pointer is over it, and a step more while a press holds it.
+/// while the pointer is over it or a press holds it.
 private struct UnderlineTabStyle: ButtonStyle {
     let selected: Bool
     let size: ControlSize
@@ -78,7 +78,7 @@ private struct UnderlineTabBody<Label: View>: View {
                 .background {
                     if lit {
                         RoundedRectangle(cornerRadius: size.radius, style: .continuous)
-                            .fill(surface.color(pressed ? .controlLit : .control))
+                            .fill(surface.color(.control))
                             .padding(margin)
                     }
                 }

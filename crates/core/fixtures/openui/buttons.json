@@ -252,8 +252,8 @@
           "tint": "destructive",
           "size": "regular",
           "icon": {
-            "name": "trash-2",
-            "glyph": ""
+            "name": "trash",
+            "glyph": ""
           },
           "block": false,
           "disabled": null

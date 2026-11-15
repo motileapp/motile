@@ -149,6 +149,7 @@ enum class Symbol(val character: String?) {
     SquareCheck("\uE559"),
     SquarePen("\uE172"),
     SquarePlus("\uE173"),
+    SquareText("\uE736"),
     Tablet("\uE17E"),
     Terminal("\uE181"),
     Ticket("\uE20F"),

@@ -1,7 +1,8 @@
 //! Finding in the open thread, as a browser finds in a page: a phrase as it is written, whatever
 //! its case and accents, through every message the thread has and not only the turns loaded. Each
 //! row of a message is searched as it reads: the user's text, a reply's prose without its
-//! Markdown, its code and its errors.
+//! Markdown, its code and its errors. So are the lines across a thread: where it compacted, where
+//! it went on with another model, and the files each turn changed.
 
 use motile_protocol::search::Folded;
 use motile_protocol::wire::{Item, ItemKind, PLAN_TOOL};
@@ -67,7 +68,7 @@ pub struct Find {
 pub fn index(items: &[Item], cwd: &str) -> Vec<Entry> {
     let mut entries = Vec::new();
     for item in items.iter().filter(|item| searched(item)) {
-        for row in rows::rendered(item, cwd) {
+        for row in rows::searched_rows(item, cwd) {
             entries.extend(entry(item.seq, &row));
         }
     }
@@ -76,7 +77,12 @@ pub fn index(items: &[Item], cwd: &str) -> Vec<Entry> {
 
 fn searched(item: &Item) -> bool {
     match &item.kind {
-        ItemKind::User { .. } | ItemKind::Assistant { .. } | ItemKind::Error { .. } => true,
+        ItemKind::User { .. }
+        | ItemKind::Assistant { .. }
+        | ItemKind::Error { .. }
+        | ItemKind::Handoff { .. }
+        | ItemKind::Compaction { .. }
+        | ItemKind::TurnEnd { .. } => true,
         ItemKind::Tool { call } => call.name == PLAN_TOOL,
         _ => false,
     }
@@ -331,6 +337,36 @@ mod tests {
     fn only_searches_what_reads_as_a_message() {
         let items = [item("t", 1, serde_json::json!({"type": "thinking", "text": "deploy"})), reply("b", 2, "No")];
         assert_eq!(find(&items, "deploy").count(), 0);
+    }
+
+    #[test]
+    fn searches_the_lines_across_the_thread_by_their_labels() {
+        let end = |model: &str, account: serde_json::Value| serde_json::json!({"agent": "claude", "model": model, "name": null, "account": account});
+        let file = |path: &str| serde_json::json!({"path": path, "from": null, "change": "modified", "added": 1, "removed": 0});
+        let items = [
+            item("c", 1, serde_json::json!({"type": "compaction", "before": 21000, "after": 2900})),
+            item(
+                "h",
+                2,
+                serde_json::json!({"type": "handoff", "from": end("opus", "Work".into()), "to": end("sonnet", serde_json::Value::Null)}),
+            ),
+            item(
+                "e",
+                3,
+                serde_json::json!({"type": "turn_end", "summary": {
+                    "duration_ms": 1, "cost_usd": null, "is_error": false,
+                    "changes": {"snapshot": "s", "files": [file("src/hub.rs"), file("README.md")]},
+                }}),
+            ),
+        ];
+        let hits = |query: &str| -> Vec<(String, u32, u32)> {
+            find(&items, query).hits().into_iter().map(|hit| (hit.row_id, hit.start, hit.len)).collect()
+        };
+        assert_eq!(hits("compacted"), [("c/0".into(), 8, 9)]);
+        assert_eq!(hits("sonnet"), [("h/0".into(), 10, 6)], "opus, Work, sonnet and no account, a line each");
+        assert_eq!(hits("work"), [("h/0".into(), 5, 4)]);
+        assert_eq!(hits("hub"), [("e/changes".into(), 4, 3)], "the folder src, then its file, then README.md");
+        assert_eq!(hits("readme"), [("e/changes".into(), 11, 6)]);
     }
 
     #[test]

@@ -147,6 +147,7 @@ enum Symbol: String {
     case squareCheck = "\u{e559}"
     case squarePen = "\u{e172}"
     case squarePlus = "\u{e173}"
+    case squareText = "\u{e736}"
     case tablet = "\u{e17e}"
     case terminal = "\u{e181}"
     case ticket = "\u{e20f}"

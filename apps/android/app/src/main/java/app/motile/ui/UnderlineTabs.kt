@@ -67,7 +67,7 @@ fun <T> UnderlineTabs(
     }
 }
 
-/** The tab that is on has its words in the foreground and the line under it; another lights while a pointer is over it, and a step more while a press holds it. */
+/** The tab that is on has its words in the foreground and the line under it; another lights while a pointer is over it or a press holds it. */
 @Composable
 private fun UnderlineTab(title: String, selected: Boolean, size: ControlSize, margin: PaddingValues, onClick: () -> Unit) {
     val palette = LocalPalette.current
@@ -77,11 +77,7 @@ private fun UnderlineTab(title: String, selected: Boolean, size: ControlSize, ma
     val pressed by interaction.collectIsPressedAsState()
     val hovering by interaction.collectIsHoveredAsState()
     val lit = enabled && (pressed || hovering)
-    val light = when {
-        !lit -> Color.Transparent
-        pressed -> surface.color(Surface.Layer.ControlLit, palette)
-        else -> surface.color(Surface.Layer.Control, palette)
-    }
+    val light = if (lit) surface.color(Surface.Layer.Control, palette) else Color.Transparent
     Column(
         Modifier.width(IntrinsicSize.Max).arrowPointer().pressesAtOnce(interaction, enabled)
             .clickable(interactionSource = interaction, indication = null, enabled = enabled, role = Role.Tab, onClick = onClick)
