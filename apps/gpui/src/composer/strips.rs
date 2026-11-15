@@ -30,7 +30,7 @@ use crate::ui::motion::pulsing;
 use crate::ui::parts::{hidden_edges, with_edge_fades};
 use crate::ui::rich_text::RichText;
 use crate::ui::{
-    ActionButton, ChoiceDropdown, DropdownChoice, FadingScroll, Variant, beside, edges, icons, logos, tabular_numbers,
+    ActionButton, ChoiceDropdown, DropdownChoice, FadingScroll, Variant, edges, icons, logos, sharing, tabular_numbers,
     tabular_text_width, text_width,
 };
 
@@ -39,18 +39,20 @@ pub const STRIP_RADIUS: f32 = Radius::LG;
 const INSET: f32 = 3.;
 /// A regular control and the room around it.
 pub const HEIGHT: f32 = ControlSize::Regular.height() + INSET * 2.;
+/// What is drawn between two controls side by side. Each takes its half to click.
+pub const GAP: f32 = 8.;
 /// How far the top strip's open edge goes under the composer, which is drawn after it and
 /// covers its outline there. The bottom strip starts under the composer's outline instead.
 const OVERLAP: f32 = 1.;
 /// The room around a control in a strip, which is the control's to click. One that ends the
 /// strip stands as far from its side as from its top and bottom.
 pub fn margin() -> Edges<f32> {
-    edges(INSET, 4., INSET, INSET)
+    edges(INSET, GAP / 2., INSET, INSET)
 }
 
 /// The same for a control between two others.
 fn middle_margin() -> Edges<f32> {
-    edges(INSET, 4., INSET, 4.)
+    edges(INSET, GAP / 2., INSET, GAP / 2.)
 }
 
 /// A strip of `height`, or as tall as what is in it with none. Its outline is inside it, so it is
@@ -452,7 +454,7 @@ fn waiting_call(store: &Entity<Store>, approval: &Waiting, count: usize, room: S
                 .child(
                     ActionButton::new("refuse", approval.refuse)
                         .surface(Surface::Composer)
-                        .margin(beside(0., 4.))
+                        .margin(sharing(GAP, 0, 2))
                         .on_click(move |_, _, cx| {
                             refuse.update(cx, |store, cx| {
                                 store.answer(&refuse_id, false, Default::default());
@@ -464,7 +466,7 @@ fn waiting_call(store: &Entity<Store>, approval: &Waiting, count: usize, room: S
                     ActionButton::new("allow", approval.allow)
                         .variant(Variant::Warning)
                         .surface(Surface::Composer)
-                        .margin(beside(4., 0.))
+                        .margin(sharing(GAP, 1, 2))
                         .on_click(move |_, _, cx| {
                             allow.update(cx, |store, cx| {
                                 store.answer(&allow_id, true, Default::default());
@@ -776,9 +778,7 @@ pub fn context_strip(
             .symbol("folder-git-2"),
         ];
         ChoiceDropdown::new("workspace", title, "Workspace", choices)
-            .button(|button| {
-                button.symbol(symbol).help(help).surface(Surface::Composer).margin(edges(INSET, 4., INSET, 4.))
-            })
+            .button(|button| button.symbol(symbol).help(help).surface(Surface::Composer).margin(middle_margin()))
             .trailing()
             .shortcut("composer.workspace")
             .on_close(focus_composer(store))
@@ -803,9 +803,7 @@ pub fn context_strip(
             })
             .collect();
         ChoiceDropdown::new("strip-server", title, "Server", choices)
-            .button(|button| {
-                button.picture(symbol).help(help).surface(Surface::Composer).margin(edges(INSET, 4., INSET, 4.))
-            })
+            .button(|button| button.picture(symbol).help(help).surface(Surface::Composer).margin(middle_margin()))
             .shortcut("composer.server")
             .on_close(focus_composer(store))
     };

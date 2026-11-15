@@ -94,7 +94,7 @@ fun QuestionsView(approval: Approval, modifier: Modifier = Modifier) {
             if (index > 0) ActionButton("Back", Symbol.ChevronLeft, variant = ButtonVariant.Ghost) { store.goBack(approval) }
             Spacer(Modifier.weight(1f))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ActionButton(approval.refuseLabel, variant = ButtonVariant.Ghost, margin = beside(end = 8.dp)) { store.answer(approval, allow = false) }
+                ActionButton(approval.refuseLabel, variant = ButtonVariant.Ghost, margin = beside(end = ComposerStrip.gap)) { store.answer(approval, allow = false) }
                 Disabled(!store.canGoOn(approval)) {
                     ActionButton(if (store.isLastQuestion(approval)) approval.allowLabel else "Next", variant = ButtonVariant.Primary) { store.goOn(approval) }
                 }

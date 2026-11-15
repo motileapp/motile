@@ -45,13 +45,15 @@ object ComposerStrip {
     /** The room between a control and the strip's visible edges. */
     val inset = 3.dp
     val height = ControlSize.Regular.height + inset * 2
+    /** What is drawn between two controls side by side. */
+    val gap = 8.dp
     /**
      * The room around a control in a strip, which is the control's to press. One that ends the strip
      * stands as far from its side as from its top and bottom.
      */
-    val margin = PaddingValues(start = 4.dp, top = inset, end = inset, bottom = inset)
+    val margin = PaddingValues(start = gap / 2, top = inset, end = inset, bottom = inset)
     /** The same for a control between two others. */
-    val middleMargin = PaddingValues(start = 4.dp, top = inset, end = 4.dp, bottom = inset)
+    val middleMargin = PaddingValues(start = gap / 2, top = inset, end = gap / 2, bottom = inset)
     /** How far the strip's open edge goes under the composer, which covers its outline there. */
     val overlap = 1.dp
 }

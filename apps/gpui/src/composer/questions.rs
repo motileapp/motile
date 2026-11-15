@@ -7,7 +7,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::render::rows::{Choice, Waiting};
 
-use crate::composer::strips::{StripRoom, waiting_title};
+use crate::composer::strips::{GAP, StripRoom, waiting_title};
 use crate::store::Store;
 use crate::theme::{IconSize, Layer, Radius, Surface, TextSize, colors};
 use crate::ui::{ActionButton, Chip, FadingScroll, PickMark, Variant, beside, icons};
@@ -93,7 +93,7 @@ pub fn questions(store: &Entity<Store>, approval: &Waiting, room: StripRoom, cx:
                     ActionButton::new("refuse-questions", approval.refuse)
                         .ghost()
                         .surface(Surface::Composer)
-                        .margin(beside(8., 4.))
+                        .margin(beside(8., GAP / 2.))
                         .on_click(move |_, _, cx| {
                             refuse.update(cx, |store, cx| {
                                 store.answer(&refuse_id, false, HashMap::new());
@@ -106,7 +106,7 @@ pub fn questions(store: &Entity<Store>, approval: &Waiting, room: StripRoom, cx:
                         .variant(Variant::Primary)
                         .surface(Surface::Composer)
                         .disabled(!can_go_on)
-                        .margin(beside(4., 0.))
+                        .margin(beside(GAP / 2., 0.))
                         .on_click(move |_, _, cx| {
                             next.update(cx, |store, cx| {
                                 store.go_on();
