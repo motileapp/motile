@@ -6,24 +6,14 @@ import SwiftUI
 @Observable
 final class UsageModel {
     enum Tab: String, CaseIterable, Identifiable {
-        case activity, cost, tokens, limits
+        case activity, spend, limits
 
         var id: Self { self }
-
-        /// What the tab asks the servers for; the cost and the tokens are read together.
-        var reads: Int {
-            switch self {
-            case .activity: 0
-            case .cost, .tokens: 1
-            case .limits: 2
-            }
-        }
 
         var label: String {
             switch self {
             case .activity: "Activity"
-            case .cost: "Cost"
-            case .tokens: "Tokens"
+            case .spend: "Spend"
             case .limits: "Limits"
             }
         }
@@ -31,11 +21,22 @@ final class UsageModel {
         var symbol: Symbol {
             switch self {
             case .activity: .activity
-            case .cost: .circleDollarSign
-            case .tokens: .coins
+            case .spend: .coins
             case .limits: .gauge
             }
         }
+
+        /// The tab kept, where the cost and the tokens were tabs of their own before Spend.
+        init(kept: String) {
+            self = Tab(rawValue: kept) ?? (Measure(rawValue: kept) == nil ? .activity : .spend)
+        }
+    }
+
+    /// What Spend counts the agents' spending in.
+    enum Measure: String, CaseIterable {
+        case cost, tokens
+
+        var label: String { self == .cost ? "Cost" : "Tokens" }
     }
 
     enum Period: String, CaseIterable, Identifiable {
@@ -65,15 +66,26 @@ final class UsageModel {
     }
 
     private static let tabKey = "usage.tab"
+    private static let measureKey = "usage.measure"
     private static let periodKey = "usage.period"
     private static let serversKey = "usage.servers"
 
-    var tab = Tab(rawValue: UserDefaults.standard.string(forKey: tabKey) ?? "") ?? .activity {
+    var tab = Tab(kept: UserDefaults.standard.string(forKey: tabKey) ?? "") {
         didSet {
             UserDefaults.standard.set(tab.rawValue, forKey: Self.tabKey)
-            guard oldValue.reads != tab.reads else { return }
+            guard oldValue != tab else { return }
             load()
         }
+    }
+
+    var measure = Measure(rawValue: UserDefaults.standard.string(forKey: measureKey) ?? UserDefaults.standard.string(forKey: tabKey) ?? "") ?? .cost {
+        didSet { UserDefaults.standard.set(measure.rawValue, forKey: Self.measureKey) }
+    }
+
+    /// Spend, counted in the measure.
+    func showSpend(_ measure: Measure) {
+        tab = .spend
+        self.measure = measure
     }
 
     var period = Period(rawValue: UserDefaults.standard.string(forKey: periodKey) ?? "") ?? .month {
@@ -352,8 +364,7 @@ struct UsageContent: View {
                 .onAppear { store.watchGateway(true) }
                 .onDisappear { store.watchGateway(false) }
         case .activity: activity
-        case .cost: spending(.cost)
-        case .tokens: spending(.tokens)
+        case .spend: spending
         }
     }
 
@@ -373,11 +384,11 @@ struct UsageContent: View {
         }
     }
 
-    @ViewBuilder private func spending(_ measure: SpendingView.Measure) -> some View {
+    @ViewBuilder private var spending: some View {
         switch model.spending {
         case .loading: loading
         case .failed(let message): UsageNote(text: message)
-        case .ready(let report): SpendingView(report: report, measure: measure, period: model.period)
+        case .ready(let report): SpendingView(report: report, measure: Bindable(model).measure, period: model.period)
         }
     }
 

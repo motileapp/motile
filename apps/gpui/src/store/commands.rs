@@ -8,7 +8,7 @@ use gpui_kit::*;
 
 use super::integrations::Integration;
 use super::shortcuts::ShortcutContext;
-use super::usage::{UsagePeriod, UsageTab};
+use super::usage::{UsageMeasure, UsagePeriod, UsageTab};
 use super::{PanelPage, Selection, Store};
 use crate::models::{Project, ThreadInfo};
 use crate::panel::state::PanelTab;
@@ -129,6 +129,10 @@ impl Store {
             }
             match change {
                 UsageChange::Tab(tab) => self.set_usage_tab(tab),
+                UsageChange::Spend(measure) => {
+                    self.set_usage_measure(measure);
+                    self.set_usage_tab(UsageTab::Spend);
+                }
                 UsageChange::Period(period) => self.set_usage_period(period),
             }
             return true;
@@ -408,13 +412,14 @@ impl Store {
 
 enum UsageChange {
     Tab(UsageTab),
+    Spend(UsageMeasure),
     Period(UsagePeriod),
 }
 
 fn usage_command(command: &str) -> Option<UsageChange> {
     Some(match command {
-        "usage.cost" => UsageChange::Tab(UsageTab::Cost),
-        "usage.tokens" => UsageChange::Tab(UsageTab::Tokens),
+        "usage.cost" => UsageChange::Spend(UsageMeasure::Cost),
+        "usage.tokens" => UsageChange::Spend(UsageMeasure::Tokens),
         "usage.limits" => UsageChange::Tab(UsageTab::Limits),
         "usage.period.day" => UsageChange::Period(UsagePeriod::Day),
         "usage.period.week" => UsageChange::Period(UsagePeriod::Week),

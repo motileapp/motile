@@ -181,8 +181,8 @@ var sidebarToggle: (() -> Unit)? = null
 
 private val AppStore.usageCommands: Map<String, () -> Unit>
     get() = mapOf(
-        "usage.cost" to { usage.tab = UsageModel.Tab.Cost },
-        "usage.tokens" to { usage.tab = UsageModel.Tab.Tokens },
+        "usage.cost" to { usage.showSpend(UsageModel.Measure.Cost) },
+        "usage.tokens" to { usage.showSpend(UsageModel.Measure.Tokens) },
         "usage.limits" to { usage.tab = UsageModel.Tab.Limits },
         "usage.period.day" to { usage.period = UsageModel.Period.Day },
         "usage.period.week" to { usage.period = UsageModel.Period.Week },

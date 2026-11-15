@@ -8,32 +8,31 @@ import app.motile.platform.Symbol
 /** What the usage route shows, kept while it is closed so that it opens with what was last read. */
 class UsageModel {
     enum class Tab(val raw: String) {
-        Activity("activity"), Cost("cost"), Tokens("tokens"), Limits("limits");
-
-        /** What the tab asks the servers for; the cost and the tokens are read together. */
-        val reads: Int
-            get() = when (this) {
-                Activity -> 0
-                Cost, Tokens -> 1
-                Limits -> 2
-            }
+        Activity("activity"), Spend("spend"), Limits("limits");
 
         val label: String
             get() = when (this) {
                 Activity -> "Activity"
-                Cost -> "Cost"
-                Tokens -> "Tokens"
+                Spend -> "Spend"
                 Limits -> "Limits"
             }
 
         val symbol: Symbol
             get() = when (this) {
                 Activity -> Symbol.Activity
-                Cost -> Symbol.CircleDollarSign
-                Tokens -> Symbol.Coins
+                Spend -> Symbol.Coins
                 Limits -> Symbol.Gauge
             }
+
+        companion object {
+            /** The tab kept, where the cost and the tokens were tabs of their own before Spend. */
+            fun kept(raw: String?): Tab =
+                entries.firstOrNull { it.raw == raw } ?: if (Measure.entries.any { it.raw == raw }) Spend else Activity
+        }
     }
+
+    /** What Spend counts the agents' spending in. */
+    enum class Measure(val raw: String, val label: String) { Cost("cost", "Cost"), Tokens("tokens", "Tokens") }
 
     enum class Period(val raw: String) {
         Day("day"), Week("week"), Month("month"), Quarter("quarter");
@@ -57,15 +56,31 @@ class UsageModel {
             }
     }
 
-    private var tabState by mutableStateOf(Tab.entries.firstOrNull { it.raw == Preferences.string(TAB_KEY) } ?: Tab.Activity)
+    private var tabState by mutableStateOf(Tab.kept(Preferences.string(TAB_KEY)))
     var tab: Tab
         get() = tabState
         set(value) {
             val old = tabState
             tabState = value
             Preferences.set(TAB_KEY, value.raw)
-            if (old.reads != value.reads) load()
+            if (old != value) load()
         }
+
+    private var measureState by mutableStateOf(
+        (Preferences.string(MEASURE_KEY) ?: Preferences.string(TAB_KEY)).let { raw -> Measure.entries.firstOrNull { it.raw == raw } } ?: Measure.Cost,
+    )
+    var measure: Measure
+        get() = measureState
+        set(value) {
+            measureState = value
+            Preferences.set(MEASURE_KEY, value.raw)
+        }
+
+    /** Spend, counted in the measure. */
+    fun showSpend(measure: Measure) {
+        tab = Tab.Spend
+        this.measure = measure
+    }
 
     private var periodState by mutableStateOf(Period.entries.firstOrNull { it.raw == Preferences.string(PERIOD_KEY) } ?: Period.Month)
     var period: Period
@@ -172,6 +187,7 @@ class UsageModel {
 
     companion object {
         private const val TAB_KEY = "usage.tab"
+        private const val MEASURE_KEY = "usage.measure"
         private const val PERIOD_KEY = "usage.period"
         private const val SERVERS_KEY = "usage.servers"
     }

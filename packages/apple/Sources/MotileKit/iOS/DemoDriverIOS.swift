@@ -22,7 +22,7 @@ import UIKit
 ///     relay <url>|off                   sets the account's relay, or goes back to iroh's
 ///     settings <section>|search <text>|pick <group>|close
 ///     appearance light|dark|system
-///     usage activity|cost|tokens|limits  picks a tab of the usage sheet
+///     usage activity|cost|tokens|limits  picks a tab of the usage sheet: cost and tokens are Spend
 ///     answer <allow|refuse>             answers the first approval
 ///     gateway sign-in claude|codex        starts signing an account in on the gateway
 ///     gateway code <code>                 finishes Claude's sign-in with the code
@@ -174,8 +174,11 @@ enum DemoDriver {
                 store.openSettings(section)
             }
         case "usage":
-            guard let tab = UsageModel.Tab(rawValue: rest) else { return }
-            store.usage.tab = tab
+            if let measure = UsageModel.Measure(rawValue: rest) {
+                store.usage.showSpend(measure)
+            } else if let tab = UsageModel.Tab(rawValue: rest) {
+                store.usage.tab = tab
+            }
         case "relay":
             if rest == "off" { store.useIrohRelays() } else { store.setRelay(rest) { _ in } }
         case "appearance":

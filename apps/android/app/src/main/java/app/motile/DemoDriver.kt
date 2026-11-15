@@ -43,7 +43,7 @@ import java.util.concurrent.Executors
  *     sheet commands|projects|settings|usage|server|thread|close
  *     settings <section>|search <text>|pick <group>|close
  *     appearance light|dark|system
- *     usage activity|cost|tokens|limits  picks a tab of the usage sheet
+ *     usage activity|cost|tokens|limits  picks a tab of the usage sheet: cost and tokens are Spend
  *     answer <allow|refuse>             answers the first approval
  *     gateway sign-in claude|codex      starts signing an account in on the gateway
  *     gateway code <code>               finishes Claude's sign-in with the code
@@ -214,7 +214,8 @@ object DemoDriver {
                     else -> store.openSettings(SettingsSection.entries.firstOrNull { it.raw == action } ?: return)
                 }
             }
-            "usage" -> store.usage.tab = UsageModel.Tab.entries.firstOrNull { it.raw == rest } ?: return
+            "usage" -> UsageModel.Measure.entries.firstOrNull { it.raw == rest }?.let { store.usage.showSpend(it) }
+                ?: run { store.usage.tab = UsageModel.Tab.entries.firstOrNull { it.raw == rest } ?: return }
             "appearance" -> Appearance.choose(Appearance.of(rest))
             "answer" -> {
                 val approval = store.activity.approvals.firstOrNull() ?: return
