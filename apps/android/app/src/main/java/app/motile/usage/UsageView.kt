@@ -49,12 +49,10 @@ fun UsageContent(model: UsageModel, modifier: Modifier = Modifier, margin: Dp = 
                     is Loaded.Failed -> UsageNote(activity.message)
                     is Loaded.Ready -> ActivityView(activity.value, model.period)
                 }
-                UsageModel.Tab.Cost, UsageModel.Tab.Tokens -> when (val spending = model.spending) {
+                UsageModel.Tab.Spend -> when (val spending = model.spending) {
                     Loaded.Loading -> UsageLoading()
                     is Loaded.Failed -> UsageNote(spending.message)
-                    is Loaded.Ready -> SpendingView(
-                        spending.value, if (model.tab == UsageModel.Tab.Cost) Measure.Cost else Measure.Tokens, model.period,
-                    )
+                    is Loaded.Ready -> SpendingView(spending.value, model.measure, { model.measure = it }, model.period)
                 }
             }
         }

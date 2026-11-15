@@ -1,6 +1,6 @@
-//! What the agents spent on the servers counted, the Cost and Tokens tabs of the usage route:
-//! the total and each agent's part beside a line for each agent over time, then what each model,
-//! project, server, account and kind of token took.
+//! What the agents spent on the servers counted, the Spend tab of the usage route, in dollars or
+//! tokens: the total and each agent's part beside a line for each agent over time, then what each
+//! model, project, server, account and kind of token took.
 
 use chrono::{Datelike, Local, TimeZone};
 use gpui_kit::prelude::*;
@@ -11,11 +11,11 @@ use super::placeholder_bar;
 use crate::format::{self, abbreviated as count, percent, usd as cost};
 use crate::models::agent_name;
 use crate::store::Store;
-use crate::store::usage::{UsageLine, UsagePeriod, UsageReport, UsageSeries, UsageTab};
+use crate::store::usage::{UsageLine, UsageMeasure, UsagePeriod, UsageReport, UsageSeries};
 use crate::theme::{Colors, IconSize, Layer, Opacity, Radius, Surface, TextSize, colors};
 use crate::ui::menu::Anchor;
 use crate::ui::motion::pulsing;
-use crate::ui::{Segmented, card_default, divider_on, logos, tabular_numbers, text_width};
+use crate::ui::{Segmented, UnderlineTabs, card_default, divider_on, logos, tabular_numbers, text_width};
 
 pub(super) const CHART_HEIGHT: f32 = 190.;
 /// Room for the labels of the y axis on the right and of the x axis below.
@@ -53,7 +53,7 @@ impl Breakdown {
             Breakdown::Projects => "Projects",
             Breakdown::Servers => "Servers",
             Breakdown::Accounts => "Accounts",
-            Breakdown::Kinds => "Tokens",
+            Breakdown::Kinds => "Types",
         }
     }
 }
@@ -76,7 +76,7 @@ impl SpendingView {
     }
 
     fn cost_shown(&self, cx: &App) -> bool {
-        self.store.read(cx).usage_tab() == UsageTab::Cost
+        self.store.read(cx).usage_measure() == UsageMeasure::Cost
     }
 
     fn point_at(&mut self, position: Point<Pixels>, count: usize, cx: &mut Context<Self>) {
@@ -152,6 +152,22 @@ impl SpendingView {
                 )
             });
         div().flex().flex_col().gap(px(14.)).child(numbers).child(agents)
+    }
+
+    fn measures(&self, cost_shown: bool) -> impl IntoElement {
+        let store = self.store.clone();
+        let shown = if cost_shown { UsageMeasure::Cost } else { UsageMeasure::Tokens };
+        UnderlineTabs::new(
+            "usage-measure",
+            UsageMeasure::ALL.iter().map(|measure| SharedString::from(measure.label())).collect(),
+            UsageMeasure::ALL.iter().position(|measure| *measure == shown).unwrap_or(0),
+        )
+        .on_select(move |index, _, cx| {
+            store.update(cx, |store, cx| {
+                store.set_usage_measure(UsageMeasure::ALL[index]);
+                cx.notify();
+            })
+        })
     }
 
     /// The agents with what each spent: in all, or at the time the pointer is over.
@@ -447,7 +463,11 @@ impl Render for SpendingView {
             } else {
                 div().flex().flex_col().gap(px(24.)).child(summary).child(chart)
             };
-            vec![top.into_any_element(), self.lines(&report, cost_shown, window, cx)]
+            vec![
+                self.measures(cost_shown).into_any_element(),
+                top.into_any_element(),
+                self.lines(&report, cost_shown, window, cx),
+            ]
         };
         div().flex().flex_col().gap(px(24.)).children(body).children(
             outdated

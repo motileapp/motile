@@ -409,36 +409,46 @@ pub enum Tone {
     Warning,
 }
 
-/// What the usage shows: what was done, what the agents cost, the tokens they spent, or what is
-/// left of their plans.
+/// What the usage shows: what was done, what the agents spent, or what is left of their plans.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UsageTab {
     #[default]
     Activity,
-    Cost,
-    Tokens,
+    /// The cost and the tokens were tabs of their own before.
+    #[serde(alias = "cost", alias = "tokens")]
+    Spend,
     Limits,
 }
 
 impl UsageTab {
-    pub const ALL: [UsageTab; 4] = [UsageTab::Activity, UsageTab::Cost, UsageTab::Tokens, UsageTab::Limits];
+    pub const ALL: [UsageTab; 3] = [UsageTab::Activity, UsageTab::Spend, UsageTab::Limits];
 
     pub fn label(self) -> &'static str {
         match self {
             UsageTab::Activity => "Activity",
-            UsageTab::Cost => "Cost",
-            UsageTab::Tokens => "Tokens",
+            UsageTab::Spend => "Spend",
             UsageTab::Limits => "Limits",
         }
     }
+}
 
-    /// What the tab asks the servers for; the cost and the tokens are read together.
-    fn reads(self) -> u8 {
+/// What Spend counts the agents' spending in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UsageMeasure {
+    #[default]
+    Cost,
+    Tokens,
+}
+
+impl UsageMeasure {
+    pub const ALL: [UsageMeasure; 2] = [UsageMeasure::Cost, UsageMeasure::Tokens];
+
+    pub fn label(self) -> &'static str {
         match self {
-            UsageTab::Activity => 0,
-            UsageTab::Cost | UsageTab::Tokens => 1,
-            UsageTab::Limits => 2,
+            UsageMeasure::Cost => "Cost",
+            UsageMeasure::Tokens => "Tokens",
         }
     }
 }
@@ -481,6 +491,7 @@ impl UsagePeriod {
 }
 
 const TAB_KEY: &str = "usage.tab";
+const MEASURE_KEY: &str = "usage.measure";
 const PERIOD_KEY: &str = "usage.period";
 const SERVERS_KEY: &str = "usage.servers";
 
@@ -534,6 +545,11 @@ impl Store {
         self.prefs.get(TAB_KEY).unwrap_or_default()
     }
 
+    /// The measure picked, or the tab it was before Spend.
+    pub fn usage_measure(&self) -> UsageMeasure {
+        self.prefs.get(MEASURE_KEY).or_else(|| self.prefs.get(TAB_KEY)).unwrap_or_default()
+    }
+
     pub fn usage_period(&self) -> UsagePeriod {
         self.prefs.get(PERIOD_KEY).unwrap_or_default()
     }
@@ -559,9 +575,13 @@ impl Store {
     pub fn set_usage_tab(&mut self, tab: UsageTab) {
         let before = self.usage_tab();
         self.prefs.set(TAB_KEY, tab);
-        if before.reads() != tab.reads() {
+        if before != tab {
             self.load_usage();
         }
+    }
+
+    pub fn set_usage_measure(&mut self, measure: UsageMeasure) {
+        self.prefs.set(MEASURE_KEY, measure);
     }
 
     pub fn set_usage_period(&mut self, period: UsagePeriod) {
@@ -777,6 +797,17 @@ mod tests {
             matches!(loaded(Err::<u8, _>("gone".into()), Loaded::Loading), Loaded::Failed(error) if error == "gone")
         );
         assert_eq!(loaded(Ok(4), Loaded::Ready(3)).value(), Some(&4));
+    }
+
+    #[test]
+    fn the_cost_and_tokens_tabs_kept_open_spend() {
+        let tab = |kept: &str| serde_json::from_value::<UsageTab>(serde_json::json!(kept)).unwrap();
+        assert_eq!(tab("cost"), UsageTab::Spend);
+        assert_eq!(tab("tokens"), UsageTab::Spend);
+        assert_eq!(tab("limits"), UsageTab::Limits);
+        let measure = |kept: &str| serde_json::from_value::<UsageMeasure>(serde_json::json!(kept)).ok();
+        assert_eq!(measure("tokens"), Some(UsageMeasure::Tokens));
+        assert_eq!(measure("spend"), None);
     }
 
     #[test]

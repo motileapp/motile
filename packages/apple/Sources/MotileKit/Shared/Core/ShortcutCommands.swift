@@ -157,8 +157,8 @@ extension AppStore {
 
     private var usageCommands: [String: () -> Void] {
         [
-            "usage.cost": { self.usage.tab = .cost },
-            "usage.tokens": { self.usage.tab = .tokens },
+            "usage.cost": { self.usage.showSpend(.cost) },
+            "usage.tokens": { self.usage.showSpend(.tokens) },
             "usage.limits": { self.usage.tab = .limits },
             "usage.period.day": { self.usage.period = .day },
             "usage.period.week": { self.usage.period = .week },

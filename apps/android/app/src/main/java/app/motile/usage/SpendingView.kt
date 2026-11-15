@@ -52,6 +52,7 @@ import app.motile.ui.AgentIcon
 import app.motile.ui.Card
 import app.motile.ui.GatewayMark
 import app.motile.ui.Segmented
+import app.motile.ui.UnderlineTabs
 import app.motile.ui.Text
 import app.motile.ui.ThemeDivider
 import app.motile.ui.color
@@ -60,11 +61,10 @@ import app.motile.ui.pulsing
 import java.text.NumberFormat
 import java.util.Currency
 
-/** What the Cost and Tokens tabs count. */
-enum class Measure { Cost, Tokens }
+typealias Measure = UsageModel.Measure
 
 private enum class Breakdown(val raw: String, val label: String) {
-    Models("models", "Models"), Projects("projects", "Projects"), Servers("servers", "Servers"), Accounts("accounts", "Accounts"), Kinds("kinds", "Tokens"),
+    Models("models", "Models"), Projects("projects", "Projects"), Servers("servers", "Servers"), Accounts("accounts", "Accounts"), Kinds("kinds", "Types"),
 }
 
 private const val BREAKDOWN_KEY = "usage.breakdown"
@@ -87,12 +87,12 @@ fun cost(value: Double): String {
 fun count(value: Long): String = value.abbreviated
 
 /**
- * What the agents spent on the servers counted, the Cost and Tokens tabs: the total and each
- * agent's part beside a line for each agent over time, then what each model, project, server,
+ * What the agents spent on the servers counted, the Spend tab, in dollars or tokens: the total and
+ * each agent's part beside a line for each agent over time, then what each model, project, server,
  * account and kind of token took.
  */
 @Composable
-fun SpendingView(report: UsageReport, measure: Measure, period: UsageModel.Period) {
+fun SpendingView(report: UsageReport, measure: Measure, onMeasure: (Measure) -> Unit, period: UsageModel.Period) {
     val store = LocalStore.current
     val palette = LocalPalette.current
     var pointed by remember { mutableStateOf<Int?>(null) }
@@ -104,6 +104,7 @@ fun SpendingView(report: UsageReport, measure: Measure, period: UsageModel.Perio
             if (report.tokens == 0L && !report.loading) {
                 UsageNote("Nothing was spent in this time. Servers keep what their agents spend from the version that shows this on.")
             } else {
+                UnderlineTabs(Measure.entries.map { it.label to it }, measure, onMeasure)
                 val chart = @Composable { modifier: Modifier ->
                     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (report.loading) {

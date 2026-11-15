@@ -1170,7 +1170,7 @@ fn signal_rings(look: &Look, color: Hsla, stopped: Option<std::time::Instant>) -
 
 type BuildMenu = Rc<dyn Fn(&mut Window, &mut App) -> Menu>;
 type OnChange = Rc<dyn Fn(bool, &mut Window, &mut App)>;
-type OnSelect = Rc<dyn Fn(usize, &mut Window, &mut App)>;
+pub(crate) type OnSelect = Rc<dyn Fn(usize, &mut Window, &mut App)>;
 
 /// A menu that looks and is sized as the button is. With words it shows what is chosen, and a
 /// chevron after it. The menu is built when it opens, under the button.

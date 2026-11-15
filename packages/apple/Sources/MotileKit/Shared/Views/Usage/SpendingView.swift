@@ -1,11 +1,11 @@
 import Charts
 import SwiftUI
 
-/// What the agents spent on the servers counted, the Cost and Tokens tabs of the usage route:
-/// the total and each agent's part beside a line for each agent over time, then what each model,
-/// project, server, account and kind of token took.
+/// What the agents spent on the servers counted, the Spend tab of the usage route, in dollars or
+/// tokens: the total and each agent's part beside a line for each agent over time, then what each
+/// model, project, server, account and kind of token took.
 struct SpendingView: View {
-    enum Measure { case cost, tokens }
+    typealias Measure = UsageModel.Measure
 
     private enum Breakdown: String, CaseIterable, Identifiable {
         case models, projects, servers, accounts, kinds
@@ -18,7 +18,7 @@ struct SpendingView: View {
             case .projects: "Projects"
             case .servers: "Servers"
             case .accounts: "Accounts"
-            case .kinds: "Tokens"
+            case .kinds: "Types"
             }
         }
     }
@@ -32,7 +32,7 @@ struct SpendingView: View {
     @Environment(\.colorScheme) private var scheme
     @Environment(\.surface) private var surface
     let report: UsageReport
-    let measure: Measure
+    @Binding var measure: Measure
     let period: UsageModel.Period
     @AppStorage("usage.breakdown") private var breakdown = Breakdown.models
     @State private var pointed: Date?
@@ -48,6 +48,7 @@ struct SpendingView: View {
             if report.tokens == 0 && !report.loading {
                 UsageNote(text: "Nothing was spent in this time. Servers keep what their agents spend from the version that shows this on.")
             } else {
+                UnderlineTabs(Measure.allCases.map { ($0.label, $0) }, selection: $measure)
                 if width >= Self.besideWidth {
                     HStack(alignment: .top, spacing: 28) {
                         summary

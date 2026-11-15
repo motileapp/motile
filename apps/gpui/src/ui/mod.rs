@@ -17,6 +17,7 @@ pub mod rich_text;
 pub mod skill_chip;
 pub mod slider;
 pub mod swatch;
+pub mod underline_tabs;
 
 use std::rc::Rc;
 
@@ -39,6 +40,7 @@ pub use parts::{
 pub use pick::{OptionCard, PickRow};
 pub use slider::Slider;
 pub use swatch::Swatch;
+pub use underline_tabs::UnderlineTabs;
 
 pub type OnClick = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
