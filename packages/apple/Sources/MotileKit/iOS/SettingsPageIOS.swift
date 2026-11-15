@@ -85,10 +85,11 @@ struct SettingsPage: View {
     @AppStorage(AppStore.managesNewThreadsKey) private var managesNewThreads = false
     @State private var editedAccount: EditedAccount?
     @State private var removal: Removal?
+    @State private var projectQuery = ""
 
     var body: some View {
         ScrollViewReader { proxy in
-            SettingsList {
+            searching(SettingsList {
                 switch section {
                 case .general: general
                 case .servers: servers
@@ -99,7 +100,7 @@ struct SettingsPage: View {
                 case .keyboard, .agentGateway, .mcpGateway: EmptyView()
                 case .integrations: integrations
                 }
-            }
+            })
             .onChange(of: store.settingsTarget, initial: true) {
                 guard let target = store.settingsTarget else { return }
                 withAnimation { proxy.scrollTo(target, anchor: .center) }
@@ -111,6 +112,14 @@ struct SettingsPage: View {
         .sheet(item: $editedAccount) { edited in
             AgentAccountSheet(server: edited.server, account: edited.account)
                 .sheetSurface()
+        }
+    }
+
+    @ViewBuilder private func searching(_ list: some View) -> some View {
+        if section == .projects {
+            list.bottomSearch(text: $projectQuery, prompt: "Search projects")
+        } else {
+            list
         }
     }
 
@@ -199,6 +208,11 @@ struct SettingsPage: View {
 
     @ViewBuilder private var servers: some View {
         Section {
+            NavigationLink {
+                AddServerPage().glassBackButton()
+            } label: {
+                SettingsActionLabel("Add a Server", symbol: .plus)
+            }
             ForEach(store.servers) { server in
                 NavigationLink {
                     ServerSettingsPage(serverID: server.id, removed: false).glassBackButton()
@@ -209,11 +223,6 @@ struct SettingsPage: View {
                         if let sync = server.sync { ServerSyncLine(sync: sync).padding(.top, 2) }
                     }
                 }
-            }
-            NavigationLink {
-                AddServerPage().glassBackButton()
-            } label: {
-                SettingsActionLabel("Add a Server", symbol: .plus)
             }
         }
         .id("servers")
@@ -330,6 +339,12 @@ struct SettingsPage: View {
                 .foregroundStyle(Color.themeMutedForeground)
         } else {
             let installed = Agent.allCases.filter { server.agents[$0] != nil }
+            Button {
+                editedAccount = EditedAccount(server: server, account: AgentAccount(agent: installed.first ?? .claude))
+            } label: {
+                SettingsActionLabel("Add Account", symbol: .plus)
+            }
+            .disabled(installed.isEmpty)
             ForEach(server.agentAccounts.filter { installed.contains($0.agent) && $0.pin == nil }) { account in
                 Button {
                     guard !account.gateway else { return store.openSettings(.agentGateway) }
@@ -361,18 +376,19 @@ struct SettingsPage: View {
                     }
                 }
             }
-            Button {
-                editedAccount = EditedAccount(server: server, account: AgentAccount(agent: installed.first ?? .claude))
-            } label: {
-                SettingsActionLabel("Add Account", symbol: .plus)
-            }
-            .disabled(installed.isEmpty)
         }
     }
 
-    private var projects: some View {
+    @ViewBuilder private var projects: some View {
+        let found = store.projects.matching(projectQuery)
         Section {
-            ForEach(store.projects) { project in
+            NavigationLink {
+                CommandPanel(start: store.addProjectPage, inStack: true).glassBackButton()
+            } label: {
+                SettingsActionLabel("Add a Project", symbol: .plus)
+            }
+            .disabled(store.servers.isEmpty)
+            ForEach(found) { project in
                 NavigationLink {
                     ProjectSettingsPage(projectID: project.id).glassBackButton()
                 } label: {
@@ -382,14 +398,12 @@ struct SettingsPage: View {
                     }
                 }
             }
-            NavigationLink {
-                CommandPanel(start: store.addProjectPage, inStack: true).glassBackButton()
-            } label: {
-                SettingsActionLabel("Add a Project", symbol: .plus)
-            }
-            .disabled(store.servers.isEmpty)
         }
         .id("projects")
+        if found.isEmpty && !projectQuery.isEmpty {
+            ContentUnavailableView.search(text: projectQuery)
+                .listRowBackground(Color.clear)
+        }
     }
 
     @ViewBuilder private var textGeneration: some View {

@@ -728,6 +728,13 @@ data class Project(
     }
 }
 
+/** The projects every word of the query is found in, by name or path, whatever the case. */
+fun List<Project>.matching(query: String): List<Project> {
+    val words = query.split(Regex("\\s+")).filter { it.isNotEmpty() }
+    if (words.isEmpty()) return this
+    return filter { project -> words.all { project.name.contains(it, ignoreCase = true) || project.path.contains(it, ignoreCase = true) } }
+}
+
 enum class Access(val raw: String) {
     Supervised("supervised"),
     AcceptEdits("accept_edits"),

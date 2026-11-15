@@ -11,6 +11,7 @@ struct SettingsPage: View {
     @State private var setupProject: Project?
     @State private var editedAccount: EditedAccount?
     @State private var removal: Removal?
+    @State private var projectQuery = ""
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -155,7 +156,19 @@ struct SettingsPage: View {
     }
 
     @ViewBuilder private var servers: some View {
-        SettingsGroup("servers", "Servers") {
+        SettingsGroup("servers", "Servers", carded: false) {
+            ActionButton("Add a Server", icon: .plus, variant: .outline, size: .large) { store.showsAddServer = true }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if !store.servers.isEmpty { serverRows.card() }
+        }
+        backup
+        relay
+        continuing
+        removedServers
+    }
+
+    private var serverRows: some View {
+        VStack(spacing: 0) {
             ForEach(store.servers) { server in
                 SettingsRow {
                     SettingsLabel(server.name, description: server.settingsDescription, icon: .server) {
@@ -170,19 +183,9 @@ struct SettingsPage: View {
                         }
                     }
                 }
-                ThemeDivider()
-            }
-            SettingsRow {
-                ActionButton("Add a Server", icon: .plus, variant: .outline, size: .large) { store.showsAddServer = true }
-                    .padding(.leading, -rowOutset(for: ControlSize.large.height))
-            } trailing: {
-                EmptyView()
+                if server.id != store.servers.last?.id { ThemeDivider() }
             }
         }
-        backup
-        relay
-        continuing
-        removedServers
     }
 
     /// The account's own iroh relay, which every device uses in place of iroh's public ones.
@@ -399,12 +402,18 @@ struct SettingsPage: View {
                 Text(reason)
                     .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
+            } else {
+                let installed = Agent.allCases.filter { server.agents[$0] != nil }
+                ActionButton("Add Account", icon: .plus, variant: .outline, size: .large) {
+                    editedAccount = EditedAccount(server: server, account: AgentAccount(agent: installed.first ?? .claude))
+                }
+                .disabled(installed.isEmpty)
             }
         }
         if server.accountsUnavailable == nil {
             let installed = Agent.allCases.filter { server.agents[$0] != nil }
-            ThemeDivider()
             ForEach(server.agentAccounts.filter { installed.contains($0.agent) && $0.pin == nil }) { account in
+                ThemeDivider()
                 SettingsRow {
                     AgentIcon(agent: account.agent, size: .md)
                     SettingsLabel(
@@ -426,16 +435,6 @@ struct SettingsPage: View {
                         }
                     }
                 }
-                ThemeDivider()
-            }
-            SettingsRow {
-                ActionButton("Add Account", icon: .plus, variant: .outline, size: .large) {
-                    editedAccount = EditedAccount(server: server, account: AgentAccount(agent: installed.first ?? .claude))
-                }
-                .padding(.leading, -rowOutset(for: ControlSize.large.height))
-                .disabled(installed.isEmpty)
-            } trailing: {
-                EmptyView()
             }
         }
     }
@@ -444,9 +443,28 @@ struct SettingsPage: View {
         SettingsLabel(server.name, icon: .server)
     }
 
-    private var projects: some View {
-        SettingsGroup("projects", "Projects") {
-            ForEach(store.projects) { project in
+    @ViewBuilder private var projects: some View {
+        let found = store.projects.matching(projectQuery)
+        SettingsGroup("projects", "Projects", carded: false) {
+            HStack(spacing: 8) {
+                SearchField(text: $projectQuery, prompt: "Search projects")
+                ActionButton("Add a Project", icon: .plus, variant: .outline) {
+                    store.closeSettings()
+                    store.addProject()
+                }
+                .disabled(store.servers.isEmpty)
+            }
+            if found.isEmpty {
+                if !projectQuery.isEmpty { SettingsNote("No projects found") }
+            } else {
+                projectRows(found).card()
+            }
+        }
+    }
+
+    private func projectRows(_ projects: [Project]) -> some View {
+        VStack(spacing: 0) {
+            ForEach(projects) { project in
                 SettingsRow {
                     ProjectIcon(project: project, size: .md)
                     SettingsLabel(project.name, description: project.path, truncates: .head)
@@ -460,17 +478,7 @@ struct SettingsPage: View {
                         MenuItem("Remove Project", symbol: .trash2, role: .destructive) { removal = .project(project) }
                     }
                 }
-                ThemeDivider()
-            }
-            SettingsRow {
-                ActionButton("Add a Project", icon: .plus, variant: .outline, size: .large) {
-                    store.closeSettings()
-                    store.addProject()
-                }
-                .padding(.leading, -rowOutset(for: ControlSize.large.height))
-                .disabled(store.servers.isEmpty)
-            } trailing: {
-                EmptyView()
+                if project.id != projects.last?.id { ThemeDivider() }
             }
         }
     }
