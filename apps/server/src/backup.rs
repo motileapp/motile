@@ -188,7 +188,10 @@ impl Backup {
 
     /// Puts what the bucket lacks of this server there, then copies what it has of the others.
     async fn pass(&self) {
-        let Some(opened) = self.kept().opened.clone() else { return };
+        let Some(opened) = self.kept().opened.clone() else {
+            self.hub.media.take_removed();
+            return;
+        };
         let uploaded = self.upload(&opened).await;
         self.report(|state| state.progress = None);
         if let Err(error) = &uploaded {
@@ -218,10 +221,16 @@ impl Backup {
             log_id: String::new(),
         };
         let listed = self.kept().media.take();
-        let mut known = match listed {
-            Some(known) => known,
-            None => listed_media(opened.store.as_ref(), &self.me).await?,
+        let (mut known, mut unshown) = match listed {
+            Some(known) => (known, HashSet::new()),
+            None => {
+                let known = listed_media(opened.store.as_ref(), &self.me).await?;
+                let shown = blocking(&self.hub, |store| Ok(store.shown_media()?)).await?;
+                let unshown = known.iter().filter(|id| !shown.contains(*id)).cloned().collect();
+                (known, unshown)
+            }
         };
+        unshown.extend(self.hub.media.take_removed().into_iter().filter(|id| known.contains(id)));
         let missing = missing_media(&self.media, &known);
         let media_bytes: u64 = missing.iter().map(|(_, size)| size).sum();
         let meter = Meter::new(self, true);
@@ -238,14 +247,23 @@ impl Backup {
             anyhow::Ok(())
         };
         if let Err(error) = log.await {
+            self.hub.media.keep_removed(unshown);
             self.kept().media = Some(known);
             return Err(error);
         }
         let log_bytes = log_bytes.load(Ordering::Relaxed);
         let report = |sent| meter.show(log_bytes + sent, log_bytes + media_bytes);
         let media = upload_media(opened.store.clone(), &self.me, &self.media, missing, &mut known, report).await;
+        let unshown: Vec<String> = unshown.into_iter().filter(|id| !self.hub.media.has(id)).collect();
+        let deleted = match media {
+            Ok(()) => delete_media(opened.store.as_ref(), &self.me, &unshown, &mut known).await,
+            failed => failed,
+        };
+        if deleted.is_err() {
+            self.hub.media.keep_removed(unshown.into_iter().filter(|id| known.contains(id)));
+        }
         self.kept().media = Some(known);
-        media?;
+        deleted?;
         self.report(|state| state.backed_up_at = Some(motile_protocol::now()));
         Ok(())
     }
@@ -478,6 +496,20 @@ pub async fn upload_media(
         }
         upload.shutdown().await?;
         known.insert(name);
+    }
+    Ok(())
+}
+
+/// Deletes the bucket's copies of the files this server no longer keeps.
+pub async fn delete_media(
+    bucket: &dyn ObjectStore,
+    me: &str,
+    ids: &[String],
+    known: &mut HashSet<String>,
+) -> anyhow::Result<()> {
+    for id in ids {
+        bucket.delete(&Key::from(format!("{me}/media/{id}"))).await?;
+        known.remove(id);
     }
     Ok(())
 }
@@ -739,7 +771,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn media_goes_up_once_and_comes_back_only_as_what_its_name_says() {
+    async fn media_goes_up_once_comes_back_only_as_what_its_name_says_and_can_be_deleted() {
         let bucket: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
         let folder = tempfile::tempdir().unwrap();
         let mut namer = Namer::default();
@@ -764,5 +796,9 @@ mod tests {
         keep_media(elsewhere.path(), &id, &fetched).unwrap();
         assert_eq!(std::fs::read(elsewhere.path().join(&id)).unwrap(), b"picture");
         assert!(keep_media(elsewhere.path(), &id, b"something else").is_err());
+
+        delete_media(bucket.as_ref(), "a", std::slice::from_ref(&id), &mut known).await.unwrap();
+        assert!(known.is_empty());
+        assert!(listed_media(bucket.as_ref(), "a").await.unwrap().is_empty());
     }
 }

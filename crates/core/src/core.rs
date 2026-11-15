@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{Context, bail};
 use base64::Engine;
@@ -33,7 +33,7 @@ use crate::api::{
 use crate::away::{Away, STALE_AFTER};
 use crate::backup::{self, BACKUP_PROTOCOL};
 use crate::browse;
-use crate::cache::{Cache, Page};
+use crate::cache::{self, Cache, Page};
 use crate::connection::{NOT_CONNECTED, ServerAddr, bind, leave_relays, offline};
 use crate::engaged::{self, Engagement};
 use crate::find::{self, Find};
@@ -526,7 +526,15 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
     std::fs::create_dir_all(&config.data_dir)
         .with_context(|| format!("{} can't be created.", config.data_dir.display()))?;
     let key = DeviceKey::load_or_create(&key_file(&config))?;
-    let cache = Cache::open(&config.data_dir.join("cache.sqlite"))?;
+    let cache_path = config.data_dir.join("cache.sqlite");
+    let cache = Cache::open(&cache_path)?;
+    let media = Arc::new(MediaCache::new(config.data_dir.join("media")));
+    let (swept, started) = (media.clone(), SystemTime::now());
+    tokio::task::spawn_blocking(move || {
+        if let Err(error) = cache::sweep_media_once(&cache_path, |shown| swept.keep_only(shown, started)) {
+            tracing::warn!("couldn't sweep the media no thread shows: {error}");
+        }
+    });
 
     let (inputs, mut received) = mpsc::unbounded_channel();
     let (link_events, mut from_links) = mpsc::unbounded_channel();
@@ -553,7 +561,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
     let mut core = Core {
         auth: AuthClient::new(&config.auth_url),
         me: cache.account().unwrap_or_default(),
-        media: Arc::new(MediaCache::new(config.data_dir.join("media"))),
+        media,
         media_limit: config.media_limit.unwrap_or(media::LIMIT),
         media_waiting: HashMap::new(),
         photos: HashMap::new(),
@@ -1250,7 +1258,7 @@ impl Core {
             }
             self.open.retain(|_, open| open.server_id != server_id);
             self.followed.retain(|_, followed| followed.server_id != server_id);
-            self.cache.remove_server(&server_id);
+            self.media.remove(&self.cache.remove_server(&server_id));
             self.emit(Event::Threads { server_id: server_id.clone(), threads: Vec::new() });
             self.emit_projects(&server_id, Vec::new());
         }
@@ -2242,7 +2250,7 @@ impl Core {
         }
         self.relay.read.insert(origin.to_string());
         let threads: Vec<Thread> = threads.into_iter().map(stopped).collect();
-        self.cache.set_threads(origin, &threads);
+        self.media.remove(&self.cache.set_threads(origin, &threads));
         self.cache.set_projects(origin, &projects);
         let behind: Vec<String> = threads
             .iter()
@@ -2319,7 +2327,7 @@ impl Core {
         match message {
             Message::Welcome { server: info, threads, projects } => {
                 self.cache.set_server_info(server_id, &info);
-                self.cache.set_threads(server_id, &threads);
+                self.media.remove(&self.cache.set_threads(server_id, &threads));
                 self.cache.set_projects(server_id, &projects);
                 let Some(server) = self.server_mut(server_id) else { return };
                 server.info = Some(info);
@@ -2382,7 +2390,7 @@ impl Core {
                 self.schedule_relay(RELAY_AFTER_CHANGE);
             }
             Message::ThreadDeleted { thread_id } => {
-                self.cache.remove_thread(&thread_id);
+                self.media.remove(&self.cache.remove_thread(&thread_id));
                 self.open.remove(&thread_id);
                 self.followed.remove(&thread_id);
                 let removed = self.server_mut(server_id).and_then(|server| server.threads.remove(&thread_id));

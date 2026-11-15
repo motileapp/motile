@@ -2,6 +2,7 @@
 //! all; this copy only makes them show at once, and without a connection. When it grows past its
 //! limit, what was looked at longest ago goes first.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -56,6 +57,22 @@ impl MediaCache {
 
     pub fn clear(&self) {
         let _ = std::fs::remove_dir_all(&self.folder);
+    }
+
+    pub fn remove(&self, ids: &[String]) {
+        for file in ids.iter().filter_map(|id| self.file(id)) {
+            let _ = std::fs::remove_file(file);
+        }
+    }
+
+    /// Removes the files `shown` doesn't name that were last looked at before `before`.
+    pub fn keep_only(&self, shown: &HashSet<String>, before: SystemTime) {
+        for (file, _, seen) in self.files() {
+            let named = file.file_name().and_then(|name| name.to_str()).is_some_and(|name| shown.contains(name));
+            if !named && seen < before {
+                let _ = std::fs::remove_file(file);
+            }
+        }
     }
 
     /// Removes the files looked at longest ago until the rest fit in `limit`.
@@ -122,6 +139,22 @@ mod tests {
         assert_eq!(cache.size(), 800);
         assert!(cache.get("old.png").is_none());
         assert!(cache.get("older.mp4").is_some() && cache.get("new.png").is_some());
+    }
+
+    #[test]
+    fn only_what_is_shown_or_was_looked_at_since_stays_and_what_is_removed_goes() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = MediaCache::new(dir.path().join("media"));
+        put(&cache, "shown.png", 1, 600);
+        put(&cache, "unshown.png", 1, 600);
+        put(&cache, "seen.png", 1, 10);
+
+        cache.keep_only(&HashSet::from(["shown.png".to_string()]), SystemTime::now() - Duration::from_secs(60));
+
+        assert!(cache.get("unshown.png").is_none());
+        assert!(cache.get("shown.png").is_some() && cache.get("seen.png").is_some());
+        cache.remove(&["seen.png".to_string(), "../cache.sqlite".to_string()]);
+        assert!(cache.get("seen.png").is_none() && cache.get("shown.png").is_some());
     }
 
     #[test]

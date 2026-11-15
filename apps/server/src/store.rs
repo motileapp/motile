@@ -1,6 +1,6 @@
 //! Threads, their transcripts and the projects, in SQLite.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -172,6 +172,15 @@ pub(crate) fn as_text<T: serde::Serialize>(value: &T) -> String {
 
 pub(crate) fn from_text<T: serde::de::DeserializeOwned>(text: &str) -> Option<T> {
     serde_json::from_value(serde_json::Value::String(text.to_string())).ok()
+}
+
+/// The ids and posters of the files the items in `table` show.
+fn items_media(table: &str) -> String {
+    format!(
+        "SELECT json_extract(m.value, '$.id'), json_extract(m.value, '$.poster')
+         FROM {table}, json_each({table}.payload, '$.media') AS m
+         WHERE instr({table}.payload, '\"media\":[') > 0"
+    )
 }
 
 impl Store {
@@ -399,6 +408,22 @@ impl Store {
     /// Whether any thread still shows the file.
     pub fn shows_media(&self, media_id: &str) -> rusqlite::Result<bool> {
         self.connection().query_row("SELECT EXISTS (SELECT 1 FROM media WHERE id = ?1)", [media_id], |row| row.get(0))
+    }
+
+    /// Every file a thread shows, of the server's own threads and of its copies of the others'.
+    pub fn shown_media(&self) -> rusqlite::Result<HashSet<String>> {
+        let connection = self.reader();
+        let mut shown = HashSet::new();
+        let mut kept = connection.prepare("SELECT id, NULL FROM media")?;
+        let mut items = connection.prepare(&items_media("items"))?;
+        let mut copied = connection.prepare(&items_media("copied_items"))?;
+        for statement in [&mut kept, &mut items, &mut copied] {
+            let rows = statement.query_map([], |row| Ok([row.get::<_, Option<String>>(0)?, row.get(1)?]))?;
+            for ids in rows {
+                shown.extend(ids?.into_iter().flatten());
+            }
+        }
+        Ok(shown)
     }
 
     /// The photos kept for a query. One that found none is asked again after a day.
