@@ -81,7 +81,7 @@ private fun Call(approval: Approval, count: Int) {
             }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-            ActionButton(approval.refuseLabel, margin = beside(end = 8.dp)) { store.answer(approval, allow = false) }
+            ActionButton(approval.refuseLabel, margin = beside(end = ComposerStrip.gap)) { store.answer(approval, allow = false) }
             ActionButton(approval.allowLabel, variant = ButtonVariant.Warning) { store.answer(approval, allow = true) }
         }
     }

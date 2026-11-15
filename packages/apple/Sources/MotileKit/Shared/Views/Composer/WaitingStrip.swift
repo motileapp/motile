@@ -47,8 +47,8 @@ struct WaitingStrip: View {
             }
             HStack(spacing: 0) {
                 Spacer()
-                ActionButton(approval.refuseLabel, glass: true, margin: .beside(trailing: 4)) { store.answer(approval, allow: false) }
-                ActionButton(approval.allowLabel, variant: .warning, glass: true, margin: .beside(leading: 4)) { store.answer(approval, allow: true) }
+                ActionButton(approval.refuseLabel, glass: true, margin: .sharing(ComposerStrip.gap, at: 0, of: 2)) { store.answer(approval, allow: false) }
+                ActionButton(approval.allowLabel, variant: .warning, glass: true, margin: .sharing(ComposerStrip.gap, at: 1, of: 2)) { store.answer(approval, allow: true) }
             }
         }
         .padding(Self.padding)

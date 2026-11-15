@@ -50,10 +50,10 @@ struct QuestionsView: View {
                     ActionButton("Back", icon: .chevronLeft, variant: .ghost, margin: .beside(trailing: 8)) { store.goBack(approval) }
                 }
                 Spacer()
-                ActionButton(approval.refuseLabel, variant: .ghost, margin: .beside(leading: 8, trailing: 4)) {
+                ActionButton(approval.refuseLabel, variant: .ghost, margin: .beside(leading: 8, trailing: ComposerStrip.gap / 2)) {
                     store.answer(approval, allow: false)
                 }
-                ActionButton(store.isLastQuestion(approval) ? approval.allowLabel : "Next", variant: .primary, glass: true, margin: .beside(leading: 4)) {
+                ActionButton(store.isLastQuestion(approval) ? approval.allowLabel : "Next", variant: .primary, glass: true, margin: .beside(leading: ComposerStrip.gap / 2)) {
                     store.goOn(approval)
                 }
                 .disabled(!store.canGoOn(approval))

@@ -15,13 +15,15 @@ struct ComposerStrip: ViewModifier {
     /// The room between a control and the strip's visible edges.
     static let inset: CGFloat = 3
     static let height = ControlSize.regular.height + inset * 2
+    /// What is drawn between two controls side by side. Each takes its half to click.
+    static let gap: CGFloat = 8
     /// The room around a control in a strip, which is the control's to click. One that ends the
     /// strip stands as far from its side as from its top and bottom.
-    static let margin = EdgeInsets(top: inset, leading: 4, bottom: inset, trailing: inset)
+    static let margin = EdgeInsets(top: inset, leading: gap / 2, bottom: inset, trailing: inset)
     /// The same for a control that starts the strip.
-    static let firstMargin = EdgeInsets(top: inset, leading: inset, bottom: inset, trailing: 4)
+    static let firstMargin = EdgeInsets(top: inset, leading: inset, bottom: inset, trailing: gap / 2)
     /// The same for a control between two others.
-    static let middleMargin = EdgeInsets(top: inset, leading: 4, bottom: inset, trailing: 4)
+    static let middleMargin = EdgeInsets(top: inset, leading: gap / 2, bottom: inset, trailing: gap / 2)
 
     let edge: Edge
     /// Nil for a strip that is as tall as what is in it.
