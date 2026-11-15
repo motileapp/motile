@@ -248,7 +248,7 @@ struct SpendingView: View {
         .chartPointing($pointed, starts: report.starts, marks: .points)
         .chartXScale(range: .plotDimension(startPadding: 16, endPadding: 16))
         .chartXAxis {
-            AxisMarks(preset: .aligned, values: .automatic(desiredCount: 5)) { _ in
+            AxisMarks(values: .automatic(desiredCount: 5)) { _ in
                 AxisValueLabel(format: period == .day ? .dateTime.hour() : .dateTime.month(.abbreviated).day())
                     .foregroundStyle(Color.themeMutedForeground)
             }
