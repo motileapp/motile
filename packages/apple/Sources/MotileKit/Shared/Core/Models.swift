@@ -1187,7 +1187,6 @@ struct AgentInfo: Equatable, Identifiable {
     let durationMs: Int?
     /// How much of its context it takes.
     let tokens: Int?
-    let toolUses: Int?
     /// What it has spent, when it was started through your server.
     let costUSD: Double?
     /// The thread it works in, when it was started through your server.
@@ -1217,7 +1216,6 @@ struct AgentInfo: Equatable, Identifiable {
         startedAt = json.double("started_at")
         durationMs = number("duration_ms")
         tokens = number("tokens")
-        toolUses = number("tool_uses")
         costUSD = json.optionalDouble("cost_usd")
         threadID = json.optionalString("thread_id")
         agent = json.optionalString("agent").flatMap(Agent.init(rawValue:))
@@ -1229,10 +1227,9 @@ struct AgentInfo: Equatable, Identifiable {
 
     var working: Bool { status == .running }
 
-    /// "21K context · $4.20 · 4,262 tools", as far as each is known.
+    /// "21K context · $4.2", as far as each is known.
     var usage: String? {
-        let tools = toolUses.map { "\($0.formatted()) \($0 == 1 ? "tool" : "tools")" }
-        let parts = [tokens.map { "\($0.abbreviated) context" }, costUSD.map(SpendingView.cost), tools].compactMap { $0 }
+        let parts = [tokens.map { "\($0.abbreviated) context" }, costUSD.map(SpendingView.cost)].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
