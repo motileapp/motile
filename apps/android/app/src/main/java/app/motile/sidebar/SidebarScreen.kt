@@ -6,7 +6,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.gestures.snapping.SnapPosition
@@ -25,7 +24,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
@@ -55,9 +53,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import app.motile.DemoHooks
 import app.motile.LocalStore
@@ -79,8 +75,8 @@ import app.motile.layout.KeyboardFocus
 import app.motile.layout.LocalDrawer
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.thread.ThreadPrompts
 import app.motile.theme.IconSize
-import app.motile.theme.ControlSize
 import app.motile.theme.Opacity
 import app.motile.theme.Radius
 import app.motile.theme.ShadowSize
@@ -89,16 +85,8 @@ import app.motile.theme.Theme
 import app.motile.theme.opacity
 import app.motile.theme.shadow
 import app.motile.ui.AccountMenu
-import app.motile.ui.beside
-import app.motile.ui.ActionButton
-import app.motile.ui.CloseModal
-import app.motile.ui.InputField
 import app.motile.ui.MenuBuilder
-import app.motile.ui.SheetSurface
-import app.motile.ui.Answer
 import app.motile.ui.Appearing
-import app.motile.ui.Asking
-import app.motile.ui.ButtonVariant
 import app.motile.ui.Confirmation
 import app.motile.ui.ConfirmationDialog
 import app.motile.ui.GlassButton
@@ -305,6 +293,9 @@ fun SidebarScreen(underThread: Boolean) {
         }
     }
     LaunchedEffect(store) {
+        snapshotFlow { store.find.shown }.drop(1).collect { if (it) showThread() }
+    }
+    LaunchedEffect(store) {
         snapshotFlow { store.serversExpandedRequests }.drop(1).collect { serversExpanded = true }
     }
     LaunchedEffect(store.revealedThreadID) {
@@ -472,13 +463,7 @@ fun SidebarScreen(underThread: Boolean) {
     busy?.let { title ->
         ConfirmationDialog(Confirmation(title, "Stop it first, then archive it.", dismissal = "OK")) { busy = null }
     }
-    renaming?.let { thread -> RenameDialog(thread) { renaming = null } }
-    Asking(deleting, onDismiss = { deleting = null }) { thread ->
-        Confirmation(
-            "Delete “${thread.title}”?", store.deletionNote(thread),
-            answers = listOf(Answer("Delete", ButtonVariant.Danger) { store.delete(thread) }),
-        )
-    }
+    ThreadPrompts(renaming, deleting, endRenaming = { renaming = null }, endDeleting = { deleting = null })
 }
 
 /** The drafts, the active threads, and under them the working, the snoozed and the archived ones: each a line that opens into their list. The working one lists the drafts being sent first. */
@@ -730,43 +715,3 @@ private fun ServerLines(store: AppStore) {
 }
 
 private const val MOST_SERVERS_SHOWN = 5
-
-/** Renames a thread, as iOS's alert with a field does. */
-@Composable
-private fun RenameDialog(thread: ThreadInfo, onDismiss: () -> Unit) {
-    val store = LocalStore.current
-    val palette = Theme.colors
-    var title by remember(thread.id) { mutableStateOf(thread.title) }
-    val field = remember { FocusRequester() }
-    val shape = RoundedCornerShape(Radius.xl)
-    fun rename() {
-        if (title.isBlank()) return
-        store.rename(thread, title)
-        onDismiss()
-    }
-    Dialog(onDismissRequest = onDismiss) {
-        SheetSurface(CloseModal(onDismiss)) {
-            Column(
-                Modifier
-                    .widthIn(max = 420.dp)
-                    .shadow(ShadowSize.Xl, shape, Opacity.ShadowStrongest)
-                    .background(palette.background, shape)
-                    .border(1.dp, palette.border, shape)
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                Text("Rename thread", size = TextSize.Lg, weight = FontWeight.SemiBold)
-                InputField(
-                    "Title", title, { title = it }, Modifier.fillMaxWidth(), size = ControlSize.Large, focusRequester = field,
-                    onSubmit = ::rename,
-                )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    ActionButton("Cancel", size = ControlSize.Large, margin = beside(end = 8.dp), onClick = onDismiss)
-                    ActionButton("Rename", variant = ButtonVariant.Primary, size = ControlSize.Large, disabled = title.isBlank(), onClick = ::rename)
-                }
-            }
-        }
-    }
-    LaunchedEffect(Unit) { runCatching { field.requestFocus() } }
-    DisposableEffect(Unit) { onDispose { KeyboardFocus.editable = false } }
-}

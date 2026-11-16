@@ -789,11 +789,14 @@ impl CommandPanel {
     fn thread_commands(&self, cx: &App) -> Vec<Item> {
         let store = self.store.read(cx);
         let Some(thread) = store.changeable_thread() else { return Vec::new() };
-        let find =
-            Item::new("find", "Find in thread", thread.title.clone(), ItemIcon::Symbol("search"), |this, _, cx| {
-                this.store.update(cx, |store, cx| store.open_find(None, None, cx))
-            });
-        let mut items = vec![find.keys(store.shortcuts.label("find.open"))];
+        let mut items = Vec::new();
+        if store.right_panel.shown_agent.is_none() {
+            let find =
+                Item::new("find", "Find in thread", thread.title.clone(), ItemIcon::Symbol("search"), |this, _, cx| {
+                    this.store.update(cx, |store, cx| store.open_find(None, None, cx))
+                });
+            items.push(find.keys(store.shortcuts.label("find.open")));
+        }
         if thread.busy() {
             let stop = Item::new(
                 "stop",

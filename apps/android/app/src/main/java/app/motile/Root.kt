@@ -1,6 +1,7 @@
 package app.motile
 
 import android.app.Activity
+import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
 import androidx.core.view.WindowCompat
 import androidx.compose.ui.platform.LocalView
@@ -16,6 +17,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -24,6 +26,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusTarget
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.window.Dialog
@@ -117,6 +120,8 @@ fun Root(store: AppStore) {
     Theme.palette = palette
     Theme.dark = dark
     val drawer = remember { Drawer() }
+    val hardKeyboard = LocalConfiguration.current.keyboard == Configuration.KEYBOARD_QWERTY
+    LaunchedEffect(hardKeyboard) { store.keyboardConnected(hardKeyboard) }
     val focus = LocalFocusManager.current
     val keyboard = LocalSoftwareKeyboardController.current
     val view = LocalView.current

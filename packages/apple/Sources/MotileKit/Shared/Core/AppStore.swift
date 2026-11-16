@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
 #else
+import GameController
 import UIKit
 #endif
 
@@ -551,6 +552,9 @@ final class AppStore {
         if environment["MOTILE_DEMO"] != "1" { updater.start() }
         lifecycle.start(self)
         engagement.start(self)
+        #if os(iOS)
+        watchKeyboard()
+        #endif
         NotificationCenter.default.addObserver(forName: Platform.becameActive, object: nil, queue: .main) { [weak self] _ in
             self?.markOpenThreadSeen()
             self?.core.send("reload_keybindings")
@@ -558,6 +562,18 @@ final class AppStore {
             self?.readWorktreeStart(fetch: true)
         }
     }
+
+    #if os(iOS)
+    /// Shows the commands' keys only while a keyboard is connected to press them.
+    private func watchKeyboard() {
+        shortcuts.shown = GCKeyboard.coalesced != nil
+        for (name, connected) in [(Notification.Name.GCKeyboardDidConnect, true), (.GCKeyboardDidDisconnect, false)] {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                self?.shortcuts.shown = connected
+            }
+        }
+    }
+    #endif
 
     /// Where the core keeps the device's key, the copy of the threads and the fetched files.
     private static func dataFolder() -> String {
@@ -580,9 +596,11 @@ final class AppStore {
     private func decode(_ event: JSON) -> (() -> Void)? {
         switch event.string("type") {
         case "keybindings":
-            let shortcuts = Shortcuts(json: event.object("keybindings") ?? [:])
+            var shortcuts = Shortcuts(json: event.object("keybindings") ?? [:])
             return { [weak self] in
-                guard let self, self.shortcuts != shortcuts else { return }
+                guard let self else { return }
+                shortcuts.shown = self.shortcuts.shown
+                guard self.shortcuts != shortcuts else { return }
                 self.shortcuts = shortcuts
             }
         case "thread_search":

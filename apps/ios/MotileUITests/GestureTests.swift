@@ -272,6 +272,45 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(shown(newThread))
     }
 
+    /// Commands find only in a thread open on the main screen, which it names, and put the sidebar away to show it.
+    func testCommandsFindInTheOpenThreadOnly() {
+        let find = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Find in thread")).firstMatch
+        openSidebar()
+        newThread.tap()
+        openSidebar()
+        app.buttons["Commands"].tap()
+        XCTAssertTrue(shown(app.navigationBars["Commands"]))
+        XCTAssertFalse(find.exists)
+        app.buttons["Close"].tap()
+        guard let thread = row("Add API Rate Limiting") else { return XCTFail("no row") }
+        thread.tap()
+        openSidebar()
+        app.buttons["Commands"].tap()
+        XCTAssertTrue(shown(find))
+        XCTAssertTrue(find.label.contains("Add API Rate Limiting"))
+        find.tap()
+        XCTAssertTrue(shown(app.textFields["Find in thread"]))
+        XCTAssertFalse(newThread.exists && newThread.isHittable)
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        app.typeText("limit")
+        let next = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Next match")).firstMatch
+        XCTAssertTrue(next.waitForExistence(timeout: 5) && next.isEnabled)
+        next.tap()
+    }
+
+    /// The thread's title opens its menu, whose Find in thread opens the find bar on it.
+    func testTheTitleOpensTheThreadsMenu() {
+        openSidebar()
+        guard let thread = row("Add API Rate Limiting") else { return XCTFail("no row") }
+        thread.tap()
+        let menu = app.buttons["Thread menu"]
+        XCTAssertTrue(shown(menu))
+        menu.tap()
+        XCTAssertTrue(shown(app.buttons["Rename"]))
+        app.buttons["Find in thread"].tap()
+        XCTAssertTrue(shown(app.textFields["Find in thread"]))
+    }
+
     private func tapRow(_ title: String) {
         let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", title)).firstMatch
         XCTAssertTrue(shown(row))

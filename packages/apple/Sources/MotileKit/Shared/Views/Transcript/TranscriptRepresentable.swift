@@ -20,6 +20,7 @@ struct TranscriptRepresentable {
         view.startedBy = ofAgent ? nil : store.parentThread?.id
         view.topInset = topInset
         view.findCover = findCover
+        view.topTaken = findCover > 0 || store.openToast != nil
         view.bottomInset = bottomInset
         view.bottomFade = bottomFade
         view.measuresAhead = !ofAgent
@@ -51,6 +52,10 @@ struct TranscriptRepresentable {
             view.onNeedEarlier = { done in
                 guard let threadID = model.threadID else { return done() }
                 store.core.send("load_earlier", ["thread_id": threadID]) { _ in done() }
+            }
+            view.onNeedAll = { done in
+                guard let threadID = model.threadID else { return done() }
+                store.core.send("load_earlier", ["thread_id": threadID, "all": true]) { _ in done() }
             }
             view.onTrimEarlier = { keepRows, done in
                 guard let threadID = model.threadID else { return done() }
@@ -84,6 +89,7 @@ struct TranscriptRepresentable {
         view.startedBy = ofAgent ? nil : store.parentThread?.id
         view.topInset = topInset
         view.findCover = findCover
+        view.topTaken = findCover > 0 || store.openToast != nil
         view.bottomInset = bottomInset
         view.bottomFade = bottomFade
     }

@@ -13,7 +13,6 @@ struct SidebarScreen: View {
     @AppStorage("sidebar.snoozedExpanded") private var snoozedExpanded = false
     @AppStorage("sidebar.serversExpanded") private var serversExpanded = false
     @State private var renaming: ThreadInfo?
-    @State private var newTitle = ""
     @State private var deleting: ThreadInfo?
     @FocusState private var searchFocused: Bool
     /// The row a swipe has slid aside, by its id in the list.
@@ -95,31 +94,16 @@ struct SidebarScreen: View {
             guard underThread else { return }
             drawer.isOpen = false
         }
+        .onChange(of: store.find.shown) { _, shown in
+            guard shown else { return }
+            showThread()
+        }
         .alert(busy, isPresented: $showsBusy) {
             Button("OK", role: .cancel) {}
         } message: {
             Text("Stop it first, then archive it.")
         }
-        .alert("Rename thread", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
-            TextField("Title", text: $newTitle)
-            Button("Rename") {
-                if let thread = renaming { store.rename(thread, to: newTitle) }
-                renaming = nil
-            }
-            Button("Cancel", role: .cancel) { renaming = nil }
-        }
-        .alert(
-            "Delete “\(deleting?.title ?? "")”?",
-            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })
-        ) {
-            Button("Cancel", role: .cancel) { deleting = nil }
-            Button("Delete", role: .destructive) {
-                if let thread = deleting { store.delete(thread) }
-                deleting = nil
-            }
-        } message: {
-            Text(store.deletionNote(deleting))
-        }
+        .threadPrompts(renaming: $renaming, deleting: $deleting)
     }
 
     private var header: some View {
@@ -415,7 +399,6 @@ struct SidebarScreen: View {
     }
 
     private func beginRename(_ thread: ThreadInfo) {
-        newTitle = thread.title
         renaming = thread
     }
 }

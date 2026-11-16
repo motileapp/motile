@@ -208,6 +208,12 @@ impl Menu {
         self.push(Entry::Separator)
     }
 
+    /// Another menu's rows after these.
+    pub fn append(mut self, menu: Menu) -> Self {
+        self.entries.extend(menu.entries);
+        self
+    }
+
     pub fn when(self, condition: bool, build: impl FnOnce(Menu) -> Menu) -> Self {
         if condition { build(self) } else { self }
     }

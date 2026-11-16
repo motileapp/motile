@@ -12,6 +12,8 @@ struct ThreadPane: View {
     static let besideSidebarInset: CGFloat = 20
     /// The right panel is beside the pane, so the window's last button isn't over it.
     var besidePanel = false
+    @State private var renaming: ThreadInfo?
+    @State private var deleting: ThreadInfo?
 
     private static let composerBottomGap: CGFloat = 16
 
@@ -59,6 +61,7 @@ struct ThreadPane: View {
             CommitSheet(project: project)
         }
         .overlay(alignment: .topTrailing) { ThreadCorner() }
+        .threadPrompts(renaming: $renaming, deleting: $deleting)
     }
 
     /// The thread's project and name and its git button, drawn in the window's top bar over
@@ -123,6 +126,9 @@ struct ThreadPane: View {
         }
         .lineLimit(1)
         .allowsHitTesting(false)
+        .overlay {
+            RightClickMenu { store.titleActions(rename: { renaming = $0 }, delete: { deleting = $0 }) }
+        }
     }
 
     /// The empty state of a new thread: a question, and the composer a little above the middle
@@ -207,5 +213,54 @@ struct ThreadPane: View {
     private static let headlineSize = TextSize.xxl
     private static let headlineIcon = IconSize(text: headlineSize)
     private static let headlineWordSpace = (" " as NSString).size(withAttributes: [.font: NSFont.ui(headlineSize)]).width
+}
+
+/// Opens a menu on a right click, or a click with control held, and leaves every other click to
+/// what is under it, as the window's top bar takes them to move the window.
+private struct RightClickMenu: NSViewRepresentable {
+    let groups: () -> [[RowAction]]
+
+    func makeNSView(context: Context) -> MenuArea { MenuArea() }
+
+    func updateNSView(_ view: MenuArea, context: Context) {
+        view.groups = groups
+    }
+
+    final class MenuArea: NSView {
+        var groups: () -> [[RowAction]] = { [] }
+
+        override func hitTest(_ point: NSPoint) -> NSView? {
+            guard let event = NSApp.currentEvent else { return nil }
+            let opensMenu = event.type == .rightMouseDown || (event.type == .leftMouseDown && event.modifierFlags.contains(.control))
+            return opensMenu ? super.hitTest(point) : nil
+        }
+
+        override func mouseDown(with event: NSEvent) {
+            guard let menu = menu(for: event) else { return }
+            NSMenu.popUpContextMenu(menu, with: event, for: self)
+        }
+
+        override func menu(for event: NSEvent) -> NSMenu? {
+            let groups = groups()
+            return groups.isEmpty ? nil : NSMenu(groups: groups)
+        }
+    }
+}
+
+extension NSMenu {
+    /// A menu of `RowAction`s, in groups a line divides.
+    convenience init(groups: [[RowAction]]) {
+        self.init()
+        autoenablesItems = false
+        for (index, group) in groups.enumerated() {
+            if index > 0 { addItem(.separator()) }
+            for action in group {
+                let item = ActionMenuItem(title: action.title, run: action.perform)
+                item.isEnabled = !action.disabled
+                if !action.children.isEmpty { item.submenu = NSMenu(groups: action.children) }
+                addItem(item)
+            }
+        }
+    }
 }
 #endif

@@ -4309,8 +4309,11 @@ impl Core {
                 self.keep_place(thread_id, agent_id, at);
                 self.reply(id, Ok(json!({})));
             }
-            Command::LoadEarlier { thread_id } => {
+            Command::LoadEarlier { thread_id, all } => {
                 self.load_earlier(&thread_id);
+                while all && self.open.get(&thread_id).is_some_and(|open| open.earlier) {
+                    self.load_earlier(&thread_id);
+                }
                 self.reply(id, Ok(json!({})));
             }
             Command::Find { thread_id, query, from, item_id } => {

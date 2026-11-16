@@ -30,6 +30,8 @@ final class TranscriptView: FlippedView, RowOwner {
     var onCancelQueued: ((String) -> Void)?
     /// Asks for the turns before the first row, and is called back once they are among the rows.
     var onNeedEarlier: ((@escaping () -> Void) -> Void)?
+    /// Asks for every turn back to the thread's first; they come as a splice before `done`.
+    var onNeedAll: ((@escaping () -> Void) -> Void)?
     /// Lets go of the turns before the last rows, that many, and is called back once they are gone.
     var onTrimEarlier: ((Int, @escaping () -> Void) -> Void)?
     /// The diff of the turn that ended with the item is to be shown, with a file in view.
@@ -86,22 +88,44 @@ final class TranscriptView: FlippedView, RowOwner {
 
     private static let jumpButtonSide: CGFloat = Platform.scale > 1 ? 38 : 32
 
+    /// Under the top bar, as far from it as the jump to the end is from the composer.
+    private var topButtonY: CGFloat { topInset + Self.jumpButtonGap }
+
     /// What covers the top of the transcript, like a bar the rows scroll under.
     var topInset: CGFloat = 0 {
         didSet {
             guard topInset != oldValue else { return }
             updateVisible()
             layoutFade()
+            topButton.frame.origin.y = topButtonY
+        }
+    }
+
+    /// Whether something lies over the top of the rows, like the find bar or a toast, which the
+    /// way to the top gives way to.
+    var topTaken = false {
+        didSet {
+            guard topTaken != oldValue else { return }
+            updateJumpButton()
         }
     }
 
     /// What the find bar covers under `topInset`. It floats over the rows, which don't move for
-    /// it; a match is only scrolled clear of it.
-    var findCover: CGFloat = 0
+    /// it unless they start at the top, where they make room for it; a match is only scrolled
+    /// clear of it.
+    var findCover: CGFloat = 0 {
+        didSet {
+            guard findCover != oldValue else { return }
+            guard scroller.offsetY > 0.5 else { return updateVisible() }
+            let moved = findCover - oldValue
+            updateVisible(anchor: currentAnchor().map { Anchor(id: $0.id, delta: $0.delta + moved) })
+        }
+    }
 
-    /// Room above the first row, which the transcript fades out in, and the way back to the
-    /// thread that started this one once the first row is the thread's first.
-    private var topPadding: CGFloat { 20 + topInset + topLineage }
+    /// Room above the first row, which the transcript fades out in, the find bar's, and the way
+    /// back to the thread that started this one once the first row is the thread's first.
+    private var topPadding: CGFloat { fadePadding + findCover + topLineage }
+    private var fadePadding: CGFloat { 20 + topInset }
 
     /// The thread whose agent started this one, which a line above the first row and under the
     /// last leads back to.
@@ -131,6 +155,8 @@ final class TranscriptView: FlippedView, RowOwner {
 
     /// How far the end has to be below the viewport for the jump button to show.
     private var jumpDistance: CGFloat { max(200, viewportHeight / 2) }
+    /// How far up from the end the viewport has to be for the way to the top to show.
+    private var topDistance: CGFloat { viewportHeight * 4 }
 
     private let scroller = TranscriptScroller()
     private var document: FlippedView { scroller.document }
@@ -138,9 +164,10 @@ final class TranscriptView: FlippedView, RowOwner {
     private let lineageTop = LineageView()
     private let lineageEnd = LineageView()
     private let jumpButton = SurfaceView()
+    private let topButton = SurfaceView()
     /// Fades the rows out under the top bar, unless the system blurs them there, and from the
-    /// composer's middle down. The jump
-    /// button is not under it, and neither is the scroll bar, which `edge` keeps whole.
+    /// composer's middle down. The jump buttons are not under it, and neither is the scroll bar,
+    /// which `edge` keeps whole.
     private let fade = CAGradientLayer()
     private let edge = CALayer()
     private let fadeMask = CALayer()
@@ -229,31 +256,8 @@ final class TranscriptView: FlippedView, RowOwner {
             document.addSubview(lineage)
         }
 
-        let side = Self.jumpButtonSide
-        jumpButton.radius = side / 2
-        jumpButton.frame = CGRect(x: 0, y: 0, width: side, height: side)
-        jumpButton.isHidden = true
-        jumpButton.tip = "Scroll to end"
-        jumpButton.describe("Scroll to end", button: true)
-        #if os(iOS)
-        let glass = GlassView(frame: jumpButton.bounds)
-        jumpButton.addSubview(glass)
-        let arrow = SymbolView(.arrowDown, size: .lg, tint: Theme.foreground)
-        let arrowSide = PlatformImage.symbolSide(.lg)
-        let arrowParent = glass.content
-        #else
-        jumpButton.fill = Theme.popover
-        jumpButton.stroke = Theme.borderPopover
-        jumpButton.onHover = { [weak self] point in self?.jumpButton.fill = point == nil ? Theme.popover : Theme.borderPopover }
-        jumpButton.drop = (.md, .shadow)
-        let arrow = SymbolView(.arrowDown, size: ControlSize.regular.symbol, tint: Theme.foreground)
-        let arrowSide = ControlSize.regular.symbolSide
-        let arrowParent = jumpButton
-        #endif
-        arrow.frame = CGRect(x: (side - arrowSide) / 2, y: (side - arrowSide) / 2, width: arrowSide, height: arrowSide)
-        arrowParent.addSubview(arrow)
-        jumpButton.onClick = { [weak self] in self?.scrollToEnd() }
-        addSubview(jumpButton)
+        dress(jumpButton, symbol: .arrowDown, tip: "Scroll to end") { [weak self] in self?.scrollToEnd() }
+        dress(topButton, symbol: .arrowUp, tip: "Scroll to top") { [weak self] in self?.scrollToStart() }
 
         if Platform.hoverReveals {
             onHover = { [weak self] point in
@@ -319,8 +323,8 @@ final class TranscriptView: FlippedView, RowOwner {
     private func layoutFade() {
         guard bounds.height > 0 else { return }
         scroller.setTopBar(height: topInset)
-        let fadeTop = TranscriptScroller.blursUnderTopBar ? [0, 0] : [topInset, topPadding - topLineage]
-        let stops = fadeTop + [max(topPadding, bounds.height - bottomFade), bounds.height]
+        let fadeTop = TranscriptScroller.blursUnderTopBar ? [0, 0] : [topInset, fadePadding]
+        let stops = fadeTop + [max(fadePadding + topLineage, bounds.height - bottomFade), bounds.height]
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         fadeMask.frame = bounds
@@ -334,7 +338,9 @@ final class TranscriptView: FlippedView, RowOwner {
     override func layoutNow() {
         scroller.frame = bounds
         layoutFade()
-        jumpButton.frame.origin = CGPoint(x: ((bounds.width - Self.jumpButtonSide) / 2).rounded(), y: jumpButtonY)
+        let middle = ((bounds.width - Self.jumpButtonSide) / 2).rounded()
+        jumpButton.frame.origin = CGPoint(x: middle, y: jumpButtonY)
+        topButton.frame.origin = CGPoint(x: middle, y: topButtonY)
         let windowSize = self.windowSize
         let windowChanged = measuresAhead && windowSize.map { $0 != TranscriptColumn.window } == true
         guard bounds.width != layoutWidth || windowChanged else {
@@ -580,6 +586,7 @@ final class TranscriptView: FlippedView, RowOwner {
         let shown = topLineage
         hasEarlier = earlier
         if topLineage != shown { updateVisible() }
+        updateJumpButton()
         loadEarlierIfNear()
     }
 
@@ -644,6 +651,26 @@ final class TranscriptView: FlippedView, RowOwner {
         pin()
         updateVisible()
         trimEarlierIfFar()
+    }
+
+    /// Goes to the thread's first row, with the turns before what is here loaded first.
+    func scrollToStart() {
+        stopGlide()
+        pinned = false
+        userScrolling = false
+        placed = nil
+        guard hasEarlier, let onNeedAll else { return showStart() }
+        loadingEarlier = true
+        onNeedAll { [weak self] in
+            self?.loadingEarlier = false
+            self?.showStart()
+        }
+    }
+
+    private func showStart() {
+        scroll(to: 0)
+        updateVisible(anchor: viewportAnchor(), follows: false)
+        updateJumpButton()
     }
 
     /// Follows the end from now on, whatever the user was doing with the viewport.
@@ -905,13 +932,49 @@ final class TranscriptView: FlippedView, RowOwner {
         return nil
     }
 
+    /// A round button over the rows with an arrow, in glass on iOS.
+    private func dress(_ button: SurfaceView, symbol: Symbol, tip: String, action: @escaping () -> Void) {
+        let side = Self.jumpButtonSide
+        button.radius = side / 2
+        button.frame = CGRect(x: 0, y: 0, width: side, height: side)
+        button.isHidden = true
+        button.tip = tip
+        button.describe(tip, button: true)
+        #if os(iOS)
+        let glass = GlassView(frame: button.bounds)
+        button.addSubview(glass)
+        let arrow = SymbolView(symbol, size: .lg, tint: Theme.foreground)
+        let arrowSide = PlatformImage.symbolSide(.lg)
+        let arrowParent = glass.content
+        #else
+        button.fill = Theme.popover
+        button.stroke = Theme.borderPopover
+        button.onHover = { [weak button] point in button?.fill = point == nil ? Theme.popover : Theme.borderPopover }
+        button.drop = (.md, .shadow)
+        let arrow = SymbolView(symbol, size: ControlSize.regular.symbol, tint: Theme.foreground)
+        let arrowSide = ControlSize.regular.symbolSide
+        let arrowParent = button
+        #endif
+        arrow.frame = CGRect(x: (side - arrowSide) / 2, y: (side - arrowSide) / 2, width: arrowSide, height: arrowSide)
+        arrowParent.addSubview(arrow)
+        button.onClick = action
+        addSubview(button)
+    }
+
+    /// The way to the end shows once the end is out of sight, and the way to the top once the
+    /// viewport is four screens up from the end, unless something else lies over the top.
     private func updateJumpButton() {
         let distance = endY - scroller.offsetY
-        let hidden = pinned || rows.isEmpty || distance < jumpDistance
-        guard hidden != jumpButton.isHidden else { return }
-        jumpButton.isHidden = hidden
+        show(jumpButton, !pinned && !rows.isEmpty && distance >= jumpDistance)
+        let atTop = !hasEarlier && scroller.offsetY < viewportHeight
+        show(topButton, !topTaken && !rows.isEmpty && !atTop && distance >= topDistance)
+    }
+
+    private func show(_ button: SurfaceView, _ shown: Bool) {
+        guard shown == button.isHidden else { return }
+        button.isHidden = !shown
         #if os(macOS)
-        if hidden { jumpButton.fill = Theme.popover }
+        if !shown { button.fill = Theme.popover }
         #endif
     }
 

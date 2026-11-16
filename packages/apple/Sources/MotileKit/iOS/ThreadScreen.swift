@@ -9,6 +9,8 @@ struct ThreadScreen: View {
     /// The sidebar is under the thread, so the top bar has the button that shows it.
     var overSidebar = true
     @State private var composerHeight: CGFloat = 120
+    @State private var renaming: ThreadInfo?
+    @State private var deleting: ThreadInfo?
 
     private static let composerBottomGap: CGFloat = 8
 
@@ -60,13 +62,15 @@ struct ThreadScreen: View {
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar { bar }
         .overlay(alignment: .topTrailing) { ThreadCorner() }
+        .threadPrompts(renaming: $renaming, deleting: $deleting)
     }
 
     @ToolbarContentBuilder private var bar: some ToolbarContent {
         if overSidebar || store.shownAgent != nil || store.parentThread != nil {
             GlassToolbarItem(placement: .topBarLeading) { leading }
         }
-        ToolbarItem(placement: .principal) { title }
+        ToolbarItem(placement: .principal) { titleMenu }
+            .withoutSystemGlass()
         GlassToolbarItem(placement: .topBarTrailing) { trailing }
     }
 
@@ -141,6 +145,26 @@ struct ThreadScreen: View {
         }
     }
 
+    /// The title opens what can be done with the thread, all of it as one button that dims under a
+    /// finger, as the bar has no room around it to light.
+    @ViewBuilder private var titleMenu: some View {
+        let groups = store.titleActions(rename: { renaming = $0 }, delete: { deleting = $0 })
+        Group {
+            if groups.isEmpty {
+                title
+            } else {
+                Menu {
+                    RowActionItems(groups: groups)
+                } label: {
+                    title.contentShape(Rectangle())
+                }
+                .buttonStyle(DimButtonStyle())
+                .accessibilityLabel("Thread menu")
+            }
+        }
+        .frame(idealWidth: 10000, maxWidth: .infinity, alignment: .leading)
+    }
+
     /// The project, then the thread's name, or the agent's when one is shown in its place.
     private var title: some View {
         VStack(alignment: .leading, spacing: 1) {
@@ -152,7 +176,6 @@ struct ThreadScreen: View {
                 .foregroundStyle(Color.themeForeground)
         }
         .lineLimit(1)
-        .frame(idealWidth: 10000, maxWidth: .infinity, alignment: .leading)
     }
 
     /// The empty state of a new thread: a question, over the composer.

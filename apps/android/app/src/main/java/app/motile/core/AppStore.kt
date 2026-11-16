@@ -439,6 +439,11 @@ class AppStore(private val context: Context) {
     /** The keyboard shortcuts, as the core read them from `keybindings.json` and the defaults. */
     var shortcuts by mutableStateOf(Shortcuts())
         private set
+
+    /** Shows the commands' keys only while a keyboard is connected to press them. */
+    fun keyboardConnected(connected: Boolean) {
+        shortcuts = shortcuts.copy(shown = connected)
+    }
     /** The keys that open the sidebar's first threads are held, so their rows show them. */
     var showsJumpHints by mutableStateOf(false)
     /** What the sidebar's threads are searched for. Their messages are searched on the servers. */
@@ -542,7 +547,10 @@ class AppStore(private val context: Context) {
         when (event.string("type")) {
             "keybindings" -> {
                 val shortcuts = Shortcuts(event.obj("keybindings") ?: EmptyJSON)
-                return { if (this.shortcuts != shortcuts) this.shortcuts = shortcuts }
+                return {
+                    val kept = shortcuts.copy(shown = this.shortcuts.shown)
+                    if (this.shortcuts != kept) this.shortcuts = kept
+                }
             }
             "thread_search" -> {
                 val search = MessageSearch.of(event)

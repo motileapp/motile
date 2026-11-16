@@ -122,6 +122,8 @@ struct Shortcuts: Equatable {
     var conditions: [String] = []
     var issues: [String] = []
     var path = ""
+    /// Whether a keyboard is there to press them. Without one, nothing shows their keys.
+    var shown = true
 
     init() {}
 
@@ -137,7 +139,7 @@ struct Shortcuts: Equatable {
     }
 
     static func == (one: Shortcuts, other: Shortcuts) -> Bool {
-        one.rules == other.rules && one.groups == other.groups && one.issues == other.issues && one.path == other.path
+        one.rules == other.rules && one.groups == other.groups && one.issues == other.issues && one.path == other.path && one.shown == other.shown
     }
 
     /// The command the keys run where `context` holds: the last rule that matches. `candidates`
@@ -163,7 +165,8 @@ struct Shortcuts: Equatable {
 
     /// The keys of the command, as said in a tooltip: "⌘B".
     func label(_ command: String, in context: Set<String> = []) -> String? {
-        effective(command, in: context).first.map { $0.caps.joined() }
+        guard shown else { return nil }
+        return effective(command, in: context).first.map { $0.caps.joined() }
     }
 
     /// The text with the command's keys after it in parentheses, as a tooltip says them.

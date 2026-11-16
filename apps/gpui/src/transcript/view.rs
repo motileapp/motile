@@ -25,7 +25,8 @@ use crate::ui::icons;
 pub const TOP_PADDING: f32 = 20.;
 /// The room under the composer, which its box doesn't reach.
 const COMPOSER_BOTTOM_GAP: f32 = 16.;
-/// The jump button floats this far above the composer, or above the transcript's end without one.
+/// The jump button floats this far above the composer, or above the transcript's end without one,
+/// and the one to the top as far under the top bar.
 const JUMP_BUTTON_GAP: f32 = 10.;
 const JUMP_BUTTON_SIDE: f32 = 32.;
 /// How close to the end the viewport has to be to go to the end when the room under the rows grows.
@@ -60,6 +61,8 @@ pub struct TranscriptView {
     /// asked for, which waits while the rows of the thread open before are kept.
     bottom_inset: f32,
     wanted_bottom_inset: f32,
+    /// Room above the first row for the find bar, so that it scrolls clear of the bar.
+    find_cover: f32,
     /// The rows changed: once they are laid out, whether to ask for earlier turns or let go of
     /// the ones far above is looked at again.
     measures_after_layout: bool,
@@ -115,6 +118,7 @@ impl TranscriptView {
             trimming: false,
             bottom_inset: 0.,
             wanted_bottom_inset: 0.,
+            find_cover: 0.,
             measures_after_layout: false,
             glide: None,
             scrolled: (0., None),
@@ -231,6 +235,27 @@ impl TranscriptView {
         cx.notify();
     }
 
+    /// Room above the first row while the find bar covers the top. The rows in view stay where
+    /// they are, unless they start at the top, where they make room for the bar.
+    fn show_find_cover(&mut self, cx: &mut Context<Self>) {
+        let cover = self.find_cover_now(cx);
+        if cover == self.find_cover {
+            return;
+        }
+        let list = self.list(cx);
+        let top = list.logical_scroll_top();
+        let moved = cover - self.find_cover;
+        self.find_cover = cover;
+        self.model.read(cx).top_changed();
+        if top.item_ix == 0 && top.offset_in_item > px(0.) {
+            list.scroll_to(ListOffset { item_ix: 0, offset_in_item: (top.offset_in_item + px(moved)).max(px(0.)) });
+        }
+    }
+
+    fn find_cover_now(&self, cx: &App) -> f32 {
+        if !self.agent && self.store.read(cx).find.shown { crate::thread::find_bar::COVER } else { 0. }
+    }
+
     /// While a reply streams in, the viewport glides after the end instead of jumping to it.
     fn follow_stream(&mut self, cx: &mut Context<Self>) {
         let list = self.list(cx);
@@ -294,7 +319,7 @@ impl TranscriptView {
         self.loading_earlier = true;
         let view = cx.entity().downgrade();
         self.store.update(cx, |store, _| {
-            store.ask(Command::LoadEarlier { thread_id }, move |_, _, cx| {
+            store.ask(Command::LoadEarlier { thread_id, all: false }, move |_, _, cx| {
                 cx.defer(move |cx| {
                     let _ = view.update(cx, |view, cx| {
                         view.loading_earlier = false;
@@ -435,6 +460,49 @@ impl TranscriptView {
         cx.notify();
     }
 
+    /// Goes to the thread's first row, with the turns before what is here loaded first.
+    fn scroll_to_start(&mut self, cx: &mut Context<Self>) {
+        self.hold_still(cx);
+        let model = self.model.read(cx);
+        let Some(thread_id) = model.thread_id.clone().filter(|_| model.earlier && !self.agent) else {
+            return self.show_start(cx);
+        };
+        self.loading_earlier = true;
+        let (view, asked) = (cx.entity().downgrade(), thread_id.clone());
+        self.store.update(cx, |store, _| {
+            store.ask(Command::LoadEarlier { thread_id, all: true }, move |_, _, cx| {
+                cx.defer(move |cx| {
+                    let _ = view.update(cx, |view, cx| {
+                        view.loading_earlier = false;
+                        if view.model.read(cx).thread_id.as_deref() == Some(&asked) {
+                            view.show_start(cx);
+                        }
+                    });
+                });
+            });
+        });
+    }
+
+    fn show_start(&mut self, cx: &mut Context<Self>) {
+        self.list(cx).scroll_to(ListOffset { item_ix: 0, offset_in_item: px(0.) });
+        cx.notify();
+    }
+
+    /// The way to the top shows once the viewport is four viewports up from the end, unless the
+    /// view is at the thread's top already or something else lies over the top of the rows.
+    fn shows_top_button(&self, cx: &App) -> bool {
+        let model = self.model.read(cx);
+        let viewport = self.viewport_height(cx);
+        if viewport <= 0. {
+            return false;
+        }
+        // The list counts the rows above it hasn't measured as no height, so only its first rows are the top.
+        let at_top =
+            !model.earlier && self.list(cx).logical_scroll_top().item_ix <= 1 && self.scroll_offsets(cx).0 < viewport;
+        let top_taken = self.find_cover_now(cx) > 0. || self.store.read(cx).open_toast().is_some();
+        !model.rows.is_empty() && !at_top && !top_taken && self.distance_to_end(cx) >= viewport * 4.
+    }
+
     /// Scrolls to the row, and to the current match in it, a frame at a time: the row into the
     /// viewport first, then the match to its middle unless it is in sight already, between the
     /// find bar and what floats over the end. A long message that hides the match opens.
@@ -457,7 +525,7 @@ impl TranscriptView {
         let list = self.list(cx);
         let area = list.viewport_bounds();
         // The find bar floats over the top of the rows; a match is scrolled clear of it.
-        let cover = if !self.agent && self.store.read(cx).find.shown { crate::thread::find_bar::COVER } else { 0. };
+        let cover = self.find_cover_now(cx);
         let shown_top = area.top() + px(cover);
         let shown_bottom = area.bottom() - px(self.bottom_inset);
         let row = list.bounds_for_item(item);
@@ -557,12 +625,14 @@ impl Render for TranscriptView {
         let show_jump = !self.pinned(cx)
             && !self.model.read(cx).rows.is_empty()
             && self.distance_to_end(cx) >= (viewport / 2.).max(200.);
+        let show_top = self.shows_top_button(cx);
         let started_by = match self.agent {
             true => None,
             false => self.store.read(cx).parent_thread().map(|thread| thread.id.clone()),
         };
         self.model.update(cx, |model, _| model.set_started_by(started_by));
         self.show_bottom_inset(cx);
+        self.show_find_cover(cx);
         let model = self.model.read(cx);
         let list_state = model.list.clone();
         let items = model.items.clone();
@@ -597,6 +667,7 @@ impl Render for TranscriptView {
         let requested = self.requested_highlight.clone();
         let entity = cx.entity().downgrade();
         let bottom = self.bottom_inset;
+        let top = TOP_PADDING + self.find_cover;
 
         let list = list(list_state.clone(), move |index, window, cx| {
             let Some(item) = items.get(index).cloned() else { return div().into_any_element() };
@@ -604,7 +675,7 @@ impl Render for TranscriptView {
             // A press in a row keeps a selection to it, as the Mac's text view of a row does.
             let key = |model: &RowModel| Some(rows::row_key(&model.row.id));
             let (element, pressed) = match &item {
-                Item::Top => return div().h(px(TOP_PADDING)).into_any_element(),
+                Item::Top => return div().h(px(top)).into_any_element(),
                 Item::Bottom => return div().h(px(bottom)).into_any_element(),
                 Item::Row(row) => match rows.get(*row) {
                     Some(model) => {
@@ -690,29 +761,43 @@ impl Render for TranscriptView {
             .child(fade_top)
             .when(bottom > 0., |transcript| transcript.child(fade_bottom))
             .child(scroller)
+            .when(show_top, |transcript| {
+                transcript.child(
+                    div().absolute().left_0().right_0().top(px(JUMP_BUTTON_GAP)).flex().justify_center().child(
+                        jump_button("jump-to-top", "arrow-up", "Scroll to top", cx)
+                            .on_click(cx.listener(|this, _, _, cx| this.scroll_to_start(cx))),
+                    ),
+                )
+            })
             .when(show_jump, |transcript| {
                 transcript.child(
                     div().absolute().left_0().right_0().bottom(px(jump_bottom)).flex().justify_center().child(
-                        div()
-                            .id("jump-to-end")
-                            .size(px(JUMP_BUTTON_SIDE))
-                            .rounded_full()
-                            .bg(c.popover)
-                            .hover(|button| button.bg(c.border_popover))
-                            .cursor_default()
-                            .border_1()
-                            .border_color(c.border_popover)
-                            .shadow(c.shadow(theme::ShadowSize::Md, theme::Opacity::Shadow))
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .child(icons::symbol("arrow-down", ControlSize::Regular.symbol()).text_color(c.foreground))
-                            .tooltip(crate::ui::tooltip("Scroll to end"))
+                        jump_button("jump-to-end", "arrow-down", "Scroll to end", cx)
                             .on_click(cx.listener(|this, _, _, cx| this.scroll_to_end(cx))),
                     ),
                 )
             })
     }
+}
+
+/// A round button over the rows with an arrow, which goes to their top or their end.
+fn jump_button(id: &'static str, symbol: &'static str, tip: &'static str, cx: &App) -> Stateful<Div> {
+    let c = colors(cx);
+    div()
+        .id(id)
+        .size(px(JUMP_BUTTON_SIDE))
+        .rounded_full()
+        .bg(c.popover)
+        .hover(|button| button.bg(c.border_popover))
+        .cursor_default()
+        .border_1()
+        .border_color(c.border_popover)
+        .shadow(c.shadow(theme::ShadowSize::Md, theme::Opacity::Shadow))
+        .flex()
+        .items_center()
+        .justify_center()
+        .child(icons::symbol(symbol, ControlSize::Regular.symbol()).text_color(c.foreground))
+        .tooltip(crate::ui::tooltip(tip))
 }
 
 /// How many frames a reveal waits for its row to arrive and its match to be painted.
