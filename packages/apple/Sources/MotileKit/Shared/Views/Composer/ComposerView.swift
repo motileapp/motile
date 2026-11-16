@@ -16,6 +16,9 @@ struct ComposerView: View {
     /// Opens the composer with the keyboard as it comes, in the keyboard's own animation.
     @Environment(\.keyboardShown) private var keyboardShown
     @State private var keyboardUp = false
+    /// The keyboard came for the composer. It stays open until that keyboard has gone, so that it
+    /// closes in the keyboard's animation even when a sheet takes the focus first.
+    @State private var ownsKeyboard = false
     /// Focused while no keyboard came, as with a keyboard with keys.
     @State private var keyless = false
     #endif
@@ -109,7 +112,7 @@ struct ComposerView: View {
             }
             #else
             aboveText
-            let collapsed = !(focused && keyboardShown || keyless) && store.draft.isEmpty && store.attachments.isEmpty
+            let collapsed = !(ownsKeyboard && keyboardShown || keyless) && store.draft.isEmpty && store.attachments.isEmpty
             ComposerRows(collapsed: collapsed) {
                 text
                     .reporting(focus: $focused)
@@ -117,7 +120,12 @@ struct ComposerView: View {
                     .frame(height: textHeight)
                 ComposerTouchControls(collapsed: collapsed)
             }
-            .onChange(of: keyboardShown, initial: true) { keyboardUp = keyboardShown }
+            .geometryGroup()
+            .onChange(of: keyboardShown, initial: true) {
+                keyboardUp = keyboardShown
+                if !keyboardShown, !focused { ownsKeyboard = false }
+            }
+            .onChange(of: focused) { if focused { ownsKeyboard = true } }
             .task(id: focused) { await openWithoutKeyboard() }
             #endif
         }
