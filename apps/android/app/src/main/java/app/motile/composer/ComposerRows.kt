@@ -5,8 +5,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -63,24 +62,38 @@ fun ComposerRows(collapsed: Boolean, text: @Composable () -> Unit, controls: @Co
  */
 @Composable
 fun ComposerTouchControls(collapsed: Boolean) {
-    val store = LocalStore.current
     Row(verticalAlignment = Alignment.CenterVertically) {
         AttachMenu()
-        Spacer(Modifier.weight(1f).widthIn(min = 8.dp))
-        Appearing(!collapsed) { SettingsButton() }
+        Box(Modifier.weight(1f).padding(start = 8.dp), contentAlignment = Alignment.CenterEnd) {
+            Appearing(!collapsed) { Settings() }
+        }
         ComposerSendButtons()
     }
 }
 
+/** A narrow row names the model without its account, then leaves out the server, then the effort, so that the send button always has its place. */
 @Composable
-private fun SettingsButton() {
+private fun Settings() {
+    val store = LocalStore.current
+    val short = store.composerModel?.shortName ?: store.composerModelLabel
+    FirstThatFits(
+        Modifier,
+        { SettingsButton(store.composerModelLabel, effortShown = true, server = true) },
+        { SettingsButton(short, effortShown = true, server = true) },
+        { SettingsButton(short, effortShown = true, server = false) },
+        { SettingsButton(short, effortShown = false, server = false) },
+    )
+}
+
+@Composable
+private fun SettingsButton(title: String, effortShown: Boolean, server: Boolean) {
     val store = LocalStore.current
     val model = store.composerModel
-    val effort = store.composerEffort?.takeIf { it.isNotEmpty() }?.let(::effortSymbol)
+    val effort = store.composerEffort?.takeIf { effortShown && it.isNotEmpty() }?.let(::effortSymbol)
     val logo: (@Composable () -> Unit)? = model?.let { { AgentIcon(it.agent) } }
     Box(Modifier.semantics { contentDescription = "Thread settings" }) {
         ActionButton(
-            store.composerModelLabel, picture = logo, detail = effort, place = store.composerServer?.shortName, proxied = store.composerProxied,
+            title, picture = logo, detail = effort, place = store.composerServer?.shortName?.takeIf { server }, proxied = store.composerProxied,
             pinned = store.composerPinned, variant = ButtonVariant.Ghost, gap = 5.dp,
         ) { store.showsThreadSettings = true }
     }

@@ -1045,6 +1045,7 @@ data class Activity(
     val approvals: List<Approval> = emptyList(),
     /** The messages that wait for the agent to take them. */
     val queued: List<QueuedMessage> = emptyList(),
+    val context: ContextFill? = null,
 ) {
     val busy: Boolean get() = running || monitoring
 
@@ -1052,7 +1053,7 @@ data class Activity(
         /** What the thread list says the agent does, until the thread's server says more. */
         fun of(thread: ThreadInfo) = Activity(running = thread.running, monitoring = thread.monitoring)
 
-        fun of(json: JSON, waiting: List<JSON>) = Activity(
+        fun of(json: JSON, waiting: List<JSON>, context: JSON? = null) = Activity(
             running = json.bool("running"),
             monitoring = json.bool("monitoring"),
             thinking = json.bool("thinking"),
@@ -1062,11 +1063,33 @@ data class Activity(
             approvals = waiting.map(::Approval),
             // What the agent is told of the agents it started isn't the user's to send or take back.
             queued = json.objects("queued").filter { it.obj("notice") == null }.map(::QueuedMessage),
+            context = context?.let(::ContextFill),
         )
 
         /** What is shown between sending a first message and the server saying the turn runs. */
         val starting: Activity get() = Activity(running = true, startedAt = Time.now())
     }
+}
+
+/** How much of its context window the thread's agent session takes. */
+data class ContextFill(
+    /** "22.7K". */
+    val tokens: String,
+    /** "200K", when the window is known. */
+    val window: String?,
+    /** Between 0 and 100, when the window is known. */
+    val usedPercent: Double?,
+    /** "11%", "<1%", when the window is known. */
+    val used: String?,
+    val tone: LimitsReport.Window.Tone,
+) {
+    constructor(json: JSON) : this(
+        tokens = json.string("tokens"),
+        window = json.optionalString("window"),
+        usedPercent = json.optionalDouble("used_percent"),
+        used = json.optionalString("used"),
+        tone = LimitsReport.Window.Tone.entries.firstOrNull { it.raw == json.string("tone") } ?: LimitsReport.Window.Tone.Success,
+    )
 }
 
 /** The agents a thread's agent started, and theirs, as the thread shows them. */

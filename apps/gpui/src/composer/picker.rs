@@ -7,7 +7,7 @@
 use gpui_kit::component::input::{Enter, Escape, InputEvent, InputState, MoveDown, MoveLeft, MoveRight, MoveUp};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
-use motile_core::limits;
+use motile_core::limits::{self, ContextFill};
 use motile_core::model_search;
 use motile_protocol::wire::{Access, Agent, AgentAccount, ModelContext, ModelInfo};
 
@@ -32,7 +32,9 @@ const HEADER_GAP: f32 = 6.;
 pub const WIDTH: f32 = RAIL_WIDTH + LIST_WIDTH + SETTINGS_WIDTH + 4.;
 /// The room between the picker and the button it opens from.
 pub const GAP: f32 = 4.;
-const FOOTER_HEIGHT: f32 = ControlSize::Regular.height() + 2. * PADDING;
+/// Around the access button, alike above, below and beside it.
+const FOOTER_PADDING: f32 = PADDING + 2.;
+const FOOTER_HEIGHT: f32 = ControlSize::Regular.height() + 2. * FOOTER_PADDING;
 /// The search's symbol stands this much closer to the edge than the rows' symbols, which it looks aligned with.
 const SEARCH_NUDGE: f32 = 2.;
 const ACCESS_MENU_WIDTH: f32 = 288.;
@@ -616,18 +618,27 @@ impl ComposerPicker {
         let c = colors(cx);
         let current = self.store.read(cx).composer_access();
         let open = self.access_open;
-        div().flex_shrink_0().p(px(PADDING)).flex().justify_end().child(
-            ActionButton::new("picker-access", access_label(current))
-                .symbol(access_symbol(current))
-                .help(access_detail(current))
-                .ghost()
-                .selected(open || self.column == ComposerPickerPart::Access)
-                .opens(true)
-                .open(open)
-                .tint(Some(c.foreground))
-                .surface(Surface::Popover)
-                .on_click(cx.listener(move |this, _, _, cx| this.open_access(!open, cx))),
-        )
+        let fill = self.store.read(cx).composer_context_fill();
+        div()
+            .flex_shrink_0()
+            .h(px(FOOTER_HEIGHT))
+            .p(px(FOOTER_PADDING))
+            .flex()
+            .items_center()
+            .when_some(fill, |footer, fill| footer.child(context_fill(&fill, cx).pl(px(list::ROW_PADDING))))
+            .child(div().flex_1())
+            .child(
+                ActionButton::new("picker-access", access_label(current))
+                    .symbol(access_symbol(current))
+                    .help(access_detail(current))
+                    .ghost()
+                    .selected(open || self.column == ComposerPickerPart::Access)
+                    .opens(true)
+                    .open(open)
+                    .tint(Some(c.foreground))
+                    .surface(Surface::Popover)
+                    .on_click(cx.listener(move |this, _, _, cx| this.open_access(!open, cx))),
+            )
     }
 
     /// Over the rest of the picker while the access menu is open: a press on it closes the access
@@ -689,7 +700,7 @@ impl ComposerPicker {
         crate::ui::dropdown_card(div(), cx)
             .id("picker-access-menu")
             .absolute()
-            .right(px(PADDING))
+            .right(px(FOOTER_PADDING))
             .bottom(px(ACCESS_MENU_LIFT))
             .w(px(ACCESS_MENU_WIDTH))
             .py(px(ACCESS_MENU_PADDING.0))
@@ -803,14 +814,7 @@ fn title_descent(cx: &App) -> f32 {
 
 /// An account's windows as thin pills side by side, each filled as far as it was used.
 fn limit_pills(account: &str, windows: &[limits::Row], cx: &App) -> Div {
-    let c = colors(cx);
-    let track = Surface::Popover.layer(Layer::Control, c);
     div().flex().gap(px(12.)).children(windows.iter().enumerate().map(|(index, window)| {
-        let tone = match window.tone {
-            limits::Tone::Success => c.success,
-            limits::Tone::Pending => c.pending,
-            limits::Tone::Warning => c.warning,
-        };
         let said = [
             Some(window.label.clone()),
             Some(format!("{} used", window.used)),
@@ -820,22 +824,56 @@ fn limit_pills(account: &str, windows: &[limits::Row], cx: &App) -> Div {
         .flatten()
         .collect::<Vec<_>>()
         .join(" · ");
-        div()
+        limit_bar(window.used_percent, window.tone, cx)
             .id(SharedString::from(format!("pill-{account}-{index}")))
             .flex_1()
-            .h(px(4.))
-            .rounded_full()
-            .overflow_hidden()
-            .bg(track)
             .tooltip(tooltip(said))
-            .child(
-                div()
-                    .h_full()
-                    .w(relative((window.used_percent / 100.).clamp(0., 1.) as f32))
-                    .rounded_full()
-                    .bg(c.at(tone, Opacity::ColorTintChartStrongest)),
-            )
     }))
+}
+
+/// A thin pill filled as far as something was used, in its tone.
+fn limit_bar(used_percent: f64, tone: limits::Tone, cx: &App) -> Div {
+    let c = colors(cx);
+    let fill = match tone {
+        limits::Tone::Success => c.success,
+        limits::Tone::Pending => c.pending,
+        limits::Tone::Warning => c.warning,
+    };
+    div().h(px(4.)).rounded_full().overflow_hidden().bg(Surface::Popover.layer(Layer::Control, c)).child(
+        div()
+            .h_full()
+            .w(relative((used_percent / 100.).clamp(0., 1.) as f32))
+            .rounded_full()
+            .bg(c.at(fill, Opacity::ColorTintChartStrongest)),
+    )
+}
+
+/// How full the open thread's context is: its tokens, and under them how much of the window they
+/// take as a bar, when the window is known.
+/// "Context: 22.7K / 200K (11%)" over its bar, as an account's name over its limits.
+fn context_fill(fill: &ContextFill, cx: &App) -> Div {
+    let c = colors(cx);
+    div()
+        .flex_none()
+        .flex()
+        .flex_col()
+        .justify_center()
+        .gap(px(HEADER_GAP))
+        .child(
+            div()
+                .flex()
+                .whitespace_nowrap()
+                .text_size(ControlSize::Regular.text_size())
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(c.muted_foreground)
+                .child("Context: ")
+                .child(div().text_color(c.foreground).child(fill.tokens.clone()))
+                .when_some(fill.window.clone(), |line, window| line.child(format!(" / {window}")))
+                .when_some(fill.used.clone(), |line, used| line.child(format!(" ({used})"))),
+        )
+        .when_some(fill.used_percent, |lines, percent| {
+            lines.child(limit_bar(percent, fill.tone, cx).w_full().mb(px(4.)))
+        })
 }
 
 impl Render for ComposerPicker {

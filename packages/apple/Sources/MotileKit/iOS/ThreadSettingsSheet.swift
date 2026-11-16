@@ -2,7 +2,7 @@
 import SwiftUI
 
 /// What the Mac has around its composer, as a sheet: the model, the reasoning effort, how much
-/// the agent may do without asking, and where the thread works.
+/// the agent may do without asking, where the thread works and how full its context is.
 struct ThreadSettingsSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.surface) private var surface
@@ -22,6 +22,9 @@ struct ThreadSettingsSheet: View {
                 options
                 if let project = store.composerProject {
                     workspace(project)
+                }
+                if let fill = store.composerContextFill {
+                    context(fill)
                 }
             }
             .listStyle(.insetGrouped)
@@ -231,6 +234,32 @@ struct ThreadSettingsSheet: View {
                 Text("A worktree can start once \(branch) has a commit.")
                     .foregroundStyle(Color.themeMutedForeground)
             }
+        }
+        .listRowBackground(surface.color(.box))
+    }
+
+    /// The tokens the thread's session holds of its context window, over the part they fill.
+    private func context(_ fill: ContextFill) -> some View {
+        Section {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    let tokens = Text(verbatim: fill.tokens).foregroundStyle(Color.themeForeground)
+                    Text("\(tokens)\(fill.window.map { " / \($0)" } ?? "")")
+                        .foregroundStyle(Color.themeMutedForeground)
+                    Spacer()
+                    if let used = fill.used {
+                        Text(verbatim: used)
+                            .foregroundStyle(Color.themeMutedForeground)
+                    }
+                }
+                if let percent = fill.usedPercent {
+                    LimitPill(usedPercent: percent, color: fill.tone.color)
+                        .padding(.bottom, 4)
+                }
+            }
+            .padding(.vertical, 4)
+        } header: {
+            Text("Context")
         }
         .listRowBackground(surface.color(.box))
     }

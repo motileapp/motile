@@ -7,7 +7,9 @@ use std::collections::HashMap;
 
 use motile_protocol::gateway_wire::{AccountStatus, GatewayAccount};
 use motile_protocol::select::{self, Candidate, HORIZON, ON_PACE, Window};
-use motile_protocol::wire::{Agent, AgentAccount, AgentLimits, LimitReset, LimitWindow, ModelInfo, ResetKind};
+use motile_protocol::wire::{
+    Agent, AgentAccount, AgentLimits, ContextUsed, LimitReset, LimitWindow, ModelInfo, ResetKind,
+};
 use serde::{Deserialize, Serialize};
 
 /// What a server said of its agents' accounts.
@@ -334,6 +336,40 @@ fn expires_in(seconds: f64) -> String {
     }
 }
 
+/// How much of its context window a thread's agent session takes, as the model picker shows it:
+/// "22.7K / 200K".
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct ContextFill {
+    /// "22.7K".
+    pub tokens: String,
+    /// "200K", when the window is known.
+    pub window: Option<String>,
+    /// Between 0 and 100, when the window is known.
+    pub used_percent: Option<f64>,
+    /// "11%", or "<1%" for a little, when the window is known.
+    pub used: Option<String>,
+    pub tone: Tone,
+}
+
+pub fn context_fill(context: ContextUsed) -> ContextFill {
+    let tokens = crate::activity::abbreviated(context.tokens);
+    let Some(window) = context.window.filter(|window| *window > 0) else {
+        return ContextFill { tokens, window: None, used_percent: None, used: None, tone: Tone::Success };
+    };
+    let percent = context.tokens as f64 * 100.0 / window as f64;
+    let used = match percent.round() {
+        0.0 if context.tokens > 0 => "<1%".to_string(),
+        whole => format!("{whole}%"),
+    };
+    ContextFill {
+        tokens,
+        window: Some(crate::activity::abbreviated(window)),
+        used_percent: Some(percent.min(100.0)),
+        used: Some(used),
+        tone: tone(percent, false),
+    }
+}
+
 fn tone(used_percent: f64, warning: bool) -> Tone {
     match used_percent {
         _ if warning || used_percent >= 75.0 => Tone::Warning,
@@ -550,6 +586,22 @@ fn runs(account: &AgentAccount, model: &ModelInfo) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_context_reads_as_its_tokens_of_the_window_and_the_part_it_fills() {
+        let fill = |tokens, window| {
+            let fill = context_fill(ContextUsed { tokens, window });
+            (fill.tokens, fill.window, fill.used_percent.map(f64::round), fill.used, fill.tone)
+        };
+        let filled = |tokens: &str, window: &str, percent: f64, used: &str, tone| {
+            (tokens.to_string(), Some(window.to_string()), Some(percent), Some(used.to_string()), tone)
+        };
+        assert_eq!(fill(22_700, Some(200_000)), filled("22.7K", "200K", 11.0, "11%", Tone::Success));
+        assert_eq!(fill(600, Some(200_000)), filled("600", "200K", 0.0, "<1%", Tone::Success));
+        assert_eq!(fill(160_000, Some(200_000)), filled("160K", "200K", 80.0, "80%", Tone::Warning));
+        assert_eq!(fill(1_200_000, Some(1_000_000)), filled("1.2M", "1M", 100.0, "120%", Tone::Warning));
+        assert_eq!(fill(34_300, None), ("34.3K".into(), None, None, None, Tone::Success));
+    }
 
     fn window(label: &str, used_percent: f64, resets_in: f64, window_secs: u64) -> LimitWindow {
         LimitWindow {

@@ -826,13 +826,9 @@ impl Hub {
     }
 
     fn context_of(&self, thread: &Thread) -> rusqlite::Result<Option<ContextUse>> {
-        let Some(session) = self.store.session(&thread.id, &self.continuation(thread))? else { return Ok(None) };
-        // Without a session to resume, the next turn starts with an empty context.
-        let Some(tokens) = session.session_id.as_ref().and(session.context_used) else { return Ok(None) };
-        let model = thread.model.as_deref().or(session.model.as_deref());
-        let prices = self.prices.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        let window = session.context_window.or_else(|| prices.context_window(model?)).filter(|window| *window > 0);
-        Ok(Some(ContextUse { tokens, window, percent: window.map(|window| (tokens * 100 + window / 2) / window) }))
+        let Some(used) = self.context_used(thread)? else { return Ok(None) };
+        let percent = used.window.map(|window| (used.tokens * 100 + window / 2) / window);
+        Ok(Some(ContextUse { tokens: used.tokens, window: used.window, percent }))
     }
 
     fn subagent_of(&self, live: &Live, state: &ChildState) -> anyhow::Result<Subagent> {

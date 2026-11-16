@@ -2,29 +2,15 @@ import SwiftUI
 
 /// An account's windows as thin pills side by side, each filled as far as it was used.
 struct LimitPills: View {
-    private static let height: CGFloat = 4
-
-    @Environment(\.surface) private var surface
     let windows: [LimitsReport.Window]
 
     var body: some View {
         HStack(spacing: 12) {
             ForEach(windows) { window in
-                GeometryReader { pill in
-                    Capsule()
-                        .fill(surface.color(.control))
-                        .overlay(alignment: .leading) {
-                            Capsule()
-                                .fill(window.color)
-                                .opacity(.colorTintChartStrongest)
-                                .frame(width: pill.size.width * window.usedPercent / 100)
-                        }
-                        .clipShape(Capsule())
-                }
-                .frame(height: scaled(Self.height))
-                .accessibilityElement()
-                .accessibilityLabel(Self.description(of: window))
-                .tooltip(Self.description(of: window))
+                LimitPill(usedPercent: window.usedPercent, color: window.color)
+                    .accessibilityElement()
+                    .accessibilityLabel(Self.description(of: window))
+                    .tooltip(Self.description(of: window))
             }
         }
     }
@@ -37,9 +23,37 @@ struct LimitPills: View {
     }
 }
 
+/// How much of something is used, as one of the account limits' bars.
+struct LimitPill: View {
+    private static let height: CGFloat = 4
+
+    @Environment(\.surface) private var surface
+    let usedPercent: Double
+    let color: Color
+
+    var body: some View {
+        GeometryReader { pill in
+            Capsule()
+                .fill(surface.color(.control))
+                .overlay(alignment: .leading) {
+                    Capsule()
+                        .fill(color)
+                        .opacity(.colorTintChartStrongest)
+                        .frame(width: pill.size.width * usedPercent / 100)
+                }
+                .clipShape(Capsule())
+        }
+        .frame(height: scaled(Self.height))
+    }
+}
+
 extension LimitsReport.Window {
+    var color: Color { tone.color }
+}
+
+extension LimitsReport.Window.Tone {
     var color: Color {
-        switch tone {
+        switch self {
         case .success: .themeSuccess
         case .pending: .themePending
         case .warning: .themeWarning

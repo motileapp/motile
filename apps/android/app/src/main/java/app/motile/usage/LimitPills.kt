@@ -27,21 +27,20 @@ import app.motile.theme.at
 /** An account's windows as thin pills side by side, each filled as far as it was used. */
 @Composable
 fun LimitPills(windows: List<LimitsReport.Window>, modifier: Modifier = Modifier) {
-    val track = LocalSurface.current.color(Surface.Layer.Control)
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         for (window in windows) {
-            Box(
-                Modifier
-                    .weight(1f)
-                    .height(scaled(4f).dp)
-                    .clip(CircleShape)
-                    .background(track)
-                    .semantics { contentDescription = description(window) },
-            ) {
-                val used = (window.usedPercent / 100).toFloat().coerceIn(0f, 1f)
-                Box(Modifier.fillMaxWidth(used).fillMaxHeight().background(window.color.at(Opacity.ColorTintChartStrongest), CircleShape))
-            }
+            LimitBar(window.usedPercent, window.tone, Modifier.weight(1f).semantics { contentDescription = description(window) })
         }
+    }
+}
+
+/** How much of something is used, as one of the account limits' bars. */
+@Composable
+fun LimitBar(usedPercent: Double, tone: LimitsReport.Window.Tone, modifier: Modifier = Modifier) {
+    val track = LocalSurface.current.color(Surface.Layer.Control)
+    Box(modifier.fillMaxWidth().height(scaled(4f).dp).clip(CircleShape).background(track)) {
+        val used = (usedPercent / 100).toFloat().coerceIn(0f, 1f)
+        Box(Modifier.fillMaxWidth(used).fillMaxHeight().background(tone.color.at(Opacity.ColorTintChartStrongest), CircleShape))
     }
 }
 
@@ -50,9 +49,12 @@ private fun description(window: LimitsReport.Window): String =
     listOfNotNull(window.label, "${window.used} used", window.resetsIn?.let { "resets in $it" }).joinToString(" · ")
 
 val LimitsReport.Window.color: Color
+    @Composable @ReadOnlyComposable get() = tone.color
+
+val LimitsReport.Window.Tone.color: Color
     @Composable @ReadOnlyComposable get() {
         val palette = LocalPalette.current
-        return when (tone) {
+        return when (this) {
             LimitsReport.Window.Tone.Success -> palette.success
             LimitsReport.Window.Tone.Pending -> palette.pending
             LimitsReport.Window.Tone.Warning -> palette.warning
