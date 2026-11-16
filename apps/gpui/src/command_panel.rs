@@ -792,7 +792,7 @@ impl CommandPanel {
         let mut items = Vec::new();
         if store.right_panel.shown_agent.is_none() {
             let find =
-                Item::new("find", "Find in thread", thread.title.clone(), ItemIcon::Symbol("search"), |this, _, cx| {
+                Item::new("find", "Search in thread", thread.title.clone(), ItemIcon::Symbol("search"), |this, _, cx| {
                     this.store.update(cx, |store, cx| store.open_find(None, None, cx))
                 });
             items.push(find.keys(store.shortcuts.label("find.open")));

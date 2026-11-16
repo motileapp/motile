@@ -61,7 +61,7 @@ fun ThreadPrompts(renaming: ThreadInfo?, deleting: ThreadInfo?, endRenaming: () 
 
 /** What the open thread's title offers: finding in it, then what its row offers. */
 fun MenuBuilder.titleMenu(store: AppStore, thread: ThreadInfo, rename: (ThreadInfo) -> Unit, delete: (ThreadInfo) -> Unit) {
-    item("Find in thread") { store.openFind() }
+    item("Search in thread") { store.openFind() }
     divider()
     threadMenu(store, thread, rename, delete)
 }

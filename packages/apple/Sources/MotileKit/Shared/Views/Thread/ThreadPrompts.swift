@@ -12,7 +12,7 @@ extension AppStore {
     /// an agent is shown in its place.
     func titleActions(rename: @escaping (ThreadInfo) -> Void, delete: @escaping (ThreadInfo) -> Void) -> [[RowAction]] {
         guard let thread = selectedThread, shownAgent == nil else { return [] }
-        let find = RowAction(title: "Find in thread") { self.openFind() }
+        let find = RowAction(title: "Search in thread") { self.openFind() }
         return [[find]] + rowActions(for: thread, rename: rename, delete: delete)
     }
 }

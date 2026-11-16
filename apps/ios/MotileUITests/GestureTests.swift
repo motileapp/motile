@@ -274,7 +274,7 @@ final class GestureTests: XCTestCase {
 
     /// Commands find only in a thread open on the main screen, which it names, and put the sidebar away to show it.
     func testCommandsFindInTheOpenThreadOnly() {
-        let find = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Find in thread")).firstMatch
+        let find = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Search in thread")).firstMatch
         openSidebar()
         newThread.tap()
         openSidebar()
@@ -289,7 +289,7 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(shown(find))
         XCTAssertTrue(find.label.contains("Add API Rate Limiting"))
         find.tap()
-        XCTAssertTrue(shown(app.textFields["Find in thread"]))
+        XCTAssertTrue(shown(app.textFields["Search in thread"]))
         XCTAssertFalse(newThread.exists && newThread.isHittable)
         XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
         app.typeText("limit")
@@ -298,7 +298,7 @@ final class GestureTests: XCTestCase {
         next.tap()
     }
 
-    /// The thread's title opens its menu, whose Find in thread opens the find bar on it.
+    /// The thread's title opens its menu, whose Search in thread opens the search bar on it.
     func testTheTitleOpensTheThreadsMenu() {
         openSidebar()
         guard let thread = row("Add API Rate Limiting") else { return XCTFail("no row") }
@@ -307,8 +307,8 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(shown(menu))
         menu.tap()
         XCTAssertTrue(shown(app.buttons["Rename"]))
-        app.buttons["Find in thread"].tap()
-        XCTAssertTrue(shown(app.textFields["Find in thread"]))
+        app.buttons["Search in thread"].tap()
+        XCTAssertTrue(shown(app.textFields["Search in thread"]))
     }
 
     private func tapRow(_ title: String) {

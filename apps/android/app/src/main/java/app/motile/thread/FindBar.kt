@@ -84,7 +84,7 @@ fun FindBar(modifier: Modifier = Modifier) {
         ) {
             Box(Modifier.weight(1f)) {
                 InputField(
-                    "Find in thread", find.query, { store.setFindQuery(it) },
+                    "Search in thread", find.query, { store.setFindQuery(it) },
                     Modifier
                         .onEscape { store.closeFind() }
                         .onPreviewKeyEvent { event ->

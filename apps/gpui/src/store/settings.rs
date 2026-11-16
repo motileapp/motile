@@ -393,7 +393,7 @@ mod tests {
     #[test]
     fn a_search_finds_groups_and_commands_by_every_word() {
         let shortcuts = Shortcuts {
-            commands: vec![CommandInfo { id: "chat.new".into(), label: "New Thread".into() }],
+            commands: vec![CommandInfo { id: "chat.new".into(), label: "New thread".into() }],
             ..Default::default()
         };
         let ids = |query: &str| -> Vec<String> {

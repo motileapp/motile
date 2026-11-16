@@ -520,7 +520,7 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
             // Finding in the thread the main screen shows, named in its detail. An agent shown in its place has none.
             val thread = store.selectedThread
             val find = if (thread == null || store.shownAgent != null) emptyList() else listOf(
-                PanelItem("find", "Find in thread", thread.title, PanelIcon.Glyph(Symbol.Search)) { store.openFind() }.keyed("find.open"),
+                PanelItem("find", "Search in thread", thread.title, PanelIcon.Glyph(Symbol.Search)) { store.openFind() }.keyed("find.open"),
             )
             return find + serverUpdates + always + settings + usage
         }

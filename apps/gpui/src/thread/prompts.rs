@@ -153,7 +153,7 @@ pub fn title_menu(store: &Entity<Store>, prompts: &Entity<ThreadPrompts>, cx: &A
     let state = store.read(cx);
     let thread = state.selected_thread().filter(|_| state.right_panel.shown_agent.is_none())?;
     let find = store.clone();
-    let menu = Menu::new().item("Find in thread", move |_, cx| {
+    let menu = Menu::new().item("Search in thread", move |_, cx| {
         find.update(cx, |store, cx| store.open_find(None, None, cx));
     });
     let Some(row) = crate::sidebar::thread_menu(store, prompts, &thread.id, cx) else { return Some(menu) };

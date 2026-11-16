@@ -13,6 +13,11 @@ struct ComposerView: View {
     @State private var pressed = 0
     #if os(iOS)
     @State private var focused = false
+    /// Opens the composer with the keyboard as it comes, in the keyboard's own animation.
+    @Environment(\.keyboardShown) private var keyboardShown
+    @State private var keyboardUp = false
+    /// Focused while no keyboard came, as with a keyboard with keys.
+    @State private var keyless = false
     #endif
     /// How far the composer's top is from the top of the thread, where its skill menu has to end.
     @State private var room: CGFloat = .infinity
@@ -104,7 +109,7 @@ struct ComposerView: View {
             }
             #else
             aboveText
-            let collapsed = !focused && store.draft.isEmpty && store.attachments.isEmpty
+            let collapsed = !(focused && keyboardShown || keyless) && store.draft.isEmpty && store.attachments.isEmpty
             ComposerRows(collapsed: collapsed) {
                 text
                     .reporting(focus: $focused)
@@ -112,6 +117,8 @@ struct ComposerView: View {
                     .frame(height: textHeight)
                 ComposerTouchControls(collapsed: collapsed)
             }
+            .onChange(of: keyboardShown, initial: true) { keyboardUp = keyboardShown }
+            .task(id: focused) { await openWithoutKeyboard() }
             #endif
         }
         .background {
@@ -122,6 +129,19 @@ struct ComposerView: View {
         .composerSurface(in: RoundedRectangle(cornerRadius: Self.radius, style: .continuous), shadow: .md)
         .anchorPreference(key: ComposerPlace.self, value: .bounds) { ComposerPlace.Value(box: $0) }
     }
+
+    #if os(iOS)
+    /// Opens the composer when it is focused and no keyboard came, and closes it again when it is not.
+    private func openWithoutKeyboard() async {
+        guard focused else {
+            if keyless { withAnimation(.smooth(duration: 0.25)) { keyless = false } }
+            return
+        }
+        try? await Task.sleep(for: .milliseconds(400))
+        guard !Task.isCancelled, !keyboardUp else { return }
+        withAnimation(.smooth(duration: 0.25)) { keyless = true }
+    }
+    #endif
 
     @ViewBuilder private var aboveText: some View {
         if let thread = store.selectedThread, thread.isArchived {
