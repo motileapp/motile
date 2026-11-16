@@ -2,6 +2,7 @@
 //! of a new one.
 
 pub mod find_bar;
+pub mod prompts;
 mod toast;
 
 use std::cell::Cell;
@@ -57,13 +58,19 @@ pub struct ThreadPane {
     git_menu: Anchor,
     commit_sheet: Option<Entity<crate::git::CommitSheet>>,
     find_bar: Entity<find_bar::FindBar>,
+    prompts: Entity<prompts::ThreadPrompts>,
     /// The title the window was last given.
     window_title: String,
     _ticks: Task<()>,
 }
 
 impl ThreadPane {
-    pub fn new(store: Entity<Store>, window: &mut Window, cx: &mut Context<Self>) -> Self {
+    pub fn new(
+        store: Entity<Store>,
+        prompts: Entity<prompts::ThreadPrompts>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Self {
         cx.observe_in(&store, window, |this, store, window, cx| {
             this.follow_commit_sheet(&store, window, cx);
             cx.notify();
@@ -105,6 +112,7 @@ impl ThreadPane {
             git_menu: Anchor::default(),
             commit_sheet: None,
             find_bar,
+            prompts,
             window_title: String::new(),
             _ticks: ticks,
         }
@@ -174,7 +182,6 @@ impl ThreadPane {
                     .children(self.back_button(cx))
                     .child(
                         div()
-                            .flex_1()
                             .flex()
                             .flex_col()
                             .gap(px(2.))
@@ -188,6 +195,17 @@ impl ThreadPane {
                                     .text_color(c.foreground)
                                     .truncate()
                                     .child(title),
+                            )
+                            // Only a right click is the title's; the top bar under it takes the others.
+                            .on_mouse_down(
+                                MouseButton::Right,
+                                cx.listener(|this, event: &MouseDownEvent, window, cx| {
+                                    let Some(menu) = prompts::title_menu(&this.store, &this.prompts, cx) else {
+                                        return;
+                                    };
+                                    cx.stop_propagation();
+                                    menu.show(event.position, window, cx);
+                                }),
                             ),
                     ),
             )

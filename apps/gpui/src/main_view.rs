@@ -11,6 +11,7 @@ use crate::sidebar::Sidebar;
 use crate::store::Store;
 use crate::theme::{self, colors};
 use crate::thread::ThreadPane;
+use crate::thread::prompts::ThreadPrompts;
 use crate::ui::{ActionButton, TOOLBAR_MARGIN, TOOLBAR_WIDTH, even};
 use crate::usage::UsageRoute;
 
@@ -54,6 +55,8 @@ pub struct MainView {
     sidebar: Entity<Sidebar>,
     thread: Entity<ThreadPane>,
     panel: Entity<RightPanelView>,
+    /// Renaming and deleting a thread, which the sidebar's rows and the thread's title ask for.
+    prompts: Entity<ThreadPrompts>,
     /// What the agents spent, in place of the thread and the right panel while it is open.
     usage: Option<Entity<UsageRoute>>,
     resizing: Option<Resizing>,
@@ -69,8 +72,9 @@ fn toolbar_button(id: &'static str, symbol: &'static str, help: impl Into<Shared
 
 impl MainView {
     pub fn new(store: Entity<Store>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let sidebar = cx.new(|cx| Sidebar::new(store.clone(), window, cx));
-        let thread = cx.new(|cx| ThreadPane::new(store.clone(), window, cx));
+        let prompts = cx.new(|_| ThreadPrompts::new(store.clone()));
+        let sidebar = cx.new(|cx| Sidebar::new(store.clone(), prompts.clone(), window, cx));
+        let thread = cx.new(|cx| ThreadPane::new(store.clone(), prompts.clone(), window, cx));
         let panel = cx.new(|cx| RightPanelView::new(store.clone(), window, cx));
         let subscriptions = vec![cx.observe(&store, |_, _, cx| cx.notify())];
         Self {
@@ -78,6 +82,7 @@ impl MainView {
             sidebar,
             thread,
             panel,
+            prompts,
             usage: None,
             resizing: None,
             moving: Default::default(),
@@ -370,5 +375,6 @@ impl Render for MainView {
                     .items_center()
                     .when(!shows_usage, |bar| bar.child(self.panel_buttons(cx))),
             )
+            .child(self.prompts.clone())
     }
 }

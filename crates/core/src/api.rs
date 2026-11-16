@@ -582,9 +582,12 @@ pub enum Command {
     FindEnd {
         thread_id: String,
     },
-    /// Asks for the turns before the first row, when the rows said there are some.
+    /// Asks for the turns before the first row, when the rows said there are some. With `all`,
+    /// every turn back to the thread's first.
     LoadEarlier {
         thread_id: String,
+        #[serde(default)]
+        all: bool,
     },
     /// Lets go of the turns before the one that has the first of the last `keep_rows` rows.
     /// The client asks while it shows the end of a thread; the turns come back with `LoadEarlier`.

@@ -192,7 +192,7 @@ private struct MenuAnchor: NSViewRepresentable {
 }
 
 /// A menu item that runs a closure.
-private final class ActionMenuItem: NSMenuItem {
+final class ActionMenuItem: NSMenuItem {
     private let run: () -> Void
 
     init(title: String, run: @escaping () -> Void) {

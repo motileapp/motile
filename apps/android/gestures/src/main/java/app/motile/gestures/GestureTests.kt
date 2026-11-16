@@ -299,6 +299,46 @@ class GestureTests {
         assertTrue(shown(newThread))
     }
 
+    /** Commands find only in a thread open on the main screen, which it names, and put the sidebar away to show it. */
+    @Test
+    fun commandsFindInTheOpenThreadOnly() {
+        val find = By.text("Find in thread")
+        openSidebar()
+        device.findObject(newThread).click()
+        openSidebar()
+        device.findObject(By.desc("Commands")).click()
+        assertTrue(shown(By.text("Commands")))
+        assertFalse(device.hasObject(find))
+        device.wait(Until.findObject(By.desc("Close")), 3_000).click()
+        assertTrue(gone(By.text("Commands")))
+        val thread = row("Add API Rate Limiting") ?: return fail("no row")
+        thread.click()
+        assertTrue(gone(newThread))
+        openSidebar()
+        device.findObject(By.desc("Commands")).click()
+        assertTrue(shown(find))
+        assertTrue(device.hasObject(By.text("Add API Rate Limiting")))
+        device.findObject(find).click()
+        assertTrue(shown(By.descStartsWith("Next match")))
+        assertTrue(waitForKeyboard(true))
+        assertFalse(device.hasObject(newThread))
+    }
+
+    /** The thread's title opens its menu, whose Find in thread opens the find bar on it. */
+    @Test
+    fun theTitleOpensTheThreadsMenu() {
+        openSidebar()
+        val thread = row("Add API Rate Limiting") ?: return fail("no row")
+        thread.click()
+        assertTrue(gone(newThread))
+        val menu = By.desc("Thread menu")
+        assertTrue(shown(menu))
+        device.findObject(menu).click()
+        assertTrue(shown(By.text("Rename")))
+        device.findObject(By.text("Find in thread")).click()
+        assertTrue(shown(By.descStartsWith("Next match")))
+    }
+
     @Test
     fun aTapBesideTheSidebarsSearchPutsTheKeyboardAway() {
         openSidebar()

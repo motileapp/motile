@@ -363,10 +363,11 @@ struct CommandPanel: View {
             ]
         case .threads: sections = [PanelSection(title: "Threads", items: threadItems)]
         case .commands:
-            sections = [PanelSection(title: "Commands", items: commands)]
-            // On iOS the sheet hides the thread, so its actions stay on the thread's screen.
+            // On iOS the sheet hides the thread, so its actions stay on the thread's screen, all but finding in it.
             if Platform.name == "macos" {
-                sections.insert(PanelSection(title: "This thread", items: threadCommands), at: 0)
+                sections = [PanelSection(title: "This thread", items: threadCommands), PanelSection(title: "Commands", items: commands)]
+            } else {
+                sections = [PanelSection(title: "Commands", items: (findItem.map { [$0] } ?? []) + commands)]
             }
             // Searching from here looks through everything.
             if !query.isEmpty {
@@ -625,12 +626,18 @@ struct CommandPanel: View {
         }
     }
 
+    /// Finding in the thread the main screen shows, named in its detail. An agent shown in its place has none.
+    private var findItem: PanelItem? {
+        guard let thread = store.selectedThread, store.shownAgent == nil else { return nil }
+        var find = PanelItem(id: "find", title: "Find in thread", detail: thread.title, icon: .symbol(.search)) { store.openFind() }
+        find.keys = store.shortcuts.label("find.open")
+        return find
+    }
+
     /// What can be done with the open thread.
     private var threadCommands: [PanelItem] {
         guard let thread = store.selectedThread, !store.onRemovedServer(thread) else { return [] }
-        var find = PanelItem(id: "find", title: "Find in thread", detail: thread.title, icon: .symbol(.search)) { store.openFind() }
-        find.keys = store.shortcuts.label("find.open")
-        var items: [PanelItem] = [find]
+        var items = findItem.map { [$0] } ?? []
         if thread.busy {
             var stop = PanelItem(id: "stop", title: "Stop the agent", detail: thread.title, icon: .symbol(.circleStop)) { store.stop() }
             stop.keys = store.shortcuts.label("thread.stop")

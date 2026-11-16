@@ -27,12 +27,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -197,7 +199,8 @@ object TranscriptView {
     val overlayGap = 16.dp
     /** The room above the first row, which the rows fade out in. */
     val topFade = 20.dp
-    private val jumpButtonGap = 10.dp
+    /** How far the jump buttons are from the composer and from the top bar. */
+    val jumpButtonGap = 10.dp
     val jumpButtonSide = 38.dp
     /** How close to the end the viewport has to be to go to the end when the keyboard opens. */
     val nearEnd = 80.dp
@@ -220,6 +223,8 @@ fun TranscriptView(
     contentPadding: PaddingValues = PaddingValues(),
     /** What the find bar covers of the top, which revealing a match scrolls it clear of. */
     findCover: Dp = 0.dp,
+    /** Whether something lies over the top of the rows, like the find bar or a toast, which the way to the top gives way to. */
+    topTaken: Boolean = false,
 ) {
     val store = LocalStore.current
     val palette = LocalPalette.current
@@ -262,6 +267,16 @@ fun TranscriptView(
     val top = contentPadding.calculateTopPadding()
     val bottom = kept.bottom
     val listTop = remember(state) { floatArrayOf(0f) }
+    // The find bar's room above the first row, so that it scrolls clear of the bar. The rows in view stay where they are, unless they start at the top, where they make room for it.
+    val coverPx = with(density) { findCover.roundToPx() }
+    val lastCover = remember(state) { intArrayOf(coverPx) }
+    SideEffect {
+        val moved = coverPx - lastCover[0]
+        if (moved == 0) return@SideEffect
+        lastCover[0] = coverPx
+        if (state.firstVisibleItemIndex == 0 && state.firstVisibleItemScrollOffset == 0) return@SideEffect
+        state.requestScrollToItem(state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset + moved)
+    }
     val findFrom by rememberUpdatedState { cover: Dp ->
         entries.findFrom(state, actions, listTop[0], with(density) { (top + cover).toPx() })
     }
@@ -307,6 +322,26 @@ fun TranscriptView(
         if (keep >= model.rows.size) return
         follower.trimming = true
         store.core.send("trim_earlier", mapOf("thread_id" to threadID, "keep_rows" to keep)) { follower.trimming = false }
+    }
+
+    /** Goes to the thread's first row, with the turns before what is here loaded first. */
+    fun scrollToStart() {
+        follower.pinned = false
+        follower.userScrolling = false
+        follower.hold = null
+        val threadID = model.threadID
+        if (ofAgent || !model.earlier || threadID == null) {
+            scope.launch { state.scrollToItem(0) }
+            return
+        }
+        follower.loadingEarlier = true
+        store.core.send("load_earlier", mapOf("thread_id" to threadID, "all" to true)) {
+            follower.loadingEarlier = false
+            scope.launch {
+                withFrameNanos {}
+                state.scrollToItem(0)
+            }
+        }
     }
 
     /** Goes a little over a fifth of the way in every sixtieth of a second, and never slower than two points in that time. */
@@ -460,7 +495,7 @@ fun TranscriptView(
                 contentPadding = PaddingValues(
                     start = side + contentPadding.calculateStartPadding(direction),
                     end = side + contentPadding.calculateEndPadding(direction),
-                    top = top + TranscriptView.topFade,
+                    top = top + TranscriptView.topFade + findCover,
                     bottom = bottom,
                 ),
             ) {
@@ -504,8 +539,30 @@ fun TranscriptView(
                 remaining > max(with(density) { 200.dp.toPx() }, state.layoutInfo.viewportSize.height / 2f)
             }
         }
+        // Five screens up from the end, unless the view is at the thread's top already.
+        val heights = remember(model) { RowHeights() }
+        val topJumps by remember(follower, state, entries) {
+            derivedStateOf {
+                if (model.rows.isEmpty()) return@derivedStateOf false
+                val info = state.layoutInfo
+                val first = info.visibleItemsInfo.firstOrNull() ?: return@derivedStateOf false
+                val last = info.visibleItemsInfo.last()
+                heights.note(info)
+                val keys = { index: Int -> entryKey(entries[index]) }
+                val viewport = info.viewportSize.height.toFloat()
+                val above = heights.between(keys, 0, first.index) - first.offset
+                val below = last.offset + last.size - info.viewportEndOffset + heights.between(keys, last.index + 1, entries.size)
+                val atTop = !model.earlier && above < viewport
+                !atTop && below >= viewport * 5
+            }
+        }
+        if (topJumps && !topTaken) {
+            JumpButton(Symbol.ArrowUp, "Scroll to top", Modifier.align(Alignment.TopCenter).padding(top = top + TranscriptView.jumpButtonGap)) {
+                scrollToStart()
+            }
+        }
         if (jumps) {
-            JumpButton(Modifier.align(Alignment.BottomCenter).padding(bottom = TranscriptView.jumpButtonBottom(bottom))) {
+            JumpButton(Symbol.ArrowDown, "Scroll to end", Modifier.align(Alignment.BottomCenter).padding(bottom = TranscriptView.jumpButtonBottom(bottom))) {
                 follower.pinned = true
                 follower.userScrolling = false
                 scope.launch {
@@ -558,6 +615,22 @@ private fun LazyListState.remaining(): Int? {
     return last.offset + last.size + info.afterContentPadding - info.viewportEndOffset
 }
 
+/** The rows' heights as they were last laid out, by key. The rows between the viewport and the end have been on screen, so
+ *  how far the end is comes out right however much the rows' heights differ; one never laid out counts as the average. */
+private class RowHeights {
+    private val sizes = HashMap<Any, Int>()
+
+    fun note(info: LazyListLayoutInfo) {
+        for (item in info.visibleItemsInfo) sizes[item.key] = item.size
+    }
+
+    fun between(keys: (Int) -> Any, from: Int, to: Int): Float {
+        if (from >= to) return 0f
+        val average = if (sizes.isEmpty()) 0f else sizes.values.average().toFloat()
+        return (from until to).sumOf { (sizes[keys(it)]?.toFloat() ?: average).toDouble() }.toFloat()
+    }
+}
+
 /** About how far the viewport's top is below the first row, from the rows on screen, and how tall the viewport is. */
 private fun LazyListState.distanceAbove(): Pair<Float, Float>? {
     val info = layoutInfo
@@ -599,9 +672,9 @@ private fun Modifier.fades(top: Dp, bottomFade: Dp): Modifier =
             )
         }
 
-/** The round button that brings the view back to the end, over the composer. */
+/** A round button with an arrow over the rows, which brings the view to the end over the composer, or to the top under the top bar. */
 @Composable
-private fun JumpButton(modifier: Modifier, onClick: () -> Unit) {
+private fun JumpButton(symbol: Symbol, label: String, modifier: Modifier, onClick: () -> Unit) {
     val palette = LocalPalette.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -610,12 +683,12 @@ private fun JumpButton(modifier: Modifier, onClick: () -> Unit) {
             .size(TranscriptView.jumpButtonSide)
             .composerSurface(CircleShape, ShadowSize.Md)
             .background(if (pressed) palette.borderComposer else Color.Transparent, CircleShape)
-            .semantics { contentDescription = "Scroll to end" }
+            .semantics { contentDescription = label }
             .pressesAtOnce(interaction)
             .clickable(interaction, null, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Symbol.ArrowDown, IconSize.Lg, color = palette.foreground)
+        Icon(symbol, IconSize.Lg, color = palette.foreground)
     }
 }
 

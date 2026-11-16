@@ -61,6 +61,8 @@ import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -74,6 +76,7 @@ import app.motile.core.PanelPage
 import app.motile.core.Project
 import app.motile.core.Selection
 import app.motile.core.Server
+import app.motile.core.ThreadInfo
 import app.motile.layout.LocalDrawer
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
@@ -92,6 +95,7 @@ import app.motile.ui.ButtonVariant
 import app.motile.ui.DimButton
 import app.motile.ui.GlassButton
 import app.motile.ui.Icon
+import app.motile.ui.Menu
 import app.motile.ui.ProjectIcon
 import app.motile.ui.Text
 import app.motile.ui.glassButton
@@ -110,6 +114,8 @@ fun ThreadScreen(overSidebar: Boolean = true) {
     val store = LocalStore.current
     val density = LocalDensity.current
     var composerHeight by remember { mutableStateOf(120.dp) }
+    var renaming by remember { mutableStateOf<ThreadInfo?>(null) }
+    var deleting by remember { mutableStateOf<ThreadInfo?>(null) }
     val isStart = store.isStart
     // An agent the thread's agent started shows in the thread's place, with a bar in the composer's.
     val agent = store.shownAgent?.takeIf { !isStart }
@@ -126,11 +132,12 @@ fun ThreadScreen(overSidebar: Boolean = true) {
                     val findCover = if (agent == null && store.find.shown && store.selectedThread != null) FindBar.cover else 0.dp
                     TranscriptView(
                         model, Modifier.fillMaxSize(), contentPadding = PaddingValues(top = top, bottom = bottom), findCover = findCover,
+                        topTaken = findCover > 0.dp || store.openToast != null,
                     )
                 }
             }
             Column(Modifier.fillMaxSize()) {
-                TopBar(overSidebar)
+                TopBar(overSidebar, rename = { renaming = it }, delete = { deleting = it })
                 Box(Modifier.weight(1f).fillMaxWidth().windowInsetsPadding(below)) {
                     if (isStart) Start(composerHeight)
                     val composerPlace = Modifier
@@ -150,6 +157,7 @@ fun ThreadScreen(overSidebar: Boolean = true) {
             ThreadCorner(Modifier.align(Alignment.TopEnd).padding(top = top + FindBar.gap, start = 14.dp, end = 14.dp))
         }
     }
+    ThreadPrompts(renaming, deleting, endRenaming = { renaming = null }, endDeleting = { deleting = null })
 }
 
 /** A new thread with nothing sent yet, which shows where it will start instead of a transcript. */
@@ -222,7 +230,7 @@ private class CornerCards {
 }
 
 @Composable
-private fun TopBar(overSidebar: Boolean) {
+private fun TopBar(overSidebar: Boolean, rename: (ThreadInfo) -> Unit, delete: (ThreadInfo) -> Unit) {
     val store = LocalStore.current
     val drawer = LocalDrawer.current
     Row(
@@ -249,7 +257,7 @@ private fun TopBar(overSidebar: Boolean) {
                 }
             }
         }
-        Title(Modifier.weight(1f))
+        TitleMenu(Modifier.weight(1f), rename, delete)
         Row(Modifier.glassButton(CircleShape), verticalAlignment = Alignment.CenterVertically) {
             val project = store.gitProject
             val control = project?.gitControl
@@ -297,6 +305,21 @@ private fun MenuIcon(attention: Color?) {
                 drawCircle(attention, radius = 4.dp.toPx(), center = dot)
             },
     )
+}
+
+/**
+ * The title opens what can be done with the thread, all of it as one button that dims under a
+ * finger, as the bar has no room around it to light. Nothing while an agent is shown in its place.
+ */
+@Composable
+private fun TitleMenu(modifier: Modifier, rename: (ThreadInfo) -> Unit, delete: (ThreadInfo) -> Unit) {
+    val store = LocalStore.current
+    val thread = store.selectedThread?.takeIf { store.shownAgent == null } ?: return Title(modifier)
+    Menu(
+        { titleMenu(store, thread, rename, delete) },
+        modifier.semantics { contentDescription = "Thread menu" },
+        contentAlignment = Alignment.CenterStart,
+    ) { Title(Modifier) }
 }
 
 /** The thread's name, after the thread whose agent started it, or for an agent shown in its place, the agent's after the thread's. Then the project. */

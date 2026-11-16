@@ -77,15 +77,7 @@ struct SidebarView: View {
             guard let revealed, let section = store.shelf(of: revealed) else { return }
             expanded(section).wrappedValue = true
         }
-        .modal(item: $renaming) { thread in
-            RenameThread(thread: thread)
-        }
-        .asking($deleting) { thread in
-            Confirmation(
-                title: "Delete “\(thread.title)”?", message: store.deletionNote(thread),
-                answers: [Answer(title: "Delete", variant: .danger) { store.delete(thread) }]
-            )
-        }
+        .threadPrompts(renaming: $renaming, deleting: $deleting)
     }
 
     private func threads(
@@ -265,38 +257,6 @@ struct SidebarView: View {
 
     private func beginRename(_ thread: ThreadInfo) {
         renaming = thread
-    }
-}
-
-private struct RenameThread: View {
-    @Environment(AppStore.self) private var store
-    @Environment(\.closeModal) private var close
-    let thread: ThreadInfo
-    @State private var title: String
-
-    init(thread: ThreadInfo) {
-        self.thread = thread
-        _title = State(initialValue: thread.title)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Rename Thread")
-                .font(.ui(.lg, weight: .semibold))
-            InputField("Title", text: $title)
-            HStack(spacing: 0) {
-                Spacer()
-                ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
-                ActionButton("Rename", variant: .primary, margin: .beside(leading: 4)) {
-                    store.rename(thread, to: title)
-                    close()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-        .padding(20)
-        .frame(width: 400)
     }
 }
 
@@ -481,7 +441,15 @@ struct ThreadMenu: View {
     let delete: (ThreadInfo) -> Void
 
     var body: some View {
-        let groups = store.rowActions(for: thread, rename: rename, delete: delete)
+        RowActionItems(groups: store.rowActions(for: thread, rename: rename, delete: delete))
+    }
+}
+
+/// A menu's items as `RowAction`s say, in groups a line divides.
+struct RowActionItems: View {
+    let groups: [[RowAction]]
+
+    var body: some View {
         ForEach(groups.indices, id: \.self) { index in
             if index > 0 { Divider() }
             ForEach(groups[index], id: \.title) { action in

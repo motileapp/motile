@@ -90,6 +90,8 @@ data class Shortcuts(
     val conditions: List<String> = emptyList(),
     val issues: List<String> = emptyList(),
     val path: String = "",
+    /** Whether a keyboard is there to press them. Without one, nothing shows their keys. */
+    val shown: Boolean = true,
 ) {
     constructor(json: JSON) : this(
         rules = json.objects("rules").map(::ShortcutRule),
@@ -120,7 +122,8 @@ data class Shortcuts(
     }
 
     /** The keys of the command, as said in a tooltip: "Ctrl+B". */
-    fun label(command: String, context: Set<String> = emptySet()): String? = effective(command, context).firstOrNull()?.caps?.joinToString("+")
+    fun label(command: String, context: Set<String> = emptySet()): String? =
+        if (!shown) null else effective(command, context).firstOrNull()?.caps?.joinToString("+")
 
     /** The text with the command's keys after it in parentheses, as a tooltip says them. */
     fun help(text: String, command: String, context: Set<String> = emptySet()): String = label(command, context)?.let { "$text ($it)" } ?: text
