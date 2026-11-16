@@ -7,6 +7,7 @@ import UIKit
 ///
 ///     sidebar open | sidebar close      shows or hides the sidebar
 ///     thread <title>                    opens the thread with that title
+///     rename <title>                    renames the open thread
 ///     new                               starts a new thread
 ///     continue                          goes on from the open thread of an unlinked server
 ///     type <text>                       writes in the composer
@@ -86,6 +87,9 @@ enum DemoDriver {
             let all = Array(store.threads.values) + Array(store.startedThreads.values)
             guard let thread = all.first(where: { $0.title.localizedCaseInsensitiveContains(rest) }) else { return }
             store.select(.thread(thread.id))
+        case "rename":
+            guard let thread = store.selectedThread else { return }
+            store.rename(thread, to: rest)
         case "new": store.startNewThread(in: store.composerProject ?? store.projects.first)
         case "continue": store.continueOnAnotherServer()
         case "type": store.draft = rest

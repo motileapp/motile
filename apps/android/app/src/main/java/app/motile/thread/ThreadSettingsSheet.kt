@@ -139,8 +139,8 @@ fun ThreadSettingsSheet() {
                 ) {
                     Models()
                     Options { page = it }
-                    store.composerProject?.let { Workspace(it) }
                     store.composerContextFill?.let { ContextSection(it) }
+                    store.composerProject?.let { Workspace(it) }
                 }
             }
         }

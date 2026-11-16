@@ -2198,7 +2198,7 @@ fn compaction_row(model: &RowModel, label: &str, ctx: &RowContext, cx: &App) -> 
                 .items_center()
                 .gap(px(ControlSize::Regular.gap()))
                 .child(
-                    icons::symbol("square-text", ControlSize::Regular.symbol()).text_color(c.muted_stronger_foreground),
+                    icons::symbol("scroll-text", ControlSize::Regular.symbol()).text_color(c.muted_stronger_foreground),
                 )
                 .child(
                     div()

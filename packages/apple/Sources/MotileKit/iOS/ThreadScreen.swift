@@ -11,8 +11,15 @@ struct ThreadScreen: View {
     @State private var composerHeight: CGFloat = 120
     @State private var renaming: ThreadInfo?
     @State private var deleting: ThreadInfo?
+    @State private var leadingEdge: CGFloat?
+    @State private var trailingEdge: CGFloat?
+    @State private var screenFrame = CGRect.zero
+    /// Where the bar put the title, which it places as it likes.
+    @State private var titleMinX: CGFloat?
 
     private static let composerBottomGap: CGFloat = 8
+    /// The room between the title and the bar's buttons.
+    private static let titleGap: CGFloat = 12
 
     private var isStart: Bool {
         guard let draft = store.selectedDraft else { return false }
@@ -54,6 +61,7 @@ struct ThreadScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { screenFrame = $0 }
         .coordinateSpace(.named(ComposerView.roomSpace))
         .transcriptBehind(of: store, ofAgent: agent != nil, shown: !isStart, under: .vertical)
         .takingDroppedFiles()
@@ -67,11 +75,18 @@ struct ThreadScreen: View {
 
     @ToolbarContentBuilder private var bar: some ToolbarContent {
         if overSidebar || store.shownAgent != nil || store.parentThread != nil {
-            GlassToolbarItem(placement: .topBarLeading) { leading }
+            GlassToolbarItem(placement: .topBarLeading) {
+                HStack(spacing: 0) { leading }
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxX } action: { leadingEdge = $0 }
+                    .onDisappear { leadingEdge = nil }
+            }
         }
         ToolbarItem(placement: .principal) { titleMenu }
             .withoutSystemGlass()
-        GlassToolbarItem(placement: .topBarTrailing) { trailing }
+        GlassToolbarItem(placement: .topBarTrailing) {
+            HStack(spacing: 0) { trailing }
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minX } action: { trailingEdge = $0 }
+        }
     }
 
     @ViewBuilder private var leading: some View {
@@ -149,20 +164,34 @@ struct ThreadScreen: View {
     /// finger, as the bar has no room around it to light.
     @ViewBuilder private var titleMenu: some View {
         let groups = store.titleActions(rename: { renaming = $0 }, delete: { deleting = $0 })
+        let room = titleRoom
+        let label = title.frame(width: room.map { $0.end - $0.start }, alignment: .leading)
         Group {
             if groups.isEmpty {
-                title
+                label
             } else {
                 Menu {
                     RowActionItems(groups: groups)
                 } label: {
-                    title.contentShape(Rectangle())
+                    label.contentShape(Rectangle())
                 }
                 .buttonStyle(DimButtonStyle())
                 .accessibilityLabel("Thread menu")
             }
         }
-        .frame(idealWidth: 10000, maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, max(0, (room?.start ?? 0) - (titleMinX ?? 0)))
+        .frame(width: room.map { 2 * max(screenFrame.midX - $0.start, $0.end - screenFrame.midX) }, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minX } action: { titleMinX = $0 }
+    }
+
+    /// The room between the bar's buttons, or the screen's edges where there are none. The bar
+    /// sizes a menu's label to all of it and places the title as it likes, over its buttons too, so
+    /// the title reaches as far both ways from the screen's middle and starts after the buttons.
+    private var titleRoom: (start: CGFloat, end: CGFloat)? {
+        guard screenFrame != .zero else { return nil }
+        let start = leadingEdge.map { $0 + Self.titleGap } ?? screenFrame.minX + Theme.contentPadding
+        let end = trailingEdge.map { $0 - Self.titleGap } ?? screenFrame.maxX - Theme.contentPadding
+        return (start, max(start, end))
     }
 
     /// The project, then the thread's name, or the agent's when one is shown in its place.

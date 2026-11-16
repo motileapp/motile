@@ -48,12 +48,11 @@ struct ComposerTouchControls: View {
     var body: some View {
         HStack(spacing: 0) {
             AttachMenu()
-            if collapsed {
-                Spacer(minLength: 8)
-            } else {
-                settings
-                    .appearing()
-            }
+            // Stays in place while hidden, so that it moves with the composer as the keyboard comes and goes.
+            settings
+                .opacity(collapsed ? 0 : 1)
+                .allowsHitTesting(!collapsed)
+                .accessibilityHidden(collapsed)
             ComposerSendButtons()
         }
     }
