@@ -539,7 +539,7 @@ fun TranscriptView(
                 remaining > max(with(density) { 200.dp.toPx() }, state.layoutInfo.viewportSize.height / 2f)
             }
         }
-        // Four screens up from the end, unless the view is at the thread's top already.
+        // Five screens up from the end, unless the view is at the thread's top already.
         val heights = remember(model) { RowHeights() }
         val topJumps by remember(follower, state, entries) {
             derivedStateOf {
@@ -553,7 +553,7 @@ fun TranscriptView(
                 val above = heights.between(keys, 0, first.index) - first.offset
                 val below = last.offset + last.size - info.viewportEndOffset + heights.between(keys, last.index + 1, entries.size)
                 val atTop = !model.earlier && above < viewport
-                !atTop && below >= viewport * 4
+                !atTop && below >= viewport * 5
             }
         }
         if (topJumps && !topTaken) {

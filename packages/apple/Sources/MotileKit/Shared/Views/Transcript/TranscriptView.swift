@@ -156,7 +156,7 @@ final class TranscriptView: FlippedView, RowOwner {
     /// How far the end has to be below the viewport for the jump button to show.
     private var jumpDistance: CGFloat { max(200, viewportHeight / 2) }
     /// How far up from the end the viewport has to be for the way to the top to show.
-    private var topDistance: CGFloat { viewportHeight * 4 }
+    private var topDistance: CGFloat { viewportHeight * 5 }
 
     private let scroller = TranscriptScroller()
     private var document: FlippedView { scroller.document }
@@ -962,7 +962,7 @@ final class TranscriptView: FlippedView, RowOwner {
     }
 
     /// The way to the end shows once the end is out of sight, and the way to the top once the
-    /// viewport is four screens up from the end, unless something else lies over the top.
+    /// viewport is five screens up from the end, unless something else lies over the top.
     private func updateJumpButton() {
         let distance = endY - scroller.offsetY
         show(jumpButton, !pinned && !rows.isEmpty && distance >= jumpDistance)

@@ -488,7 +488,7 @@ impl TranscriptView {
         cx.notify();
     }
 
-    /// The way to the top shows once the viewport is four viewports up from the end, unless the
+    /// The way to the top shows once the viewport is five viewports up from the end, unless the
     /// view is at the thread's top already or something else lies over the top of the rows.
     fn shows_top_button(&self, cx: &App) -> bool {
         let model = self.model.read(cx);
@@ -500,7 +500,7 @@ impl TranscriptView {
         let at_top =
             !model.earlier && self.list(cx).logical_scroll_top().item_ix <= 1 && self.scroll_offsets(cx).0 < viewport;
         let top_taken = self.find_cover_now(cx) > 0. || self.store.read(cx).open_toast().is_some();
-        !model.rows.is_empty() && !at_top && !top_taken && self.distance_to_end(cx) >= viewport * 4.
+        !model.rows.is_empty() && !at_top && !top_taken && self.distance_to_end(cx) >= viewport * 5.
     }
 
     /// Scrolls to the row, and to the current match in it, a frame at a time: the row into the
