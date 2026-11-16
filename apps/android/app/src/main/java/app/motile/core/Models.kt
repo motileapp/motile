@@ -1139,7 +1139,6 @@ data class AgentInfo(
     val durationMs: Int?,
     /** How much of its context it takes. */
     val tokens: Int?,
-    val toolUses: Int?,
     /** What it has spent, when it was started through your server. */
     val costUSD: Double? = null,
     /** The thread it works in, when it was started through your server. */
@@ -1168,7 +1167,6 @@ data class AgentInfo(
         startedAt = json.double("started_at"),
         durationMs = json.optionalInt("duration_ms"),
         tokens = json.optionalInt("tokens"),
-        toolUses = json.optionalInt("tool_uses"),
         costUSD = json.optionalDouble("cost_usd"),
         threadID = json.optionalString("thread_id"),
         agent = Agent.of(json.optionalString("agent")),
@@ -1180,11 +1178,10 @@ data class AgentInfo(
 
     val working: Boolean get() = status == ToolStatus.Running
 
-    /** "21K context · $4.20 · 4,262 tools", as far as each is known. */
+    /** "21K context · $4.2", as far as each is known. */
     val usage: String?
         get() {
-            val tools = toolUses?.let { "${it.grouped} ${if (it == 1) "tool" else "tools"}" }
-            val parts = listOfNotNull(tokens?.let { "${it.toLong().abbreviated} context" }, costUSD?.let(::cost), tools)
+            val parts = listOfNotNull(tokens?.let { "${it.toLong().abbreviated} context" }, costUSD?.let(::cost))
             return if (parts.isEmpty()) null else parts.joinToString(" · ")
         }
 }

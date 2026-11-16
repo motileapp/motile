@@ -59,7 +59,8 @@ import app.motile.ui.color
 import app.motile.ui.proxied
 import app.motile.ui.pulsing
 import java.text.NumberFormat
-import java.util.Currency
+import java.util.Locale
+import kotlin.math.abs
 
 typealias Measure = UsageModel.Measure
 
@@ -73,15 +74,24 @@ private val besideWidth = 640.dp
 /** Narrower than this, a row's bar goes under its name and numbers. */
 private val stackWidth = 520.dp
 
-private val dollars = NumberFormat.getCurrencyInstance().apply { currency = Currency.getInstance("USD") }
 private val percent = NumberFormat.getPercentInstance().apply {
     minimumFractionDigits = 0
     maximumFractionDigits = 1
 }
 
+/** "$0.05", "$642.5", "$12.45K", "$1.2M": at most four significant digits, never past the cent. */
 fun cost(value: Double): String {
-    if (value > 0 && value < 0.01) return "<" + dollars.format(0.01)
-    return dollars.format(value)
+    if (value > 0 && value < 0.01) return "<$0.01"
+    val units = listOf("", "K", "M", "B", "T")
+    var amount = abs(value)
+    var unit = 0
+    while (amount >= 999.95 && unit < units.size - 1) {
+        amount /= 1000
+        unit += 1
+    }
+    val decimals = if (amount >= 100) 1 else if (amount >= 10 || unit == 0) 2 else 3
+    val digits = "%.${decimals}f".format(Locale.ROOT, amount).trimEnd('0').trimEnd('.')
+    return (if (value < 0) "-$" else "$") + digits + units[unit]
 }
 
 fun count(value: Long): String = value.abbreviated

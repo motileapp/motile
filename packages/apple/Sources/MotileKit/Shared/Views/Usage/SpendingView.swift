@@ -303,9 +303,21 @@ struct SpendingView: View {
         }
     }
 
+    /// "$0.05", "$642.5", "$12.45K", "$1.2M": at most four significant digits, never past the cent.
     static func cost(_ value: Double) -> String {
-        if value > 0 && value < 0.01 { return "<" + 0.01.formatted(.currency(code: "USD")) }
-        return value.formatted(.currency(code: "USD"))
+        if value > 0 && value < 0.01 { return "<$0.01" }
+        let units = ["", "K", "M", "B", "T"]
+        var amount = value.magnitude
+        var unit = 0
+        while amount >= 999.95 && unit < units.count - 1 {
+            amount /= 1000
+            unit += 1
+        }
+        let decimals = amount >= 100 ? 1 : amount >= 10 || unit == 0 ? 2 : 3
+        var digits = String(format: "%.\(decimals)f", amount)
+        while digits.hasSuffix("0") { digits.removeLast() }
+        if digits.hasSuffix(".") { digits.removeLast() }
+        return (value < 0 ? "-$" : "$") + digits + units[unit]
     }
 
     static func count(_ value: Int) -> String {

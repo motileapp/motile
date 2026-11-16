@@ -23,12 +23,28 @@ pub fn stamp(seconds: f64) -> String {
         .unwrap_or_else(|| time.format(if today { "%H:%M" } else { "%b %-d, %Y at %H:%M" }).to_string())
 }
 
-/// Dollars and cents; less than a cent is said so.
+/// "$0.05", "$642.5", "$12.45K", "$1.2M": at most four significant digits, never past the cent.
 pub fn usd(value: f64) -> String {
     if value > 0. && value < 0.01 {
-        return format!("<{}", usd(0.01));
+        return "<$0.01".into();
     }
-    system::usd(value).unwrap_or_else(|| plain_usd(value))
+    const UNITS: [&str; 5] = ["", "K", "M", "B", "T"];
+    let mut amount = value.abs();
+    let mut unit = 0;
+    while amount >= 999.95 && unit < UNITS.len() - 1 {
+        amount /= 1000.;
+        unit += 1;
+    }
+    let decimals = if amount >= 100. {
+        1
+    } else if amount >= 10. || unit == 0 {
+        2
+    } else {
+        3
+    };
+    let digits = format!("{amount:.decimals$}");
+    let digits = digits.trim_end_matches('0').trim_end_matches('.');
+    format!("{}${digits}{}", if value < 0. { "-" } else { "" }, UNITS[unit])
 }
 
 /// A share as a percentage with at most one decimal: "42%", "42.5%".
@@ -90,20 +106,6 @@ fn plain_bytes(count: u64) -> String {
     format!("{text} {unit}")
 }
 
-fn plain_usd(value: f64) -> String {
-    let cents = (value * 100.).round() as u64;
-    let (dollars, cents) = (cents / 100, cents % 100);
-    let digits = dollars.to_string();
-    let mut grouped = String::new();
-    for (index, digit) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index) % 3 == 0 {
-            grouped.push(',');
-        }
-        grouped.push(digit);
-    }
-    format!("${grouped}.{cents:02}")
-}
-
 fn plain_percent(share: f64) -> String {
     let tenths = (share * 1000.).round() / 10.;
     if tenths.fract() == 0. { format!("{tenths:.0}%") } else { format!("{tenths:.1}%") }
@@ -139,12 +141,6 @@ mod system {
                 formatter.setTimeStyle(NSDateFormatterStyle::ShortStyle);
                 formatter
             });
-        static USD: Retained<NSNumberFormatter> = {
-            let formatter = NSNumberFormatter::new();
-            formatter.setNumberStyle(NSNumberFormatterStyle::CurrencyStyle);
-            formatter.setCurrencyCode(Some(&NSString::from_str("USD")));
-            formatter
-        };
         static PERCENT: Retained<NSNumberFormatter> = {
             let formatter = NSNumberFormatter::new();
             formatter.setNumberStyle(NSNumberFormatterStyle::PercentStyle);
@@ -166,10 +162,6 @@ mod system {
     pub fn stamp(seconds: f64, with_date: bool) -> Option<String> {
         let date = NSDate::dateWithTimeIntervalSince1970(seconds);
         Some(STAMPS.with(|formatters| formatters[usize::from(with_date)].stringFromDate(&date)).to_string())
-    }
-
-    pub fn usd(value: f64) -> Option<String> {
-        USD.with(|formatter| formatter.stringFromNumber(&NSNumber::new_f64(value))).map(|text| text.to_string())
     }
 
     pub fn percent(share: f64) -> Option<String> {
@@ -207,10 +199,6 @@ mod system {
         None
     }
 
-    pub fn usd(_: f64) -> Option<String> {
-        None
-    }
-
     pub fn percent(_: f64) -> Option<String> {
         None
     }
@@ -230,7 +218,6 @@ mod tests {
 
     #[test]
     fn plain_amounts_read_as_us_english_does() {
-        assert_eq!(plain_usd(1234.5), "$1,234.50");
         assert_eq!(plain_percent(0.42), "42%");
         assert_eq!(plain_percent(0.4251), "42.5%");
         assert_eq!(plain_bytes(1), "1 byte");
@@ -253,12 +240,26 @@ mod tests {
     }
 
     #[test]
+    fn dollars_keep_four_digits_and_no_more_than_cents() {
+        assert_eq!(usd(0.004), "<$0.01");
+        assert_eq!(usd(0.), "$0");
+        assert_eq!(usd(0.054), "$0.05");
+        assert_eq!(usd(4.2), "$4.2");
+        assert_eq!(usd(42.137), "$42.14");
+        assert_eq!(usd(642.53), "$642.5");
+        assert_eq!(usd(999.96), "$1K");
+        assert_eq!(usd(1_234.56), "$1.235K");
+        assert_eq!(usd(12_453.2), "$12.45K");
+        assert_eq!(usd(653_420.), "$653.4K");
+        assert_eq!(usd(1_200_000.), "$1.2M");
+        assert_eq!(usd(3_400_000_000_000.), "$3.4T");
+    }
+
+    #[test]
     fn the_system_writes_every_amount() {
         assert!(!bytes(123_456_789).is_empty());
         assert!(!file_bytes(0).is_empty());
         assert!(!stamp(1_760_000_000.).is_empty());
-        assert!(!usd(1234.5).is_empty());
-        assert!(usd(0.004).starts_with('<'));
         assert!(!percent(0.42).is_empty());
         assert!(!date(1_760_000_000., "EEEj", "%a %H:00").is_empty());
         assert!((1..=7).contains(&first_weekday()));
