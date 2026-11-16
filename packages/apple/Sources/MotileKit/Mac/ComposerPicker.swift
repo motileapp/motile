@@ -132,6 +132,8 @@ private struct ComposerPicker: View {
 
     private struct Group: Identifiable {
         let title: String
+        /// The account's name, where its agent has more than one.
+        let name: String?
         let account: AgentAccount
         let windows: [LimitsReport.Window]
         /// The gateway's account whose limits `windows` are, for the Gateway account.
@@ -258,7 +260,7 @@ private struct ComposerPicker: View {
             guard !rows.isEmpty else { return nil }
             let windows = store.composerServer?.accountLimits[choice.account.id] ?? []
             let next = store.composerServer?.nextAccounts[choice.account.id]
-            return Group(title: choice.title, account: choice.account, windows: windows, next: next, rows: rows)
+            return Group(title: choice.title, name: choice.name, account: choice.account, windows: windows, next: next, rows: rows)
         }
     }
 
@@ -375,6 +377,13 @@ private struct ComposerPicker: View {
                     .gatewayMarked(group.account.gateway, fontSize: ControlSize.regular.textSize, size: ControlSize.regular.symbol)
                     .foregroundStyle(Color.themeMutedForeground)
                     .layoutPriority(1)
+                if let name = group.name {
+                    Text(verbatim: " · ")
+                        .foregroundStyle(Color.themeMutedStrongerForeground)
+                    Text(verbatim: name)
+                        .foregroundStyle(Color.themeMutedForeground)
+                        .truncationMode(.middle)
+                }
                 if let next = group.next {
                     Text(verbatim: " · ")
                         .foregroundStyle(Color.themeMutedStrongestForeground)
@@ -421,7 +430,6 @@ private struct ComposerPicker: View {
 
     private func choose(_ row: Row) {
         store.setModel(row.model, account: row.account)
-        store.composerPicker = nil
     }
 
     // MARK: Effort and context window
@@ -511,7 +519,6 @@ private struct ComposerPicker: View {
         case .effort(let effort): store.setEffort(effort)
         case .context(let context): store.setContext(context)
         }
-        store.composerPicker = nil
     }
 
     // MARK: Access
@@ -536,11 +543,13 @@ private struct ComposerPicker: View {
         .padding(Self.footerPadding)
     }
 
-    /// "Context: 22.7K / 200K (11%)" over its bar, as an account's name over its limits.
+    /// "Context: 22.7K / 200K · 11%" over its bar, as an account's name over its limits.
     private func contextFill(_ fill: ContextFill) -> some View {
         VStack(alignment: .leading, spacing: Self.headerGap) {
             let tokens = Text(verbatim: fill.tokens).foregroundStyle(Color.themeForeground)
-            Text("Context: \(tokens)\(fill.window.map { " / \($0)" } ?? "")\(fill.used.map { " (\($0))" } ?? "")")
+            let dot = Text(verbatim: " · ").foregroundStyle(Color.themeMutedStrongerForeground)
+            let used = fill.used.map { Text("\(dot)\($0)") } ?? Text(verbatim: "")
+            Text("Context: \(tokens)\(fill.window.map { " / \($0)" } ?? "")\(used)")
                 .font(ControlSize.regular.font)
                 .foregroundStyle(Color.themeMutedForeground)
                 .lineLimit(1)
@@ -603,7 +612,6 @@ private struct ComposerPicker: View {
     private func setAccess(_ access: Access) {
         store.setAccess(access)
         store.composerAccessOpen = false
-        store.composerPicker = nil
     }
 
     // MARK: Keys

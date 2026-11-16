@@ -207,6 +207,10 @@ private fun Models() {
                         val next = store.composerServer?.nextAccounts?.get(id)
                         val title = buildAnnotatedString {
                             append(AnnotatedString(choices.title).proxied(choices.account.gateway))
+                            choices.name?.let {
+                                withStyle(SpanStyle(color = palette.mutedStrongerForeground)) { append(" · ") }
+                                append(it)
+                            }
                             if (next != null) {
                                 withStyle(SpanStyle(color = palette.mutedStrongestForeground)) { append(" · ") }
                                 withStyle(SpanStyle(color = palette.mutedStrongerForeground)) { append(next) }

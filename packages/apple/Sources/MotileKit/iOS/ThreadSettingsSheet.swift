@@ -114,6 +114,12 @@ struct ThreadSettingsSheet: View {
                                     Text(verbatim: choices.title)
                                         .gatewayMarked(choices.account.gateway, fontSize: .lg, size: Self.logoSize)
                                         .layoutPriority(1)
+                                    if let name = choices.name {
+                                        Text(verbatim: " · ")
+                                            .foregroundStyle(Color.themeMutedStrongerForeground)
+                                        Text(verbatim: name)
+                                            .truncationMode(.middle)
+                                    }
                                     if let next = store.composerServer?.nextAccounts[id] {
                                         Text(verbatim: " · ")
                                             .foregroundStyle(Color.themeMutedStrongerForeground)
