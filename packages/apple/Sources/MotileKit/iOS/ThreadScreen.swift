@@ -1,6 +1,11 @@
 #if os(iOS)
 import SwiftUI
 
+extension EnvironmentValues {
+    /// Whether the screen's keyboard is up under the view.
+    @Entry var keyboardShown = false
+}
+
 /// The open thread with the composer over its end, or the start of a new one, under a top bar
 /// with the thread's name, its git button and the way to its files and changes.
 struct ThreadScreen: View {
@@ -21,6 +26,14 @@ struct ThreadScreen: View {
     /// The room between the title and the bar's buttons.
     private static let titleGap: CGFloat = 12
 
+    /// Whether the keyboard takes the bottom of the window under `frame`. Read while the view is
+    /// laid out, so that what changes with it changes in the keyboard's own animation.
+    private static func keyboardShown(under frame: CGRect) -> Bool {
+        let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+        guard let window else { return false }
+        return window.bounds.maxY - frame.maxY > window.safeAreaInsets.bottom + 1
+    }
+
     private var isStart: Bool {
         guard let draft = store.selectedDraft else { return false }
         return store.transcriptIsEmpty && !store.isSending(draft)
@@ -28,6 +41,24 @@ struct ThreadScreen: View {
 
     var body: some View {
         let agent = store.shownAgent
+        GeometryReader { proxy in
+            bottom(agent: agent)
+                .environment(\.keyboardShown, Self.keyboardShown(under: proxy.frame(in: .global)))
+        }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { screenFrame = $0 }
+        .coordinateSpace(.named(ComposerView.roomSpace))
+        .transcriptBehind(of: store, ofAgent: agent != nil, shown: !isStart, under: .vertical)
+        .takingDroppedFiles()
+        .background(Color.themeBackground.ignoresSafeArea())
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar { bar }
+        .overlay(alignment: .topTrailing) { ThreadCorner() }
+        .threadPrompts(renaming: $renaming, deleting: $deleting)
+    }
+
+    /// The start of a new thread, and the composer or the bar that takes its place.
+    private func bottom(agent: AgentInfo?) -> some View {
         ZStack(alignment: .bottom) {
             if isStart {
                 start
@@ -61,16 +92,6 @@ struct ThreadScreen: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { screenFrame = $0 }
-        .coordinateSpace(.named(ComposerView.roomSpace))
-        .transcriptBehind(of: store, ofAgent: agent != nil, shown: !isStart, under: .vertical)
-        .takingDroppedFiles()
-        .background(Color.themeBackground.ignoresSafeArea())
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.hidden, for: .navigationBar)
-        .toolbar { bar }
-        .overlay(alignment: .topTrailing) { ThreadCorner() }
-        .threadPrompts(renaming: $renaming, deleting: $deleting)
     }
 
     @ToolbarContentBuilder private var bar: some ToolbarContent {

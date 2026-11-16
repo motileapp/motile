@@ -302,7 +302,7 @@ class GestureTests {
     /** Commands find only in a thread open on the main screen, which it names, and put the sidebar away to show it. */
     @Test
     fun commandsFindInTheOpenThreadOnly() {
-        val find = By.text("Find in thread")
+        val find = By.text("Search in thread")
         openSidebar()
         device.findObject(newThread).click()
         openSidebar()
@@ -324,7 +324,7 @@ class GestureTests {
         assertFalse(device.hasObject(newThread))
     }
 
-    /** The thread's title opens its menu, whose Find in thread opens the find bar on it. */
+    /** The thread's title opens its menu, whose Search in thread opens the search bar on it. */
     @Test
     fun theTitleOpensTheThreadsMenu() {
         openSidebar()
@@ -335,7 +335,7 @@ class GestureTests {
         assertTrue(shown(menu))
         device.findObject(menu).click()
         assertTrue(shown(By.text("Rename")))
-        device.findObject(By.text("Find in thread")).click()
+        device.findObject(By.text("Search in thread")).click()
         assertTrue(shown(By.descStartsWith("Next match")))
     }
 

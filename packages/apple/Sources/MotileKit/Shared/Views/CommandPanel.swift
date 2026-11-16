@@ -629,7 +629,7 @@ struct CommandPanel: View {
     /// Finding in the thread the main screen shows, named in its detail. An agent shown in its place has none.
     private var findItem: PanelItem? {
         guard let thread = store.selectedThread, store.shownAgent == nil else { return nil }
-        var find = PanelItem(id: "find", title: "Find in thread", detail: thread.title, icon: .symbol(.search)) { store.openFind() }
+        var find = PanelItem(id: "find", title: "Search in thread", detail: thread.title, icon: .symbol(.search)) { store.openFind() }
         find.keys = store.shortcuts.label("find.open")
         return find
     }

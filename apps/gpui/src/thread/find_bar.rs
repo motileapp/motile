@@ -34,7 +34,7 @@ pub struct FindBar {
 
 impl FindBar {
     pub fn new(store: Entity<Store>, window: &mut Window, cx: &mut Context<Self>) -> Self {
-        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Find in thread"));
+        let input = cx.new(|cx| InputState::new(window, cx).placeholder("Search in thread"));
         let subscription = cx.subscribe_in(&input, window, |this, input, event: &InputEvent, _, cx| match event {
             InputEvent::Change => {
                 let query = input.read(cx).value().to_string();

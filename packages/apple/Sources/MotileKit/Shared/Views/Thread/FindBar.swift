@@ -19,7 +19,7 @@ struct FindBar: View {
     var body: some View {
         let find = store.find
         HStack(spacing: 0) {
-            InputField("Find in thread", text: Binding(get: { find.query }, set: { store.setFindQuery($0) }), icon: .search, variant: .bare, focus: $focused)
+            InputField("Search in thread", text: Binding(get: { find.query }, set: { store.setFindQuery($0) }), icon: .search, variant: .bare, focus: $focused)
                 .onReturn { store.stepFind(back: Self.shiftHeld) }
             if !find.label.isEmpty {
                 Text(find.label)
