@@ -20,11 +20,12 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::gateway_wire::{AccountStatus, GatewayAccount};
 use motile_protocol::wire::{
     AccountSkills, ActionRecord, Activity, Actor, ActorKind, Agent, AgentAccount, AgentLimits, AgentNotice, Approval,
-    BackupState, BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContinueSettings, CopiedThread, DiffScope, FileKind,
-    GitAction, GitHubState, GitStage, GitStatus, HandoffEnd, Interruption, Item, ItemKind, Media, MergeMethod, Message,
-    ModelInfo, NewThread, NoticeEvent, OriginActivity, OriginUsage, PLAN_TOOL, Project, PullRequest, PullRequestAction,
-    QUESTION_TOOL, Queued, Request, RunsOn, ServerInfo, ServerReason, ServerUpdate, SkillMention, Subagent, Thread,
-    ThreadChange, ThreadParent, ToolCall, ToolStatus, TurnChanges, TurnOutcome, TurnStarter, TurnSummary, Worktree,
+    BackupState, BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContextUsed, ContinueSettings, CopiedThread,
+    DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus, HandoffEnd, Interruption, Item, ItemKind, Media,
+    MergeMethod, Message, ModelInfo, NewThread, NoticeEvent, OriginActivity, OriginUsage, PLAN_TOOL, Project,
+    PullRequest, PullRequestAction, QUESTION_TOOL, Queued, Request, RunsOn, ServerInfo, ServerReason, ServerUpdate,
+    SkillMention, Subagent, Thread, ThreadChange, ThreadParent, ToolCall, ToolStatus, TurnChanges, TurnOutcome,
+    TurnStarter, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use serde_json::Value;
@@ -324,6 +325,8 @@ struct Live {
     told_limit: bool,
     /// When its usage limit stopped it last.
     limited_at: Option<Instant>,
+    /// How much of its context the session it resumes takes, which its activity says.
+    context: Option<ContextUsed>,
     /// How many tool calls of its own the transcript has, once they were counted.
     tools: Option<u64>,
     /// The thread was deleted while this waited for its lock.
@@ -782,6 +785,27 @@ impl Hub {
         let mut session = self.store.session(&thread.id, &continuation)?.unwrap_or_default();
         change(&mut session);
         self.store.save_session(&thread.id, &continuation, &session)
+    }
+
+    /// How much of its context the session the thread resumes takes. A thread without one starts
+    /// its next turn with an empty context.
+    fn context_used(&self, thread: &Thread) -> rusqlite::Result<Option<ContextUsed>> {
+        let Some(session) = self.store.session(&thread.id, &self.continuation(thread))? else { return Ok(None) };
+        let Some(tokens) = session.session_id.as_ref().and(session.context_used) else { return Ok(None) };
+        let model = thread.model.as_deref().or(session.model.as_deref());
+        let prices = self.prices.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        let window = session.context_window.or_else(|| prices.context_window(model?)).filter(|window| *window > 0);
+        Ok(Some(ContextUsed { tokens, window }))
+    }
+
+    /// Tells the thread's clients how much of its context the session takes, when that changed.
+    fn refresh_context(&self, live: &mut Live) -> rusqlite::Result<()> {
+        let context = self.context_used(&live.stored.thread)?;
+        if live.context != context {
+            live.context = context;
+            live.send_activity();
+        }
+        Ok(())
     }
 
     fn account_environment(&self, account: &AgentAccount) -> Environment {
@@ -1287,6 +1311,7 @@ impl Hub {
     pub async fn open(&self, thread_id: &str, since: u64) -> anyhow::Result<ThreadSubscription> {
         let mut live = self.live_or(thread_id, "That thread no longer exists.").await?;
         live.flush(&self.store)?;
+        live.context = self.context_used(&live.stored.thread)?;
         let rev = live.stored.thread.rev;
         // A client ahead of the server has a copy from before the server's data was replaced.
         let reset = since > rev;
@@ -2043,6 +2068,7 @@ impl Hub {
         }
         self.store.save_thread(&live.stored)?;
         self.announce(&live.stored.thread);
+        self.refresh_context(live)?;
         Ok(())
     }
 
@@ -4133,6 +4159,10 @@ impl Hub {
                 let session = self.store.session(&thread.id, &self.continuation(thread))?;
                 let before = before.or_else(|| session.and_then(|session| session.context_used));
                 live.append(store, ItemKind::Compaction { before, after })?;
+                if after.is_some() {
+                    self.change_session(&live.stored.thread, |session| session.context_used = after)?;
+                    self.refresh_context(live)?;
+                }
             }
             AgentEvent::Usage { spent, total, context_window, context_used } => {
                 let thread = &live.stored.thread;
@@ -4147,6 +4177,7 @@ impl Hub {
                         session.context_window = context_window.or(session.context_window);
                         session.context_used = context_used.or(session.context_used);
                     })?;
+                    self.refresh_context(live)?;
                 }
             }
             AgentEvent::Completed { mut summary, result_text, preempted } => {
@@ -4296,8 +4327,10 @@ impl Hub {
         self.change_session(&live.stored.thread, |session| {
             session.session_id = None;
             session.pending_through = None;
+            session.context_used = None;
         })?;
         live.stored.session_id = None;
+        self.refresh_context(live)?;
         let again = live.turn.as_ref().filter(|turn| !turn.retried && !turn.accepted);
         live.retry = again.map(|turn| turn.prompt.clone());
         if let Some(run) = &mut live.run {
@@ -4579,6 +4612,7 @@ impl Live {
             told_ask: None,
             told_limit: false,
             limited_at: None,
+            context: None,
             tools: None,
             deleted: false,
             server_asks: HashMap::new(),
@@ -4674,7 +4708,7 @@ impl Live {
     }
 
     fn activity(&self) -> Activity {
-        Activity { queued: self.queued.clone(), ..self.activity.clone() }
+        Activity { queued: self.queued.clone(), context: self.context, ..self.activity.clone() }
     }
 
     fn send_activity(&self) {

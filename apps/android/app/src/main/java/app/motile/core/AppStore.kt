@@ -737,7 +737,7 @@ class AppStore(private val context: Context) {
             }
             "activity" -> {
                 val threadID = event.string("thread_id")
-                val activity = Activity.of(event.obj("activity") ?: EmptyJSON, event.objects("waiting"))
+                val activity = Activity.of(event.obj("activity") ?: EmptyJSON, event.objects("waiting"), event.obj("context"))
                 return {
                     if (transcript.threadID == threadID) {
                         if (this.activity != activity) this.activity = activity
@@ -1343,6 +1343,9 @@ class AppStore(private val context: Context) {
         }
 
     val composerAccess: Access get() = selectedThread?.access ?: selectedDraft?.access ?: Access.Full
+
+    /** How much of its context window the open thread's agent session takes, once it has one. */
+    val composerContextFill: ContextFill? get() = if (selectedThread == null) null else activity.context
 
     /** The context window the thread or the draft runs with, when its model offers more than one. */
     val composerContext: ModelContext?

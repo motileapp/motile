@@ -614,8 +614,14 @@ class Turn:
             emit({"type": "stream_event", "event": {"type": "content_block_delta", "index": 0, "delta": delta}})
             # Paced by the clock rather than by each sleep, which can last far longer than asked.
             time.sleep(max(0.0, began + (n + 1) * self.pause - time.monotonic()))
-        emit({"type": "assistant", "message": {"id": message_id, "content": [{"type": "text", "text": text}]}})
+        message = {"id": message_id, "content": [{"type": "text", "text": text}], "usage": self._context()}
+        emit({"type": "assistant", "message": message})
         emit({"type": "stream_event", "event": {"type": "content_block_stop", "index": 0}})
+
+    def _context(self):
+        """What the message's request held, which grows with every message of the session."""
+        return {"input_tokens": 6, "cache_read_input_tokens": 21000 + 4600 * (Turn.turns + self.messages),
+                "cache_creation_input_tokens": 0, "output_tokens": 180}
 
     def tool(self, name, tool_input, output, seconds=0.25, is_error=False, ask=False):
         """Makes the tool call, after asking when `ask` is set. Says whether it was made."""
@@ -624,7 +630,7 @@ class Turn:
         block = {"type": "tool_use", "id": tool_id, "name": name, "input": {}}
         emit({"type": "stream_event", "event": {"type": "content_block_start", "index": 0, "content_block": block}})
         block = dict(block, input=tool_input)
-        emit({"type": "assistant", "message": {"id": message_id, "content": [block]}})
+        emit({"type": "assistant", "message": {"id": message_id, "content": [block], "usage": self._context()}})
         emit({"type": "stream_event", "event": {"type": "content_block_stop", "index": 0}}, seconds)
         answer = self._answer(name, tool_input, tool_id) if ask else {"behavior": "allow"}
         allowed = answer["behavior"] == "allow"

@@ -901,6 +901,9 @@ pub enum Event {
         activity: Activity,
         /// The tool calls the turn waits with, worded for a person.
         waiting: Vec<Waiting>,
+        /// How much of its context window the session takes, worded.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        context: Option<limits::ContextFill>,
     },
     /// The thread couldn't be opened on its server.
     ThreadError {

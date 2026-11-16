@@ -30,6 +30,7 @@ use futures::StreamExt;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_core::api::{AccountView, BackupView, ClientDescription, Command, Config, Event, Section};
+use motile_core::limits::ContextFill;
 use motile_core::outbox::Outgoing;
 use motile_core::render::agents::AgentView;
 use motile_protocol::wire::{
@@ -349,6 +350,8 @@ pub struct Store {
     /// Always a draft or a thread; `load_preferences` opens the first draft.
     pub selection: Selection,
     pub activity: Activity,
+    /// How much of its context window the open thread's session takes, once it is known.
+    pub context: Option<ContextFill>,
     /// How far the questions of each tool call that asks some are answered, by its id.
     question_answers: HashMap<String, questions::QuestionAnswers>,
     pub transcript_is_empty: bool,
@@ -508,6 +511,7 @@ impl Store {
             custom_snooze: None,
             selection: Selection::Draft(String::new()),
             activity: Activity::default(),
+            context: None,
             question_answers: HashMap::new(),
             transcript_is_empty: true,
             agents: Vec::new(),
@@ -826,10 +830,11 @@ impl Store {
                     });
                 }
             }
-            Event::Activity { thread_id, activity, waiting } => {
+            Event::Activity { thread_id, activity, waiting, context } => {
                 if self.transcript.read(cx).thread_id.as_deref() != Some(&thread_id) {
                     return;
                 }
+                self.context = context;
                 let activity = Activity::new(activity, waiting);
                 if self.activity != activity {
                     self.activity = activity.clone();
@@ -1411,6 +1416,12 @@ impl Store {
             .map(|thread| thread.access)
             .or_else(|| self.selected_draft().map(|draft| draft.access))
             .unwrap_or(Access::Full)
+    }
+
+    /// How much of its context window the open thread's agent session takes, once it has one.
+    pub fn composer_context_fill(&self) -> Option<ContextFill> {
+        self.selected_thread()?;
+        self.context.clone()
     }
 
     /// What the composer's text and attachments are kept under: the open draft or thread.

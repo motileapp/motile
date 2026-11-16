@@ -773,7 +773,7 @@ final class AppStore {
             }
         case "activity":
             let threadID = event.string("thread_id")
-            let activity = Activity(json: event.object("activity") ?? [:], waiting: event.objects("waiting"))
+            let activity = Activity(json: event.object("activity") ?? [:], waiting: event.objects("waiting"), context: event.object("context"))
             return { [weak self] in
                 guard let self, self.transcript.threadID == threadID else { return }
                 if self.activity != activity { self.activity = activity }
@@ -1379,6 +1379,9 @@ final class AppStore {
     }
 
     var composerAccess: Access { selectedThread?.access ?? selectedDraft?.access ?? .full }
+
+    /// How much of its context window the open thread's agent session takes, once it has one.
+    var composerContextFill: ContextFill? { selectedThread == nil ? nil : activity.context }
 
     /// The context window the thread or the draft runs with, when its model offers more than one.
     var composerContext: ModelContext? {

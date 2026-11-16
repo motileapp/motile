@@ -44,6 +44,7 @@ import app.motile.LocalStore
 import app.motile.composer.BranchPicker
 import app.motile.core.Access
 import app.motile.core.Agent
+import app.motile.core.ContextFill
 import app.motile.core.AppStore
 import app.motile.core.ModelContext
 import app.motile.core.ModelInfo
@@ -70,6 +71,7 @@ import app.motile.ui.Text
 import app.motile.ui.ThemeDivider
 import app.motile.ui.pressable
 import app.motile.ui.proxied
+import app.motile.usage.LimitBar
 import app.motile.usage.LimitPills
 
 private val rowText = TextSize.Lg
@@ -86,7 +88,7 @@ private enum class SettingsPage { Reasoning, Access }
 
 /**
  * What the Mac has around its composer, as a sheet: the model, the reasoning effort, how much the
- * agent may do without asking, and where the thread works.
+ * agent may do without asking, where the thread works and how full its context is.
  */
 @Composable
 fun ThreadSettingsSheet() {
@@ -138,6 +140,7 @@ fun ThreadSettingsSheet() {
                     Models()
                     Options { page = it }
                     store.composerProject?.let { Workspace(it) }
+                    store.composerContextFill?.let { ContextSection(it) }
                 }
             }
         }
@@ -276,6 +279,29 @@ private fun Workspace(project: Project) {
                 draft && branch != null && project.git?.hasCommit == false -> add { Labeled("Works in", "Current checkout") }
             }
             branchRow(store, project)?.let(::add)
+        })
+    }
+}
+
+/** The tokens the thread's session holds and the part of the context window they fill. */
+@Composable
+private fun ContextSection(fill: ContextFill) {
+    Section("Context") {
+        Group(listOf {
+            ListRow {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val muted = SpanStyle(color = Theme.colors.mutedForeground)
+                        val tokens = buildAnnotatedString {
+                            append(fill.tokens)
+                            fill.window?.let { withStyle(muted) { append(" / $it") } }
+                        }
+                        Text(tokens, Modifier.weight(1f), size = rowText, maxLines = 1)
+                        fill.used?.let { Text(it, size = rowText, color = Theme.colors.mutedForeground, maxLines = 1) }
+                    }
+                    fill.usedPercent?.let { LimitBar(it, fill.tone, Modifier.padding(bottom = 4.dp)) }
+                }
+            }
         })
     }
 }

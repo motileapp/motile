@@ -4190,6 +4190,27 @@ async fn a_thread_handed_from_claude_to_codex_and_back_tells_each_what_it_missed
 }
 
 #[tokio::test]
+async fn a_thread_opens_with_how_much_of_its_context_the_session_it_resumes_takes() {
+    let harness = Harness::with_sessions(fixture(Agent::Claude), &[]).await;
+    let connection = harness.connect().await;
+    let new_thread = full_access(&harness, &connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "What is in README.md?").await;
+    finished_transcript(&connection, &thread_id).await;
+    let opened_context = || async {
+        let mut follow = open(&connection, &thread_id, 0).await;
+        let Message::Opened { activity, .. } = next(&mut follow).await else { panic!("the thread didn't open") };
+        activity.context
+    };
+
+    let context = opened_context().await.expect("the session's context");
+    assert!(context.tokens >= 13_689, "{context:?}");
+    assert_eq!(context.window, Some(200_000));
+
+    switch_to(&connection, &thread_id, Agent::Codex).await;
+    assert_eq!(opened_context().await, None, "Codex starts a session of its own");
+}
+
+#[tokio::test]
 async fn a_session_too_full_to_be_told_what_it_missed_is_left_for_a_new_one() {
     let harness = Harness::with_sessions(fixture(Agent::Claude), &[("FAKE_AGENT_CONTEXT", "190000")]).await;
     let connection = harness.connect().await;

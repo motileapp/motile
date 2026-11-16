@@ -48,28 +48,41 @@ struct ComposerTouchControls: View {
     var body: some View {
         HStack(spacing: 0) {
             AttachMenu()
-            Spacer(minLength: 8)
-            if !collapsed {
-                settingsButton
-                    .fixedSize()
+            if collapsed {
+                Spacer(minLength: 8)
+            } else {
+                settings
                     .appearing()
             }
             ComposerSendButtons()
         }
     }
 
-    private var settingsButton: some View {
+    /// A narrow row names the model without its account, then leaves out the server, then the effort,
+    /// so that the send button always has its place.
+    private var settings: some View {
+        let short = store.composerModel?.shortName ?? store.composerModelLabel
+        return ViewThatFits(in: .horizontal) {
+            settingsButton(store.composerModelLabel, effort: true, server: true)
+            settingsButton(short, effort: true, server: true)
+            settingsButton(short, effort: true, server: false)
+            settingsButton(short, effort: false, server: false)
+        }
+        .frame(maxWidth: .infinity, alignment: .trailing)
+        .padding(.leading, 8)
+    }
+
+    private func settingsButton(_ title: String, effort shown: Bool, server: Bool) -> some View {
         let model = store.composerModel
         let logo = model.map { AnyView(AgentIcon(agent: $0.agent, size: ControlSize.regular.symbol)) }
         let effort = store.composerEffort.flatMap { $0.isEmpty ? nil : ComposerView.effortSymbol($0) }
         return ActionButton(
-            store.composerModelLabel, picture: logo, detail: effort, place: store.composerServer?.shortName, proxied: store.composerProxied,
-            pinned: store.composerPinned,
-            variant: .ghost,
-            gap: 5
+            title, picture: logo, detail: shown ? effort : nil, place: server ? store.composerServer?.shortName : nil,
+            proxied: store.composerProxied, pinned: store.composerPinned, variant: .ghost, gap: 5
         ) {
             store.showsThreadSettings = true
         }
+        .fixedSize()
         .accessibilityLabel("Thread settings")
     }
 }

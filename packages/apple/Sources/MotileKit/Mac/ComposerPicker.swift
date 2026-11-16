@@ -105,6 +105,8 @@ private struct ComposerPicker: View {
     private static let height: CGFloat = 348
     private static let shortest: CGFloat = 180
     private static let padding = DropdownList.padding
+    /// Around the access button, alike above, below and beside it.
+    private static let footerPadding = padding + 2
     private static let headerGap: CGFloat = 6
     /// The search's symbol stands this much closer to the edge than the rows' symbols, which it looks aligned with.
     private static let searchNudge: CGFloat = 2
@@ -191,7 +193,7 @@ private struct ComposerPicker: View {
         .overlay(alignment: .bottomTrailing) {
             if store.composerAccessOpen {
                 accessMenu
-                    .padding(.trailing, Self.padding)
+                    .padding(.trailing, Self.footerPadding)
                     .padding(.bottom, Self.accessMenuLift)
             }
         }
@@ -523,16 +525,37 @@ private struct ComposerPicker: View {
         let current = store.composerAccess
         let open = store.composerAccessOpen
         return HStack(spacing: 0) {
+            if let fill = store.composerContextFill {
+                contextFill(fill)
+            }
             Spacer(minLength: 0)
             ActionButton(current.label, icon: current.symbol, help: current.detail, variant: .ghost, size: .regular, selected: open || column == .access, opens: true, open: open, tint: .themeForeground) {
                 openAccess(!open)
             }
         }
-        .padding(Self.padding)
+        .padding(Self.footerPadding)
+    }
+
+    /// "Context: 22.7K / 200K (11%)" over its bar, as an account's name over its limits.
+    private func contextFill(_ fill: ContextFill) -> some View {
+        VStack(alignment: .leading, spacing: Self.headerGap) {
+            let tokens = Text(verbatim: fill.tokens).foregroundStyle(Color.themeForeground)
+            Text("Context: \(tokens)\(fill.window.map { " / \($0)" } ?? "")\(fill.used.map { " (\($0))" } ?? "")")
+                .font(ControlSize.regular.font)
+                .foregroundStyle(Color.themeMutedForeground)
+                .lineLimit(1)
+            if let percent = fill.usedPercent {
+                LimitPill(usedPercent: percent, color: fill.tone.color)
+                    .frame(maxWidth: .infinity)
+                    .padding(.bottom, 4)
+            }
+        }
+        .fixedSize()
+        .padding(.leading, DropdownList.rowPadding)
     }
 
     /// Over the columns, just above the footer's button, as a menu opens above what opened it.
-    private static let accessMenuLift = ControlSize.regular.height + 2 * padding + 4
+    private static let accessMenuLift = ControlSize.regular.height + 2 * footerPadding + 4
 
     /// The access modes as one row of their symbols, the one under the pointer or the arrow keys
     /// named and told about under it.

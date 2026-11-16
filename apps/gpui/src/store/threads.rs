@@ -108,6 +108,7 @@ impl Store {
         let preview = self.selected_draft().cloned().and_then(|draft| self.preview(&draft));
         self.set_opened_draft_preview(preview);
         self.activity = Activity::default();
+        self.context = None;
         self.transcript_is_empty = true;
         self.right_panel.turns.clear();
         self.show_agents(cx);

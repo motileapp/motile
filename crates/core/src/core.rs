@@ -4649,7 +4649,8 @@ fn transcript_of(event: &Event) -> Option<&str> {
 fn activity_changed(thread_id: &str, transcript: &mut Transcript, activity: Activity) -> (Option<Splice>, Event) {
     let queued = transcript.set_queued(activity.queued.clone());
     let waiting = activity.approvals.iter().map(|approval| transcript.waiting(approval)).collect();
-    (queued, Event::Activity { thread_id: thread_id.to_string(), activity, waiting })
+    let context = activity.context.map(limits::context_fill);
+    (queued, Event::Activity { thread_id: thread_id.to_string(), activity, waiting, context })
 }
 
 /// Writes an image among a server's files where the client can read it, and answers with where
@@ -4866,7 +4867,7 @@ fn reply(sink: &EventSink, id: u64, result: Result<Value, String>) {
 /// last open here, so the thread's flags, which the list keeps current, have the last word.
 fn restored_activity(thread: &Thread, cached: Option<Activity>) -> Activity {
     if !thread.running && !thread.monitoring {
-        return Activity::default();
+        return Activity { context: cached.and_then(|cached| cached.context), ..Activity::default() };
     }
     let mut activity = cached.unwrap_or_default();
     activity.running = thread.running;
@@ -5111,9 +5112,13 @@ mod tests {
     }
 
     #[test]
-    fn an_idle_thread_restores_no_activity() {
-        let cached = Activity { running: true, started_at: Some(5.0), ..Activity::default() };
-        assert_eq!(restored_activity(&thread(false, false, false), Some(cached)), Activity::default());
+    fn an_idle_thread_restores_only_how_full_its_context_is() {
+        let context = Some(motile_protocol::wire::ContextUsed { tokens: 15_040, window: Some(258_400) });
+        let cached = Activity { running: true, started_at: Some(5.0), context, ..Activity::default() };
+        assert_eq!(
+            restored_activity(&thread(false, false, false), Some(cached)),
+            Activity { context, ..Activity::default() }
+        );
     }
 
     #[test]

@@ -2731,6 +2731,17 @@ pub struct Activity {
     /// The messages that wait for the agent to take them, in the order they were sent.
     #[serde(default)]
     pub queued: Vec<Queued>,
+    /// How much of its context window the session the thread resumes takes, as its agent last said.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<ContextUsed>,
+}
+
+/// The tokens an agent's session holds, and how many its model's context window takes when that is known.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub struct ContextUsed {
+    pub tokens: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window: Option<u64>,
 }
 
 /// A message sent while the agent was working. It joins the transcript when the agent is given it.

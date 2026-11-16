@@ -1083,6 +1083,7 @@ struct Activity: Equatable {
     var approvals: [Approval] = []
     /// The messages that wait for the agent to take them.
     var queued: [QueuedMessage] = []
+    var context: ContextFill?
 
     var busy: Bool { running || monitoring }
 
@@ -1094,7 +1095,8 @@ struct Activity: Equatable {
         monitoring = thread.monitoring
     }
 
-    init(json: JSON, waiting: [JSON]) {
+    init(json: JSON, waiting: [JSON], context: JSON?) {
+        self.context = context.map(ContextFill.init(json:))
         running = json.bool("running")
         monitoring = json.bool("monitoring")
         thinking = json.bool("thinking")
@@ -1104,6 +1106,27 @@ struct Activity: Equatable {
         approvals = waiting.map { Approval(json: $0) }
         // What the agent is told of the agents it started isn't the user's to send or take back.
         queued = json.objects("queued").filter { $0["notice"] == nil }.map { QueuedMessage(json: $0) }
+    }
+}
+
+/// How much of its context window the thread's agent session takes.
+struct ContextFill: Equatable {
+    /// "22.7K".
+    let tokens: String
+    /// "200K", when the window is known.
+    let window: String?
+    /// Between 0 and 100, when the window is known.
+    let usedPercent: Double?
+    /// "11%", "<1%", when the window is known.
+    let used: String?
+    let tone: LimitsReport.Window.Tone
+
+    init(json: JSON) {
+        tokens = json.string("tokens")
+        window = json.optionalString("window")
+        usedPercent = json.optionalDouble("used_percent")
+        used = json.optionalString("used")
+        tone = LimitsReport.Window.Tone(rawValue: json.string("tone")) ?? .success
     }
 }
 

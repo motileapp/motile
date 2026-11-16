@@ -1332,7 +1332,7 @@ pub fn number(value: u32) -> String {
     grouped
 }
 
-fn abbreviated(value: u64) -> String {
+pub(crate) fn abbreviated(value: u64) -> String {
     match value {
         0..1_000 => value.to_string(),
         1_000..1_000_000 => format!("{:.1}K", value as f64 / 1e3).replace(".0K", "K"),
