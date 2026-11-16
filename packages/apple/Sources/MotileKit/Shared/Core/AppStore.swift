@@ -1360,13 +1360,13 @@ final class AppStore {
     }
 
     /// What the composer's model menu lists: each account with its agent's models, titled with
-    /// the account's name when its agent has more than one.
-    /// The Gateway account's title is its agent's alone, which the gateway's symbol follows.
-    var composerChoices: [(title: String, account: AgentAccount, models: [ModelInfo])] {
+    /// its agent's name, and named when its agent has more than one.
+    /// The Gateway account goes unnamed, as the gateway's symbol follows its title.
+    var composerChoices: [(title: String, name: String?, account: AgentAccount, models: [ModelInfo])] {
         composerAccounts.map { account in
             let several = (composerServer?.accounts(of: account.agent).count ?? 0) > 1
-            let title = several && !account.gateway ? "\(account.agent.name) · \(account.name)" : account.agent.name
-            return (title, account, composerModels.filter { $0.runs(under: account) })
+            let name = several && !account.gateway ? account.name : nil
+            return (account.agent.name, name, account, composerModels.filter { $0.runs(under: account) })
         }
     }
 

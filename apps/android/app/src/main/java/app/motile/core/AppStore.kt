@@ -1317,18 +1317,18 @@ class AppStore(private val context: Context) {
     }
 
     /** One account with its agent's models, as the composer's model menu lists them. */
-    data class ModelChoice(val title: String, val account: AgentAccount, val models: List<ModelInfo>)
+    data class ModelChoice(val title: String, val name: String?, val account: AgentAccount, val models: List<ModelInfo>)
 
     /**
-     * What the composer's model menu lists: each account with its agent's models, titled with the
-     * account's name when its agent has more than one. The Gateway account's title is its agent's
-     * alone, which the gateway's symbol follows.
+     * What the composer's model menu lists: each account with its agent's models, titled with its
+     * agent's name, and named when its agent has more than one. The Gateway account goes unnamed,
+     * as the gateway's symbol follows its title.
      */
     val composerChoices: List<ModelChoice>
         get() = composerAccounts.map { account ->
             val several = (composerServer?.accounts(account.agent)?.size ?: 0) > 1
-            val title = if (several && !account.gateway) "${account.agent.title} · ${account.name}" else account.agent.title
-            ModelChoice(title, account, composerModels.filter { it.runs(account) })
+            val name = account.name.takeIf { several && !account.gateway }
+            ModelChoice(account.agent.title, name, account, composerModels.filter { it.runs(account) })
         }
 
     /** The effort the thread or the draft runs at: "" where the agent applies its own default. */

@@ -1357,11 +1357,11 @@ impl Store {
         GatewayMark::of(server.runs_through_gateway(account, model.agent), server.runs_pinned(account, model.agent))
     }
 
-    /// What the model picker lists: each account with its agent's models, titled with the
-    /// account's name when its agent has more than one. Each agent's account that a new thread
-    /// would start on comes first. The Gateway account's title is its agent's alone, which the
-    /// gateway's symbol follows.
-    pub fn composer_choices(&self) -> Vec<(String, AgentAccount, Vec<ModelInfo>)> {
+    /// What the model picker lists: each account with its agent's models, titled with its agent's
+    /// name, and named when its agent has more than one. Each agent's account that a new thread
+    /// would start on comes first. The Gateway account goes unnamed, as the gateway's symbol
+    /// follows its title.
+    pub fn composer_choices(&self) -> Vec<(String, Option<String>, AgentAccount, Vec<ModelInfo>)> {
         let Some(server) = self.composer_server() else { return Vec::new() };
         let models = self.composer_models();
         let place = |account: &&AgentAccount| {
@@ -1377,11 +1377,9 @@ impl Store {
             })
             .map(|account| {
                 let several = server.accounts(account.agent).len() > 1;
-                let name = agent_name(account.agent);
-                let title =
-                    if several && !account.gateway { format!("{name} · {}", account.name) } else { name.to_string() };
+                let name = (several && !account.gateway).then(|| account.name.clone());
                 let offered = models.iter().filter(|model| model.runs_under(account)).cloned().collect();
-                (title, account.clone(), offered)
+                (agent_name(account.agent).to_string(), name, account.clone(), offered)
             })
             .collect()
     }

@@ -47,6 +47,8 @@ const ACCESS_MENU_LIFT: f32 = FOOTER_HEIGHT + 4.;
 
 struct Group {
     title: String,
+    /// The account's name, where its agent has more than one.
+    name: Option<String>,
     account: AgentAccount,
     windows: Vec<limits::Row>,
     /// The gateway's account whose limits `windows` are, for the Gateway account.
@@ -178,8 +180,8 @@ impl ComposerPicker {
         store
             .composer_choices()
             .into_iter()
-            .filter(|(_, account, _)| !words.is_empty() || self.agent.is_none_or(|agent| account.agent == agent))
-            .filter_map(|(title, account, models)| {
+            .filter(|(_, _, account, _)| !words.is_empty() || self.agent.is_none_or(|agent| account.agent == agent))
+            .filter_map(|(title, name, account, models)| {
                 let rows: Vec<ModelRow> = models
                     .into_iter()
                     .filter(|model| {
@@ -201,7 +203,7 @@ impl ComposerPicker {
                 }
                 let windows = limits.get(&account.id).cloned().unwrap_or_default();
                 let next = next.get(&account.id).cloned();
-                Some(Group { title, account, windows, next, rows })
+                Some(Group { title, name, account, windows, next, rows })
             })
             .collect()
     }
@@ -213,7 +215,7 @@ impl ComposerPicker {
     /// The agents with models here, Claude Code's first.
     fn agents(&self, cx: &App) -> Vec<Agent> {
         let choices = self.store.read(cx).composer_choices();
-        AGENTS.into_iter().filter(|agent| choices.iter().any(|(_, account, _)| account.agent == *agent)).collect()
+        AGENTS.into_iter().filter(|agent| choices.iter().any(|(_, _, account, _)| account.agent == *agent)).collect()
     }
 
     fn settings(&self, cx: &App) -> Vec<Setting> {
@@ -270,7 +272,6 @@ impl ComposerPicker {
 
     fn choose(&self, row: &ModelRow, cx: &mut Context<Self>) {
         self.store.update(cx, |store, _| store.set_model(&row.model, &row.account));
-        self.close(cx);
     }
 
     fn pick(&self, setting: &Setting, cx: &mut Context<Self>) {
@@ -278,7 +279,6 @@ impl ComposerPicker {
             Setting::Effort(effort) => store.set_effort(effort),
             Setting::Context(context) => store.set_context(context),
         });
-        self.close(cx);
     }
 
     fn open_access(&mut self, open: bool, cx: &mut Context<Self>) {
@@ -293,9 +293,9 @@ impl ComposerPicker {
         cx.notify();
     }
 
-    fn set_access(&self, access: Access, cx: &mut Context<Self>) {
+    fn set_access(&mut self, access: Access, cx: &mut Context<Self>) {
         self.store.update(cx, |store, _| store.set_access(access));
-        self.close(cx);
+        self.open_access(false, cx);
     }
 
     fn pick_agent(&mut self, agent: Agent, window: &mut Window, cx: &mut Context<Self>) {
@@ -792,6 +792,13 @@ fn header(group: &Group, cx: &App) -> Div {
                     )
                     .flex_none(),
                 )
+                .when_some(group.name.clone(), |title, name| {
+                    title
+                        .child(
+                            div().flex_none().whitespace_nowrap().text_color(c.muted_stronger_foreground).child(" · "),
+                        )
+                        .child(crate::ui::middle_truncated(name))
+                })
                 .when_some(group.next.clone(), |title, next| {
                     title
                         .child(
@@ -852,7 +859,7 @@ fn limit_bar(used_percent: f64, tone: limits::Tone, cx: &App) -> Div {
 
 /// How full the open thread's context is: its tokens, and under them how much of the window they
 /// take as a bar, when the window is known.
-/// "Context: 22.7K / 200K (11%)" over its bar, as an account's name over its limits.
+/// "Context: 22.7K / 200K · 11%" over its bar, as an account's name over its limits.
 fn context_fill(fill: &ContextFill, cx: &App) -> Div {
     let c = colors(cx);
     div()
@@ -871,7 +878,9 @@ fn context_fill(fill: &ContextFill, cx: &App) -> Div {
                 .child("Context: ")
                 .child(div().text_color(c.foreground).child(fill.tokens.clone()))
                 .when_some(fill.window.clone(), |line, window| line.child(format!(" / {window}")))
-                .when_some(fill.used.clone(), |line, used| line.child(format!(" ({used})"))),
+                .when_some(fill.used.clone(), |line, used| {
+                    line.child(div().text_color(c.muted_stronger_foreground).child(" · ")).child(used)
+                }),
         )
         .when_some(fill.used_percent, |lines, percent| {
             lines.child(limit_bar(percent, fill.tone, cx).w_full().mb(px(4.)))
