@@ -2,7 +2,7 @@
 import SwiftUI
 
 /// What the Mac has around its composer, as a sheet: the model, the reasoning effort, how much
-/// the agent may do without asking, where the thread works and how full its context is.
+/// the agent may do without asking, how full its context is and where the thread works.
 struct ThreadSettingsSheet: View {
     @Environment(AppStore.self) private var store
     @Environment(\.surface) private var surface
@@ -20,11 +20,11 @@ struct ThreadSettingsSheet: View {
             List {
                 models
                 options
-                if let project = store.composerProject {
-                    workspace(project)
-                }
                 if let fill = store.composerContextFill {
                     context(fill)
+                }
+                if let project = store.composerProject {
+                    workspace(project)
                 }
             }
             .listStyle(.insetGrouped)

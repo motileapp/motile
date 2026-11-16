@@ -1848,7 +1848,7 @@ final class CompactionRowView: RowView {
         CGRect(x: rightLine, y: lineY, width: max(0, bounds.width - rightLine), height: 1).fillCurrent()
 
         let symbol = CGRect(x: x, y: 0, width: symbolSide, height: bounds.height)
-        TintedSymbol.draw(.squareText, size: Self.symbolSize, color: Theme.mutedStrongerForeground, in: symbol)
+        TintedSymbol.draw(.scrollText, size: Self.symbolSize, color: Theme.mutedStrongerForeground, in: symbol)
         let found = marks?.split([text.length]).first ?? []
         FoundLabel.draw(text, found: found, in: CGRect(x: x + fixed, y: ((bounds.height - height) / 2).rounded(), width: width, height: height))
     }

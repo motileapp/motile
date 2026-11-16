@@ -112,7 +112,6 @@ struct ComposerView: View {
                     .frame(height: textHeight)
                 ComposerTouchControls(collapsed: collapsed)
             }
-            .animation(.easeOut(duration: 0.22), value: collapsed)
             #endif
         }
         .background {

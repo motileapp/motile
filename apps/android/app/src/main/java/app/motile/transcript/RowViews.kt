@@ -927,7 +927,7 @@ private fun CompactionRow(row: RowModel, label: String) {
     Row(Modifier.fillMaxWidth().height(ControlSize.Large.height), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.weight(1f).height(1.dp).background(palette.border))
         Spacer(Modifier.width(lineGap))
-        Icon(Symbol.SquareText, ControlSize.Regular.symbol, color = palette.mutedStrongerForeground)
+        Icon(Symbol.ScrollText, ControlSize.Regular.symbol, color = palette.mutedStrongerForeground)
         Spacer(Modifier.width(ControlSize.Regular.gap))
         MarkedText(
             AnnotatedString(label), Theme.smallFont, found = found, onCurrent = { _, window -> actions.currentMatch(row.id, window) },

@@ -551,7 +551,7 @@ private struct ComposerPicker: View {
             }
         }
         .fixedSize()
-        .padding(.leading, DropdownList.rowPadding)
+        .padding(.leading, DropdownList.rowPadding - (Self.footerPadding - Self.padding))
     }
 
     /// Over the columns, just above the footer's button, as a menu opens above what opened it.
