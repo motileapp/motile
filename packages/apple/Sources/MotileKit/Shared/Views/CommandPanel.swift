@@ -271,8 +271,8 @@ struct CommandPanel: View {
                 }
                 .padding(.bottom, Platform.scale > 1 ? 32 : 8)
             }
-            .fadesHiddenEdges()
             #if os(macOS)
+            .fadesHiddenEdges()
             .frame(height: height(page, sections, notice: refused))
             #else
             .frame(maxHeight: .infinity)
