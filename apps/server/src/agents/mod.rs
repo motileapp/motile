@@ -39,7 +39,8 @@ pub fn instructions(turn: &Turn) -> String {
         Agent::Codex => "Codex",
     };
     let mut text = format!(
-        "In case you're asked: you are running in Motile through the {harness} harness. No need to mention this otherwise. "
+        "You run in Motile through the {harness} harness, on a server: one of the user's machines. The user reads this \
+         thread from a Motile client on another device. No need to mention this unless asked. "
     );
     text += SHOWING_MEDIA;
     match turn.mcp {
