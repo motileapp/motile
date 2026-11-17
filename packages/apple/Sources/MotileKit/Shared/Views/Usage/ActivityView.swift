@@ -164,12 +164,13 @@ struct ActivityView: View {
                 Segmented(Measure.allCases.map { ($0.label, $0) }, selection: $measure, fills: !beside)
             }
             if report.loading {
-                PlaceholderBar(width: 180, size: .xs)
                 Pulsing { RoundedRectangle(cornerRadius: Radius.md, style: .continuous).fill(surface.color(.control)) }
                     .frame(height: Self.chartHeight)
+                    .padding(.top, 2)
+                PlaceholderBar(width: 180, size: .xs)
             } else {
+                chart.padding(.top, 2)
                 legend
-                chart
             }
         }
     }

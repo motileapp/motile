@@ -251,11 +251,14 @@ impl ActivityView {
                 .rounded(px(Radius::MD))
                 .bg(Surface::Background.layer(Layer::Control, colors(cx)));
             return section
+                .child(div().pt(px(2.)).child(pulsing("activity-chart-placeholder", block, cx)))
                 .child(placeholder_bar("activity-legend-placeholder", 180., TextSize::Xs, Surface::Background, cx))
-                .child(pulsing("activity-chart-placeholder", block, cx))
                 .into_any_element();
         }
-        section.child(self.legend(report, measure, cx)).child(self.chart(report, measure, cx)).into_any_element()
+        section
+            .child(div().pt(px(2.)).child(self.chart(report, measure, cx)))
+            .child(self.legend(report, measure, cx))
+            .into_any_element()
     }
 
     /// Each source with its total and its share, or those in the bucket the pointer is over, whose date ends the

@@ -276,14 +276,15 @@ private fun OverTime(report: ActivityReport, period: UsageModel.Period, beside: 
             Preferences.set(MEASURE_KEY, it.raw)
         }, fills = !beside)
     }) {
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxWidth().padding(top = 2.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (report.loading) {
-                PlaceholderBar(180.dp, Theme.ui(TextSize.Xs))
                 Box(
                     Modifier.fillMaxWidth().height(activityChartHeight).pulsing()
                         .background(LocalSurface.current.color(Surface.Layer.Control), RoundedCornerShape(Radius.md)),
                 )
+                PlaceholderBar(180.dp, Theme.ui(TextSize.Xs))
             } else {
+                ActivityChart(report.starts, shown.map { palette.chart(it.color) to measure.points(it) }, measure.ticks(report), period, index, measure::amount, point)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
                     FlowRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         for (source in shown) {
@@ -301,7 +302,6 @@ private fun OverTime(report: ActivityReport, period: UsageModel.Period, beside: 
                     }
                     Holding(pointedShapes, index?.let { pointedTime(report.starts[it], period) }, Alignment.TopEnd)
                 }
-                ActivityChart(report.starts, shown.map { palette.chart(it.color) to measure.points(it) }, measure.ticks(report), period, index, measure::amount, point)
             }
         }
     }

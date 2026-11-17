@@ -283,7 +283,7 @@ impl SpendingView {
                                         .bottom_0()
                                         .left(relative(fraction(index)))
                                         .w(px(1.))
-                                        .bg(c.border),
+                                        .bg(c.muted_strongest_foreground),
                                 )
                             },
                         ),
@@ -456,8 +456,8 @@ impl Render for SpendingView {
                 .flex()
                 .flex_col()
                 .gap(px(10.))
-                .child(self.legend(&report, cost_shown, cx))
-                .child(self.chart(&report, cost_shown, cx));
+                .child(self.chart(&report, cost_shown, cx))
+                .child(self.legend(&report, cost_shown, cx));
             let top = if self.width >= BESIDE_WIDTH {
                 div().flex().items_start().gap(px(28.)).child(summary.w(px(SUMMARY_WIDTH)).flex_shrink_0()).child(chart)
             } else {
