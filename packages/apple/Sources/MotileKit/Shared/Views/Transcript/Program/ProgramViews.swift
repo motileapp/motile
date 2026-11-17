@@ -660,7 +660,7 @@ final class ProgramMarkdownView: ProgramNodeView {
 final class ProgramCodeBox: FlippedView {
     private let surface = SurfaceView()
     private let header = CodeHeader()
-    private let text = RowTextView.make()
+    private let text = RowTextView.make(trimsLineRoom: false)
 
     override init(frame: CGRect) {
         super.init(frame: frame)

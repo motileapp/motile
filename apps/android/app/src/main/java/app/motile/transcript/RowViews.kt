@@ -88,6 +88,7 @@ import app.motile.ui.AgentAvatar
 import app.motile.ui.AgentAvatars
 import app.motile.ui.AgentIcon
 import app.motile.ui.ButtonVariant
+import app.motile.ui.CentredLines
 import app.motile.ui.CopyButton
 import app.motile.ui.Dropdown
 import app.motile.ui.GatewayMark
@@ -424,7 +425,7 @@ fun CodeBox(
     val palette = LocalPalette.current
     val density = LocalDensity.current
     val piece = rememberTextPiece(sent)
-    val style = TextStyle(fontFamily = Theme.mono, fontSize = Theme.codeSize, lineHeight = Theme.codeLineHeight)
+    val style = TextStyle(fontFamily = Theme.mono, fontSize = Theme.codeSize, lineHeight = Theme.codeLineHeight, lineHeightStyle = CentredLines)
     val shown = remember(text, found, palette) { text.withCurrent(found, palette) }
     var layout by remember(text) { mutableStateOf<TextLayoutResult?>(null) }
     SurfaceBox(RoundedCornerShape(radius), modifier.fillMaxWidth(), bordered = true) {
@@ -552,7 +553,7 @@ private fun ToolRow(row: RowModel) {
                     .fillMaxWidth()
                     .clip(shape)
                     .background(palette.backgroundSecondary, shape)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 val style = if (tool != null) Theme.smallMono.copy(lineHeight = Theme.codeLineHeight) else Theme.ui(TextSize.Sm).copy(lineHeight = (13f * Platform.scale * 1.2f + 5).sp)

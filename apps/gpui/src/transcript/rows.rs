@@ -1255,7 +1255,7 @@ fn detail_box(inset: f32, detail: impl IntoElement, cx: &App) -> Div {
         .mt(px(3.))
         .mb(px(6.))
         .px(px(12.))
-        .py(px(10.))
+        .py(px(8.))
         .bg(c.background_secondary)
         .rounded(px(8.))
         .child(detail)

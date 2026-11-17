@@ -9,11 +9,9 @@ struct WaitingStrip: View {
 
     static let padding: CGFloat = 12
     private static let targetInset: CGFloat = 10
-    private static let targetInsetVertical: CGFloat = 6
-    /// Half the room a code line has over its font, which Apple's text puts above the words.
-    private static let targetLift = (Theme.codeLineHeight - (Theme.inlineCodeFont.ascender - Theme.inlineCodeFont.descender)) / 2
+    private static let targetInsetVertical: CGFloat = 8
     /// Eight lines of a command, after which it scrolls inside its box.
-    private static let targetHeight = Theme.codeLineHeight * 8 + targetInsetVertical * 2
+    private static let targetHeight = LineRoom.height(lines: 8, font: Theme.inlineCodeFont, lineHeight: Theme.codeLineHeight) + targetInsetVertical * 2
 
     var body: some View {
         content
@@ -40,8 +38,7 @@ struct WaitingStrip: View {
                 FadingScroll(maxHeight: Self.targetHeight) {
                     ProseText(text: approval.typesetTarget)
                         .padding(.horizontal, Self.targetInset)
-                        .padding(.top, Self.targetInsetVertical - Self.targetLift)
-                        .padding(.bottom, Self.targetInsetVertical + Self.targetLift)
+                        .padding(.vertical, Self.targetInsetVertical)
                 }
                 .box(in: RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
             }

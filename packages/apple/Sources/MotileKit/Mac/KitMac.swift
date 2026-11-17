@@ -578,8 +578,8 @@ final class RowTextView: PointerTextView {
     var onSelect: (() -> Void)?
     private var system: TextSystem!
 
-    static func make(wraps: Bool = true) -> RowTextView {
-        let system = TextSystem()
+    static func make(wraps: Bool = true, trimsLineRoom: Bool = true) -> RowTextView {
+        let system = TextSystem(trimsLineRoom: trimsLineRoom)
         // The view takes the storage as its own while it is made.
         let view = withExtendedLifetime(system.storage) { RowTextView(frame: .zero, textContainer: system.container) }
         view.system = system

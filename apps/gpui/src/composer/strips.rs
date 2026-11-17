@@ -366,7 +366,7 @@ pub fn waiting_title(title: String, symbol: &'static str, place: Option<String>,
 
 const PADDING: f32 = 12.;
 const TARGET_INSET: f32 = 10.;
-const TARGET_INSET_VERTICAL: f32 = 6.;
+const TARGET_INSET_VERTICAL: f32 = 8.;
 /// Eight lines of a command, after which it scrolls inside its box.
 const TARGET_HEIGHT: f32 = theme::CODE_LINE_HEIGHT * 8. + TARGET_INSET_VERTICAL * 2.;
 

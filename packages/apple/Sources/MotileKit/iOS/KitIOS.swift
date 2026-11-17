@@ -535,8 +535,8 @@ final class RowTextView: UITextView, UITextViewDelegate {
     var onSelect: (() -> Void)?
     private var system: TextSystem!
 
-    static func make(wraps: Bool = true) -> RowTextView {
-        let system = TextSystem()
+    static func make(wraps: Bool = true, trimsLineRoom: Bool = true) -> RowTextView {
+        let system = TextSystem(trimsLineRoom: trimsLineRoom)
         let view = RowTextView(frame: .zero, textContainer: system.container)
         view.system = system
         view.isEditable = false

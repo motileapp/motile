@@ -694,7 +694,11 @@ final class CodeRowView: RowView {
     private var widestLine = 0
 
     static func height(lines: Int) -> CGFloat {
-        CodeHeader.height + CGFloat(lines) * Theme.codeLineHeight + bottomPadding + 14
+        CodeHeader.height + bodyHeight(lines: lines) + bottomPadding + 14
+    }
+
+    private static func bodyHeight(lines: Int) -> CGFloat {
+        LineRoom.height(lines: lines, font: Theme.codeFont, lineHeight: Theme.codeLineHeight)
     }
 
     override init(frame: CGRect) {
@@ -763,7 +767,7 @@ final class CodeRowView: RowView {
     }
 
     override func layout(width: CGFloat) -> CGFloat {
-        let bodyHeight = CGFloat(lines) * Theme.codeLineHeight
+        let bodyHeight = Self.bodyHeight(lines: lines)
         let height = CodeHeader.height + bodyHeight + Self.bottomPadding
         surface.frame = CGRect(x: 0, y: 4, width: width, height: height)
         header.place(CGRect(x: 0, y: 0, width: width, height: CodeHeader.height))
@@ -785,6 +789,8 @@ final class ToolRowView: RowView {
     static let afterProse: CGFloat = 8
     /// The room between a fold's line and the rule under it, and between the rule and the row after.
     private static let ruleGap: CGFloat = 4
+    /// The room above and under what an open row shows, in its box.
+    private static let detailPadding: CGFloat = 8
     private var above: CGFloat = 0
     private let rule = SurfaceView()
     /// When a fold's turn started, at its right, seen while the pointer is over the row.
@@ -1013,17 +1019,18 @@ final class ToolRowView: RowView {
         }
         let inner = width - 30 - 24
         let textHeight = detail.content.length > 0 ? detail.height(forWidth: inner) : 0
-        detail.place(CGRect(x: 12, y: 10, width: inner, height: textHeight))
-        var bottom = 10 + textHeight
+        let padding = Self.detailPadding
+        detail.place(CGRect(x: 12, y: padding, width: inner, height: textHeight))
+        var bottom = padding + textHeight
         for (box, image) in zip(imageBoxes, shownImages) {
             let size = image.box(width: inner)
-            let top = bottom > 10 ? bottom + 10 : bottom
+            let top = bottom > padding ? bottom + 10 : bottom
             box.frame = CGRect(x: 12, y: top, width: size.width, height: size.height)
             bottom = top + size.height
         }
-        let detailHeight = bottom - 10
-        detailSurface.frame = CGRect(x: inset + 30, y: Self.rowHeight + above + 3, width: width - 30, height: detailHeight + 20)
-        return Self.rowHeight + above + detailHeight + 20 + 9
+        let detailHeight = bottom - padding
+        detailSurface.frame = CGRect(x: inset + 30, y: Self.rowHeight + above + 3, width: width - 30, height: detailHeight + 2 * padding)
+        return Self.rowHeight + above + detailHeight + 2 * padding + 9
     }
 
     override func clearSelection() { detail.clearSelection() }

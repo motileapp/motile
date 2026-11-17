@@ -60,10 +60,13 @@ enum CodeBoxes {
     }
 }
 
-/// Keeps a shell command's words whole: its lines break only after a space, or inside a word
-/// longer than the line. A skill's chip never breaks.
-final class ShellWords: NSObject, NSLayoutManagerDelegate {
-    static let shared = ShellWords()
+/// Lays out a row's text. A shell command's words stay whole: its lines break only after a space,
+/// or inside a word longer than the line, and a skill's chip never breaks. A line of a fixed
+/// height has its text in its middle, where the text system would leave all the room over it, and
+/// a run of such lines loses the room over its first line and under its last, so that what pads
+/// the text pads it from the letters.
+final class RowLayout: NSObject, NSLayoutManagerDelegate {
+    static let shared = RowLayout()
 
     func layoutManager(_ layoutManager: NSLayoutManager, shouldBreakLineByWordBeforeCharacterAt charIndex: Int) -> Bool {
         guard let storage = layoutManager.textStorage, charIndex > 0, charIndex < storage.length else { return true }
@@ -73,11 +76,64 @@ final class ShellWords: NSObject, NSLayoutManagerDelegate {
         let before = (storage.string as NSString).character(at: charIndex - 1)
         return before == 0x20 || before == 0x09
     }
+
+    func layoutManager(
+        _ layoutManager: NSLayoutManager,
+        shouldSetLineFragmentRect rect: UnsafeMutablePointer<CGRect>,
+        lineFragmentUsedRect used: UnsafeMutablePointer<CGRect>,
+        baselineOffset: UnsafeMutablePointer<CGFloat>,
+        in textContainer: NSTextContainer,
+        forGlyphRange glyphRange: NSRange
+    ) -> Bool {
+        guard let storage = layoutManager.textStorage, glyphRange.length > 0 else { return false }
+        let characters = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+        guard let height = LineRoom.fixedHeight(in: storage, at: characters.location),
+            let font = storage.attribute(.font, at: characters.location, effectiveRange: nil) as? PlatformFont
+        else { return false }
+        // The used rect is the line itself; the rect has the paragraph's spacing around it too.
+        let lineTop = used.pointee.minY - rect.pointee.minY
+        let baseline = ((height + font.ascender + font.descender) / 2).rounded()
+        let trims = (layoutManager as? DecoratingLayoutManager)?.trimsLineRoom ?? true
+        let startsRun = LineRoom.fixedHeight(in: storage, at: characters.location - 1) != height
+        let endsRun = LineRoom.fixedHeight(in: storage, at: NSMaxRange(characters)) != height
+        let top = trims && startsRun ? max(0, baseline - font.ascender) : 0
+        let bottom = trims && endsRun ? max(0, height - baseline + font.descender) : 0
+        baselineOffset.pointee = lineTop + baseline - top
+        rect.pointee.size.height -= top + bottom
+        used.pointee.size.height -= top + bottom
+        return true
+    }
+}
+
+/// The room a line of a fixed height has around its text, which `RowLayout` shares out.
+enum LineRoom {
+    /// The height of the line `index` is on when its paragraph fixes it.
+    static func fixedHeight(in text: NSAttributedString, at index: Int) -> CGFloat? {
+        guard index >= 0, index < text.length,
+            let style = text.attribute(.paragraphStyle, at: index, effectiveRange: nil) as? NSParagraphStyle,
+            style.maximumLineHeight > 0, style.minimumLineHeight == style.maximumLineHeight
+        else { return nil }
+        #if os(iOS)
+        // A table's line is the table's room, not a line of text.
+        guard text.attribute(.motileTable, at: index, effectiveRange: nil) == nil else { return nil }
+        #endif
+        return style.maximumLineHeight
+    }
+
+    /// How tall `lines` lines of `font`, `lineHeight` apart, are in a row's text.
+    static func height(lines: Int, font: PlatformFont, lineHeight: CGFloat) -> CGFloat {
+        guard lines > 0 else { return 0 }
+        return CGFloat(lines - 1) * lineHeight + min(lineHeight, font.ascender - font.descender)
+    }
 }
 
 /// Draws what attributes alone can't: rounded backgrounds behind inline code, the bar beside a
 /// quote and horizontal rules.
 final class DecoratingLayoutManager: NSLayoutManager {
+    /// Whether a run of fixed-height lines loses the room over its first line and under its last.
+    /// A program's code keeps it, as every client lays programs out.
+    var trimsLineRoom = true
+
     override func fillBackgroundRectArray(
         _ rectArray: UnsafePointer<CGRect>,
         count rectCount: Int,
@@ -201,8 +257,9 @@ final class TextSystem {
     let layout: NSLayoutManager = DecoratingLayoutManager()
     let container = NSTextContainer(size: CGSize(width: 100, height: CGFloat.greatestFiniteMagnitude))
 
-    init() {
-        layout.delegate = ShellWords.shared
+    init(trimsLineRoom: Bool = true) {
+        (layout as? DecoratingLayoutManager)?.trimsLineRoom = trimsLineRoom
+        layout.delegate = RowLayout.shared
         layout.allowsNonContiguousLayout = true
         storage.addLayoutManager(layout)
         container.lineFragmentPadding = RowTextView.overhang
@@ -237,6 +294,8 @@ final class TextSystem {
         }
         let tail = new.attributedSubstring(from: NSRange(location: kept, length: new.length - kept))
         storage.replaceCharacters(in: NSRange(location: kept, length: storage.length - kept), with: tail)
+        // Whether the line before ends a run of fixed-height lines depends on what follows it.
+        layout.invalidateLayout(forCharacterRange: NSRange(location: kept - 1, length: 1), actualCharacterRange: nil)
     }
 
     /// Lays the text out at `width` and returns how tall it is.
