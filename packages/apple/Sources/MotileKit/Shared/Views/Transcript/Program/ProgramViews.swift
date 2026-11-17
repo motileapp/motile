@@ -83,6 +83,9 @@ class ProgramNodeView: FlippedView {
 
     func text(_ key: String) -> ProgramTextView? { textViews[key] }
 
+    /// The texts the node draws itself, besides its children's.
+    var ownSelectables: [ProgramSelectable] { Array(textViews.values) }
+
     private func placeChildren(_ box: ProgramBox) {
         var kept: [String: ProgramNodeView] = [:]
         for (child, origin) in zip(box.children, box.origins) {
@@ -128,21 +131,24 @@ class ProgramNodeView: FlippedView {
 }
 
 /// Text a node draws: lines of a fixed height, cut short where its box says, with links that open
-/// in the browser.
-final class ProgramTextView: FlippedView {
+/// in the browser. In a program's row it takes part in the row's selection.
+final class ProgramTextView: FlippedView, ProgramSelectable {
     var part: ProgramTextPart? {
         didSet {
+            laid = nil
             redraw()
             hasLinks = part.map { Self.hasLinks($0.text) } ?? false
         }
     }
     var onLink: ((URL) -> Void)?
+    private var selected: NSRange?
+    private var laid: (width: CGFloat, storage: NSTextStorage, geometry: TextGeometry)?
     private var hasLinks = false {
         didSet {
+            #if os(iOS)
             guard hasLinks != oldValue else { return }
             onPress = hasLinks ? { [weak self] point in self?.press(at: point) } : nil
             pointer = hasLinks ? .hand : .arrow
-            #if os(iOS)
             isUserInteractionEnabled = hasLinks
             #endif
         }
@@ -159,13 +165,32 @@ final class ProgramTextView: FlippedView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     #if os(macOS)
-    override func hitTest(_ point: NSPoint) -> NSView? {
-        hasLinks ? super.hitTest(point) : nil
+    /// Outside a row, as in a popover's panel, a click on a link opens it; in one the row does.
+    override func mouseDown(with event: NSEvent) {
+        guard !inRow, let url = link(at: convert(event.locationInWindow, from: nil)) else { return super.mouseDown(with: event) }
+        onLink?(url)
+    }
+
+    override func cursor(at point: CGPoint) -> NSCursor {
+        guard link(at: point) == nil else { return .pointingHand }
+        return inRow ? .iBeam : .arrow
+    }
+
+    private var inRow: Bool {
+        var view = superview
+        while let current = view, !(current is ProgramRowView) { view = current.superview }
+        return view != nil
     }
     #endif
 
     override func draw(_ rect: CGRect) {
         guard let part else { return }
+        #if os(macOS)
+        if let selected, let geometry = textGeometry, let context = Platform.drawing {
+            context.setFillColor(NSColor.selectedTextBackgroundColor.cgColor)
+            context.fill(geometry.rects(of: selected))
+        }
+        #endif
         let area = CGRect(x: 0, y: -part.lift, width: bounds.width, height: bounds.height + part.lift)
         guard part.oneLine || part.maxLines != nil else {
             return part.text.draw(with: area, options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil)
@@ -173,14 +198,45 @@ final class ProgramTextView: FlippedView {
         part.text.draw(with: area, options: [.usesLineFragmentOrigin, .usesFontLeading, .truncatesLastVisibleLine], context: nil)
     }
 
-    override func takesPress(at point: CGPoint) -> Bool {
-        link(at: point) != nil
+    // MARK: ProgramSelectable
+
+    var selectableText: NSAttributedString { part?.text ?? NSAttributedString() }
+
+    var textGeometry: TextGeometry? {
+        guard let part else { return nil }
+        if let laid, laid.width == bounds.width { return laid.geometry }
+        let storage = NSTextStorage(attributedString: part.text)
+        let layout = NSLayoutManager()
+        let container = NSTextContainer(size: CGSize(width: max(1, bounds.width), height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        layout.addTextContainer(container)
+        storage.addLayoutManager(layout)
+        let geometry = TextGeometry(layout: layout, container: container, origin: CGPoint(x: 0, y: -part.lift), lineShift: part.lift)
+        laid = (bounds.width, storage, geometry)
+        return geometry
     }
 
+    func showSelected(_ range: NSRange?) {
+        guard range != selected else { return }
+        selected = range
+        redraw()
+    }
+
+    func link(at point: CGPoint) -> URL? {
+        guard hasLinks, bounds.contains(point) else { return nil }
+        return textGeometry?.link(at: point)
+    }
+
+    #if os(iOS)
     private func press(at point: CGPoint) {
         guard let url = link(at: point) else { return }
         onLink?(url)
     }
+
+    override func takesPress(at point: CGPoint) -> Bool {
+        link(at: point) != nil
+    }
+    #endif
 
     private static func hasLinks(_ text: NSAttributedString) -> Bool {
         var found = false
@@ -190,22 +246,6 @@ final class ProgramTextView: FlippedView {
             stop.pointee = true
         }
         return found
-    }
-
-    private func link(at point: CGPoint) -> URL? {
-        guard hasLinks, let part, bounds.contains(point) else { return nil }
-        let storage = NSTextStorage(attributedString: part.text)
-        let layout = NSLayoutManager()
-        let container = NSTextContainer(size: CGSize(width: bounds.width, height: .greatestFiniteMagnitude))
-        container.lineFragmentPadding = 0
-        layout.addTextContainer(container)
-        storage.addLayoutManager(layout)
-        let at = CGPoint(x: point.x, y: point.y + part.lift)
-        let glyph = layout.glyphIndex(for: at, in: container)
-        guard layout.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: container).insetBy(dx: -2, dy: -2).contains(at) else { return nil }
-        let index = layout.characterIndexForGlyph(at: glyph)
-        guard index < storage.length else { return nil }
-        return storage.attribute(.link, at: index, effectiveRange: nil) as? URL
     }
 }
 
@@ -503,11 +543,10 @@ enum ProgramGlyphs {
 final class ProgramBadgeView: ProgramNodeView {
     private let face = SurfaceView()
     private let icon = SymbolView()
-    private let words = TextBlockView()
+    private let words = ProgramTextView()
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        words.oneLine = true
         for view in [face, icon, words] as [PlatformView] { addSubview(view) }
     }
 
@@ -523,8 +562,11 @@ final class ProgramBadgeView: ProgramNodeView {
         icon.isHidden = badge.icon == nil
         if let glyph = badge.icon?.glyph { icon.image = .lucide(glyph, side: PlatformImage.symbolSide(ProgramBadge.iconSize)) }
         icon.tint = ink
-        words.text = ControlText.line(badge.text, font: ProgramBadge.font, color: ink)
+        let text = ControlText.line(badge.text, font: ProgramBadge.font, color: ink)
+        words.part = ProgramTextPart(text: text, frame: .zero, lift: ControlText.lift(text), oneLine: true)
     }
+
+    override var ownSelectables: [ProgramSelectable] { [words] }
 
     override func layoutNow() {
         face.frame = bounds
@@ -534,7 +576,7 @@ final class ProgramBadgeView: ProgramNodeView {
             icon.frame = CGRect(x: x, y: ((bounds.height - side) / 2).rounded(), width: side, height: side)
             x += side + ProgramBadge.gap
         }
-        let height = ControlText.height(words.text, width: .greatestFiniteMagnitude)
+        let height = ControlText.height(words.selectableText, width: .greatestFiniteMagnitude)
         words.frame = CGRect(x: x, y: ((bounds.height - height) / 2).rounded(), width: max(0, bounds.width - x - ProgramBadge.padding), height: height)
     }
 }
@@ -609,6 +651,7 @@ final class ProgramMarkdownView: ProgramNodeView {
         let code = blocks.filter { $0.code != nil }
         while texts.count < prose.count {
             let text = RowTextView.make()
+            text.selectsWithProgram = true
             addSubview(text)
             texts.append(text)
             headers.append([])
@@ -639,6 +682,10 @@ final class ProgramMarkdownView: ProgramNodeView {
         }
     }
 
+    override var ownSelectables: [ProgramSelectable] {
+        texts.filter { !$0.isHidden } + codes.filter { !$0.isHidden }.map(\.text)
+    }
+
     private func placeHeaders(in text: RowTextView, width: CGFloat, index: Int) {
         _ = text.height(forWidth: width)
         let boxes = text.codeBoxes()
@@ -660,10 +707,11 @@ final class ProgramMarkdownView: ProgramNodeView {
 final class ProgramCodeBox: FlippedView {
     private let surface = SurfaceView()
     private let header = CodeHeader()
-    private let text = RowTextView.make(trimsLineRoom: false)
+    let text = RowTextView.make(trimsLineRoom: false)
 
     override init(frame: CGRect) {
         super.init(frame: frame)
+        text.selectsWithProgram = true
         addSubview(surface)
         surface.addSubview(header)
         surface.addSubview(text)
@@ -702,6 +750,8 @@ final class ProgramCodeView: ProgramNodeView {
         guard let content = box.extra as? CodeContent, case .code(let node) = box.node.kind else { return }
         code.show(content, surface: box.surface, radius: ProgramStyle.radius(node.radius, side: min(box.size.width, box.size.height)))
     }
+
+    override var ownSelectables: [ProgramSelectable] { [code.text] }
 
     override func layoutNow() {
         code.frame = bounds

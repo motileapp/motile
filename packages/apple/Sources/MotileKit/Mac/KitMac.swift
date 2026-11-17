@@ -576,6 +576,9 @@ class PointerTextView: NSTextView, CursorOwner {
 final class RowTextView: PointerTextView {
     /// Called when the user starts selecting here, so other rows can let go of their selection.
     var onSelect: (() -> Void)?
+    /// Its text is selected with the rest of its program's: its clicks go on to the program's row.
+    var selectsWithProgram = false
+    private var shownSelection: NSRange?
     private var system: TextSystem!
 
     static func make(wraps: Bool = true, trimsLineRoom: Bool = true) -> RowTextView {
@@ -651,8 +654,16 @@ final class RowTextView: PointerTextView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        guard !selectsWithProgram else {
+            nextResponder?.mouseDown(with: event)
+            return
+        }
         onSelect?()
         super.mouseDown(with: event)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        selectsWithProgram ? nil : super.menu(for: event)
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -661,6 +672,23 @@ final class RowTextView: PointerTextView {
 
     // The transcript decides the size; the text view must not grow itself to fit.
     override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric) }
+}
+
+extension RowTextView: ProgramSelectable {
+    var selectableText: NSAttributedString { content }
+
+    var textGeometry: TextGeometry? {
+        guard let layoutManager, let textContainer else { return nil }
+        return TextGeometry(layout: layoutManager, container: textContainer, origin: textContainerOrigin)
+    }
+
+    func showSelected(_ range: NSRange?) {
+        guard range != shownSelection, let layoutManager else { return }
+        shownSelection = range
+        layoutManager.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: content.length))
+        guard let range, range.length > 0 else { return }
+        layoutManager.addTemporaryAttribute(.backgroundColor, value: NSColor.selectedTextBackgroundColor, forCharacterRange: range)
+    }
 }
 
 /// Shows what is wider than the column and scrolls it sideways, with the system's scroller.

@@ -495,6 +495,21 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(copy.exists)
     }
 
+    /// A hold on a program's text selects a word of it to copy.
+    func testAHoldOnAProgramsTextSelectsAWordToCopy() {
+        addTeardownBlock { [self] in deleteThread("The Drone Photography Market") }
+        app.buttons["Threads"].tap()
+        XCTAssertTrue(shown(newThread))
+        newThread.tap()
+        send("show the ui drones")
+        let caption = "Illustrative. Fixed costs cover insurance, gear, software and marketing; project costs cover editing and travel."
+        guard let text = lastShown(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", caption))) else {
+            return XCTFail("no program")
+        }
+        text.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 30, dy: 10)).press(forDuration: 0.8)
+        XCTAssertTrue(app.menuItems["Copy"].waitForExistence(timeout: 3))
+    }
+
     func testATapBesideTheComposersTextBringsTheKeyboard() {
         let text = app.textViews.firstMatch
         XCTAssertTrue(text.waitForExistence(timeout: 10))

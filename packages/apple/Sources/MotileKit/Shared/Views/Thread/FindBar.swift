@@ -110,10 +110,12 @@ extension AppStore {
     /// The text selected in the transcript, on one line, to find.
     var selectedTranscriptText: String? {
         #if os(macOS)
-        guard let view = NSApp.keyWindow?.firstResponder as? RowTextView else { return nil }
-        let range = view.selectedRange()
-        guard range.length > 0, range.length <= 200 else { return nil }
-        let text = (view.string as NSString).substring(with: range)
+        let responder = NSApp.keyWindow?.firstResponder
+        let selected: String? = (responder as? ProgramRowView)?.selectedText ?? (responder as? RowTextView).flatMap { view in
+            let range = view.selectedRange()
+            return range.length > 0 ? (view.string as NSString).substring(with: range) : nil
+        }
+        guard let text = selected, (text as NSString).length <= 200 else { return nil }
         let line = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         return trimmed.isEmpty ? nil : trimmed

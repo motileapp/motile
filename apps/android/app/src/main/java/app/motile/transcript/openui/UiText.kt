@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -289,7 +288,7 @@ fun UiQuote(node: UiNode, kind: UiKind.Quote) {
 fun UiCode(node: UiNode, kind: UiKind.Code) {
     val palette = LocalPalette.current
     val text = remember(kind, palette) { Typesetter.code(kind.code, kind.spans?.toIntArray() ?: IntArray(0), palette) }
-    SelectionContainer(Modifier.uiNode(node)) { CodeBox(kind.language, kind.code, text, wraps = true, radius = UiStyle.radius(kind.radius)) }
+    CodeBox(kind.language, kind.code, text, Modifier.uiNode(node), wraps = true, radius = UiStyle.radius(kind.radius))
 }
 
 /** Markdown as the transcript's own prose. */
@@ -299,18 +298,16 @@ fun UiMarkdown(node: UiNode, kind: UiKind.Markdown) {
     val prose = remember(kind, palette) {
         kind.blocks.map { block -> (block as? UiMarkdownBlock.Prose)?.let { Typesetter.prose(ProseSource(it.prose), palette) } }
     }
-    SelectionContainer(Modifier.uiNode(node)) {
-        Column(Modifier.fillMaxWidth()) {
-            kind.blocks.forEachIndexed { index, block ->
-                val top = if (index == 0) 0.dp else 12.dp
-                when (block) {
-                    is UiMarkdownBlock.Code -> {
-                        val code = remember(block, palette) { Typesetter.code(block.code, block.spans?.toIntArray() ?: IntArray(0), palette) }
-                        CodeBox(block.language, block.code, code, Modifier.padding(top = top), wraps = true)
-                    }
-                    is UiMarkdownBlock.Prose -> Column(Modifier.padding(top = top)) {
-                        for (paragraph in prose[index].orEmpty()) ProseBlockView(paragraph)
-                    }
+    Column(Modifier.uiNode(node).fillMaxWidth()) {
+        kind.blocks.forEachIndexed { index, block ->
+            val top = if (index == 0) 0.dp else 12.dp
+            when (block) {
+                is UiMarkdownBlock.Code -> {
+                    val code = remember(block, palette) { Typesetter.code(block.code, block.spans?.toIntArray() ?: IntArray(0), palette) }
+                    CodeBox(block.language, block.code, code, Modifier.padding(top = top), wraps = true)
+                }
+                is UiMarkdownBlock.Prose -> Column(Modifier.padding(top = top)) {
+                    for (paragraph in prose[index].orEmpty()) ProseBlockView(paragraph)
                 }
             }
         }
