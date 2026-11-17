@@ -182,9 +182,13 @@ private struct GatewayRequestLog: View {
                     .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 12, trailing: 0))
             }
         }
-        .refreshable { log.reload() }
         .navigationTitle("Request Log")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            GlassToolbarItem(placement: .topBarTrailing) {
+                RefreshGlassButton(pending: log.reloading) { log.reload() }
+            }
+        }
         .onAppear {
             store.watchGateway(true)
             log.start(store)

@@ -428,6 +428,9 @@ class GatewayLog(private val gateway: Gateway) {
         private set
     var loading by mutableStateOf(false)
         private set
+    /** Whether the newest page is being read again, not the next one. */
+    var reloading by mutableStateOf(false)
+        private set
     var error by mutableStateOf<String?>(null)
         private set
     private var errorsOnlyState by mutableStateOf(false)
@@ -472,6 +475,7 @@ class GatewayLog(private val gateway: Gateway) {
         asked += 1
         val number = asked
         loading = true
+        reloading = before == null
         val fields = buildMap<String, Any?> {
             put("errors_only", errorsOnly)
             before?.let { put("before", it) }
@@ -479,6 +483,7 @@ class GatewayLog(private val gateway: Gateway) {
         gateway.send("gateway_log", fields) { result ->
             if (number != asked) return@send
             loading = false
+            reloading = false
             val answer = result.getOrElse {
                 error = result.coreError?.message
                 return@send

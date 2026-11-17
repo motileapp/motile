@@ -332,6 +332,9 @@ class McpServerCalls(private val mcpServers: McpServers) {
         private set
     var loading by mutableStateOf(false)
         private set
+    /** Whether the newest page is being read again, not the next one. */
+    var reloading by mutableStateOf(false)
+        private set
     var error by mutableStateOf<String?>(null)
         private set
     private var errorsOnlyState by mutableStateOf(false)
@@ -348,6 +351,8 @@ class McpServerCalls(private val mcpServers: McpServers) {
     private var asked = 0
 
     fun start() = load(before = null)
+
+    fun reload() = load(before = null)
 
     fun loadMore() {
         val last = rows.lastOrNull() ?: return
@@ -384,10 +389,12 @@ class McpServerCalls(private val mcpServers: McpServers) {
         asked += 1
         val number = asked
         loading = true
+        reloading = before == null
         error = null
         mcpServers.loadCalls(before, errorsOnly) { result ->
             if (number != asked) return@loadCalls
             loading = false
+            reloading = false
             val page = result.getOrElse {
                 error = result.coreError?.message
                 return@loadCalls

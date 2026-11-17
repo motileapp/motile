@@ -217,9 +217,13 @@ private struct McpServerActivity: View {
                     .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 12, trailing: 0))
             }
         }
-        .refreshable { calls.refresh() }
         .navigationTitle("Activity")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            GlassToolbarItem(placement: .topBarTrailing) {
+                RefreshGlassButton(pending: calls.reloading) { calls.reload() }
+            }
+        }
         .onAppear {
             store.watchGateway(true)
             calls.start(store)

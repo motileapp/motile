@@ -28,12 +28,14 @@ import app.motile.core.GatewayCaptured
 import app.motile.core.GatewayLogRow
 import app.motile.core.coreError
 import app.motile.platform.Platform
+import app.motile.platform.Symbol
 import app.motile.theme.LocalPalette
 import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.ui.Card
 import app.motile.ui.Chip
 import app.motile.ui.CopyButton
+import app.motile.ui.GlassButton
 import app.motile.ui.HighlightButton
 import app.motile.ui.Segmented
 import app.motile.ui.Spinner
@@ -66,7 +68,7 @@ fun GatewayLogPage() {
         log.errorsOnly -> "No errors"
         else -> "No requests yet"
     }
-    SettingsScreen("Request Log") {
+    SettingsScreen("Request Log", { GlassButton(Symbol.RefreshCw, "Refresh", onClick = { log.reload() }, pending = log.reloading) }) {
         LazyColumn(
             Modifier.fillMaxSize(),
             state = state,

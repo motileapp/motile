@@ -3,7 +3,7 @@ import SwiftUI
 
 /// What was done, what the agents spent and what is left of their plans, in a sheet: the tabs in
 /// the system's tab bar, and the period and the servers counted, once there are several, in the
-/// bar's menus. Pulling a page down reads it again.
+/// bar's menus, beside the button that reads the page again.
 struct UsageSheet: View {
     private static let margin: CGFloat = 16
 
@@ -40,7 +40,6 @@ struct UsageSheet: View {
                     LimitsListIOS(model: model)
                 } else {
                     UsageContent(model: model, shown: tab, margin: Self.margin, top: 4)
-                        .refreshable { await model.refreshed() }
                 }
             }
             .dropdowns()
@@ -50,11 +49,10 @@ struct UsageSheet: View {
             .serversSubtitle(picksServers ? model.serversLabel(among: store.usageServers) : nil)
             .toolbar {
                 GlassToolbarItem(placement: .topBarLeading) { SheetCloseButton() }
-                if tab != .limits || picksServers {
-                    GlassToolbarItem(placement: .topBarTrailing) {
-                        if tab != .limits { period }
-                        if picksServers { servers }
-                    }
+                GlassToolbarItem(placement: .topBarTrailing) {
+                    if tab != .limits { period }
+                    if picksServers { servers }
+                    RefreshGlassButton(pending: model.refreshing) { model.refresh() }
                 }
             }
         }
