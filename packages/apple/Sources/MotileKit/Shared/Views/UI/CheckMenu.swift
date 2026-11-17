@@ -92,7 +92,7 @@ struct OpenDropdown: PreferenceKey {
     struct Shown {
         let anchor: Anchor<CGRect>
         let content: AnyView
-        /// It opens above the button, as what the composer's buttons open does.
+        /// It opens above the button where it fits, as what the composer's buttons open does.
         var up = false
         /// It lines up with the button's trailing edge rather than its leading one.
         var trailing = false
@@ -218,9 +218,6 @@ final class HungDropdown {
 }
 
 private struct DropdownLayer: View {
-    private static let gap: CGFloat = 4
-    private static let roomBelow: CGFloat = 220
-
     private let content: AnyView
     private let up: Bool
     private let trailing: Bool
@@ -252,16 +249,6 @@ private struct DropdownLayer: View {
         }
     }
 
-    @ViewBuilder private func lined(up button: CGRect) -> some View {
-        if trailing {
-            content
-                .frame(width: button.maxX, alignment: .trailing)
-        } else {
-            content
-                .offset(x: button.minX)
-        }
-    }
-
     /// Takes every press around the dropdown, which only closes it, as a menu does.
     @ViewBuilder private var backdrop: some View {
         #if os(macOS)
@@ -275,21 +262,9 @@ private struct DropdownLayer: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let button = place(proxy)
-            ZStack(alignment: .topLeading) {
+            ZStack {
                 backdrop
-                // One that would have too little room under its button, as the strip under the
-                // composer at the window's bottom, opens above it.
-                let below = proxy.size.height - button.maxY
-                if up || (below < Self.roomBelow && button.minY > below) {
-                    lined(up: button)
-                        .frame(maxHeight: max(0, button.minY - 3 * Self.gap), alignment: .bottom)
-                        .frame(height: max(0, button.minY - Self.gap), alignment: .bottom)
-                } else {
-                    lined(up: button)
-                        .frame(maxHeight: max(0, proxy.size.height - button.maxY - 3 * Self.gap), alignment: .top)
-                        .offset(y: button.maxY + Self.gap)
-                }
+                DropdownPlacement(button: place(proxy), up: up, trailing: trailing) { content }
             }
         }
         #if os(macOS)
@@ -306,5 +281,37 @@ private struct DropdownLayer: View {
             NSEvent.removeMonitor(escape)
         }
         #endif
+    }
+}
+
+/// Places a dropdown against its button: on the side it prefers, `up` or under it, unless it only
+/// fits on the other, which has more room; lined up with the button's leading or `trailing` edge;
+/// and slid back inside the window where it would leave it. One too tall for its side is cut to
+/// it, to scroll.
+private struct DropdownPlacement: Layout {
+    private static let gap: CGFloat = 4
+    private static let margin: CGFloat = 8
+
+    let button: CGRect
+    let up: Bool
+    let trailing: Bool
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        proposal.replacingUnspecifiedDimensions()
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let card = subviews.first else { return }
+        let width = max(0, bounds.width - 2 * Self.margin)
+        let below = bounds.height - button.maxY - Self.gap - Self.margin
+        let above = button.minY - Self.gap - Self.margin
+        let natural = card.sizeThatFits(ProposedViewSize(width: width, height: nil)).height
+        let opensUp = up ? natural <= above || above >= below : natural > below && above > below
+        let room = max(0, opensUp ? above : below)
+        let size = card.sizeThatFits(ProposedViewSize(width: width, height: min(natural, room)))
+        let aligned = trailing ? button.maxX - size.width : button.minX
+        let x = max(Self.margin, min(aligned, bounds.width - Self.margin - size.width))
+        let y = opensUp ? button.minY - Self.gap - size.height : button.maxY + Self.gap
+        card.place(at: CGPoint(x: bounds.minX + x, y: bounds.minY + y), proposal: ProposedViewSize(size))
     }
 }
