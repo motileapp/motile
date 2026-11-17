@@ -424,8 +424,7 @@ struct CommitSheet: View {
             } else if file.added + file.removed > 0 {
                 LineCounts(added: file.added, removed: file.removed)
             } else {
-                Text(file.change == "added" ? "new" : file.change)
-                    .foregroundStyle(Color.themeMutedStrongerForeground)
+                Text(AttributedString(LineCountText.change(file.change)))
             }
         }
         .font(.ui(.xs))
@@ -461,12 +460,8 @@ private struct LineCounts: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            if added > 0 {
-                Text("+\(added)").foregroundStyle(Color.themeSuccess)
-            }
-            if removed > 0 {
-                Text("−\(removed)").foregroundStyle(Color.themeDestructive)
-            }
+            Text("+\(added)").foregroundStyle(Color.themeSuccess)
+            Text("−\(removed)").foregroundStyle(Color.themeDestructive)
         }
         .font(.ui(.xs, weight: .medium).monospacedDigit())
     }

@@ -428,6 +428,8 @@ class ChangesContent(json: JSON) {
         val open = json.bool("open")
         val added = json.int("added")
         val removed = json.int("removed")
+        /** How a file changed: "added", "modified", "deleted" or "renamed". */
+        val change = json.string("change")
     }
 
     val files = json.int("files")

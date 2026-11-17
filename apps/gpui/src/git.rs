@@ -365,16 +365,26 @@ impl CommitSheet {
                 } else if file.added + file.removed > 0 {
                     end.child(line_counts(file.added, file.removed, cx))
                 } else {
-                    let change = match file.change {
-                        Change::Added => "new",
-                        Change::Modified => "modified",
-                        Change::Deleted => "deleted",
-                        Change::Renamed => "renamed",
-                    };
-                    end.text_color(c.muted_stronger_foreground).child(change)
+                    end.child(change_label(file.change, cx))
                 }
             }))
     }
+}
+
+/// What a file whose lines git doesn't count, as an image's, says instead: how it changed, in
+/// the colour of its counts.
+pub fn change_word(change: Change, c: &crate::theme::Colors) -> (&'static str, Hsla) {
+    match change {
+        Change::Added => ("New", c.success),
+        Change::Modified => ("Modified", c.warning),
+        Change::Deleted => ("Deleted", c.destructive),
+        Change::Renamed => ("Renamed", c.muted_stronger_foreground),
+    }
+}
+
+pub fn change_label(change: Change, cx: &App) -> Div {
+    let (word, color) = change_word(change, colors(cx));
+    div().text_size(TextSize::Xs).font_weight(FontWeight::MEDIUM).text_color(color).child(word)
 }
 
 /// The lines added and removed, as git counts them.
@@ -386,8 +396,8 @@ fn line_counts(added: u32, removed: u32, cx: &App) -> Div {
         .text_size(TextSize::Xs)
         .font_weight(FontWeight::MEDIUM)
         .font_features(crate::ui::tabular_numbers())
-        .when(added > 0, |counts| counts.child(div().text_color(c.success).child(format!("+{added}"))))
-        .when(removed > 0, |counts| counts.child(div().text_color(c.destructive).child(format!("−{removed}"))))
+        .child(div().text_color(c.success).child(format!("+{added}")))
+        .child(div().text_color(c.destructive).child(format!("−{removed}")))
 }
 
 impl Render for CommitSheet {

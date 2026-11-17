@@ -471,11 +471,19 @@ struct ChangesContent {
         let title = NSMutableAttributedString(
             string: files == 1 ? "1 changed file" : "\(files) changed files",
             attributes: [.font: PlatformFont.ui(.sm, weight: .medium), .foregroundColor: Theme.foreground])
-        title.append(NSAttributedString(string: "   "))
-        title.append(LineCountText.text(added: json.int("added"), removed: json.int("removed")))
+        if json.int("added") + json.int("removed") > 0 {
+            title.append(NSAttributedString(string: "   "))
+            title.append(LineCountText.text(added: json.int("added"), removed: json.int("removed")))
+        }
         self.title = title
         entries = json.objects("entries").map { entry in
             let folder = entry.bool("folder")
+            let counted = entry.int("added") + entry.int("removed") > 0
+            // A file without lines to count, as an image, says how it changed instead.
+            let counts =
+                counted
+                ? LineCountText.text(added: entry.int("added"), removed: entry.int("removed"))
+                : folder ? NSAttributedString() : LineCountText.change(entry.string("change"))
             let name = NSAttributedString(
                 string: entry.string("name"),
                 attributes: [
@@ -483,7 +491,7 @@ struct ChangesContent {
                 ])
             return Entry(
                 id: entry.string("id"), path: entry.string("path"), depth: entry.int("depth"), folder: folder, open: entry.bool("open"),
-                name: name, counts: LineCountText.text(added: entry.int("added"), removed: entry.int("removed")))
+                name: name, counts: counts)
         }
     }
 }

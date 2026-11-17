@@ -159,8 +159,8 @@ function File({
           <span className="text-muted-foreground">{folderOf(file.path)}</span>
           <span className="font-medium">{nameOf(file.path)}</span>
           {file.isNew && (
-            <span className="ml-3 text-(length:--type-xs) text-muted-stronger-foreground">
-              new
+            <span className="ml-3 text-(length:--type-xs) font-medium text-success">
+              New
             </span>
           )}
         </span>

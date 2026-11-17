@@ -557,15 +557,11 @@ final class CodeSheet {
             title.append(NSAttributedString(string: folder + "/", attributes: [.font: PlatformFont.ui(.xs), .foregroundColor: Theme.mutedForeground]))
         }
         title.append(NSAttributedString(string: (file.path as NSString).lastPathComponent, attributes: [.font: font, .foregroundColor: Theme.foreground]))
-        let note: String? =
-            switch file.change {
-            case "added": "new"
-            case "deleted": "deleted"
-            case "renamed": file.from.map { "was \($0)" }
-            default: nil
-            }
-        if let note {
-            title.append(NSAttributedString(string: "   \(note)", attributes: [.font: PlatformFont.ui(.xs), .foregroundColor: Theme.mutedStrongerForeground]))
+        if file.change == "added" || file.change == "deleted" {
+            title.append(NSAttributedString(string: "   ", attributes: [.font: PlatformFont.ui(.xs)]))
+            title.append(LineCountText.change(file.change))
+        } else if file.change == "renamed", let from = file.from {
+            title.append(NSAttributedString(string: "   Was \(from)", attributes: [.font: PlatformFont.ui(.xs), .foregroundColor: Theme.mutedStrongerForeground]))
         }
         title.addAttribute(.paragraphStyle, value: style, range: NSRange(location: 0, length: title.length))
         return title

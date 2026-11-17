@@ -145,7 +145,9 @@ function Row({
           {item.running ? (
             <Shimmer className="truncate">
               {item.verb}{" "}
-              <span className="font-mono text-(length:--type-xs)">{item.target}</span>
+              <span className="font-mono text-(length:--type-xs)">
+                {item.target}
+              </span>
             </Shimmer>
           ) : (
             <span className="truncate">
@@ -549,9 +551,8 @@ export function LineCounts({
 }) {
   return (
     <span className="font-mono text-(length:--type-xs) font-normal tabular-nums">
-      {added > 0 && <span className="text-success">+{added}</span>}
-      {added > 0 && removed > 0 && " "}
-      {removed > 0 && <span className="text-destructive">−{removed}</span>}
+      <span className="text-success">+{added}</span>{" "}
+      <span className="text-destructive">−{removed}</span>
     </span>
   )
 }

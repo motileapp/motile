@@ -793,8 +793,10 @@ private fun ChangesRow(row: RowModel, changes: ChangesContent) {
                 val title = remember(changes, palette) {
                     buildAnnotatedString {
                         withStyle(Theme.ui(TextSize.Sm, androidx.compose.ui.text.font.FontWeight.Medium).toSpanStyle().copy(color = palette.foreground)) { append(changes.title) }
-                        append("   ")
-                        withStyle(Theme.uiDigits(TextSize.Xs, androidx.compose.ui.text.font.FontWeight.Medium).toSpanStyle()) { append(counts) }
+                        if (changes.added + changes.removed > 0) {
+                            append("   ")
+                            withStyle(Theme.uiDigits(TextSize.Xs, androidx.compose.ui.text.font.FontWeight.Medium).toSpanStyle()) { append(counts) }
+                        }
                     }
                 }
                 Text(title, Modifier.padding(start = 14.dp).weight(1f), maxLines = 1)
@@ -840,8 +842,13 @@ private fun ChangeEntryRow(row: RowModel, entry: ChangesContent.Entry, found: Li
                     color = if (entry.folder) palette.mutedForeground else palette.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
                 )
             }
-            val counts = remember(entry, palette) { Typesetter.lineCounts(entry.added, entry.removed, palette) }
-            Text(counts, style = Theme.uiDigits(TextSize.Xs, androidx.compose.ui.text.font.FontWeight.Medium), maxLines = 1)
+            when {
+                entry.added + entry.removed > 0 -> {
+                    val counts = remember(entry, palette) { Typesetter.lineCounts(entry.added, entry.removed, palette) }
+                    Text(counts, style = Theme.uiDigits(TextSize.Xs, androidx.compose.ui.text.font.FontWeight.Medium), maxLines = 1)
+                }
+                !entry.folder -> Text(Typesetter.changeWord(entry.change, palette), style = Theme.ui(TextSize.Xs, androidx.compose.ui.text.font.FontWeight.Medium), maxLines = 1)
+            }
         }
     }
 }

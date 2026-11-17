@@ -164,11 +164,8 @@ object LineCountText {
     fun text(added: Int, removed: Int): AnnotatedString {
         val palette = LocalPalette.current
         return buildAnnotatedString {
-            if (added > 0 || removed == 0) withStyle(SpanStyle(color = palette.success)) { append("+$added") }
-            if (removed > 0 || added == 0) {
-                val space = if (length > 0) " " else ""
-                withStyle(SpanStyle(color = palette.destructive)) { append("$space−$removed") }
-            }
+            withStyle(SpanStyle(color = palette.success)) { append("+$added") }
+            withStyle(SpanStyle(color = palette.destructive)) { append(" −$removed") }
         }
     }
 }

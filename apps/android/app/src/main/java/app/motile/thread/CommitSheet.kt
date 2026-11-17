@@ -37,6 +37,7 @@ import app.motile.theme.Radius
 import app.motile.theme.SurfaceBox
 import app.motile.theme.TextSize
 import app.motile.theme.Theme
+import app.motile.transcript.Typesetter
 import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
 import app.motile.ui.Text
@@ -156,7 +157,7 @@ private fun FileRow(file: ChangedFile, isExcluded: Boolean, editing: Boolean, to
         when {
             isExcluded -> Text("Excluded", size = TextSize.Xs, color = palette.mutedStrongerForeground)
             file.added + file.removed > 0 -> LineCounts(file.added, file.removed)
-            else -> Text(if (file.change == "added") "new" else file.change, size = TextSize.Xs, color = palette.mutedStrongerForeground)
+            else -> Text(Typesetter.changeWord(file.change, palette), style = Theme.ui(TextSize.Xs, FontWeight.Medium))
         }
     }
 }
@@ -167,7 +168,7 @@ private fun LineCounts(added: Int, removed: Int) {
     val palette = Theme.colors
     val style = Theme.uiDigits(TextSize.Xs, FontWeight.Medium)
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (added > 0) Text("+$added", style = style, color = palette.success)
-        if (removed > 0) Text("−$removed", style = style, color = palette.destructive)
+        Text("+$added", style = style, color = palette.success)
+        Text("−$removed", style = style, color = palette.destructive)
     }
 }
