@@ -532,8 +532,9 @@ async fn a_codex_turn_shows_its_commands_and_edits() {
     assert_eq!((&started["approvalPolicy"], &started["sandbox"]), (&json!("on-request"), &json!("workspace-write")));
     let instructions = started["developerInstructions"].as_str().unwrap();
     assert!(instructions.starts_with(
-        "In case you're asked: you are running in Motile through the Codex harness. No need to mention this \
-         otherwise. You can show the user an image or a video"
+        "You run in Motile through the Codex harness, on a server: one of the user's machines. The user reads this \
+         thread from a Motile client, often on another device. No need to mention this unless asked. You can show \
+         the user an image or a video"
     ));
     assert!(instructions.ends_with("\n\nIn case you're asked, you run with high reasoning effort."), "{instructions}");
     let first_turn = &asked[1]["turn/start"];
@@ -2132,8 +2133,9 @@ async fn the_model_effort_and_access_chosen_for_a_thread_reach_the_agent() {
     );
     assert!(
         first.contains(
-            "--append-system-prompt\nIn case you're asked: you are running in Motile through the Claude Code harness. \
-             No need to mention this otherwise. You can show the user an image or a video"
+            "--append-system-prompt\nYou run in Motile through the Claude Code harness, on a server: one of the user's \
+             machines. The user reads this thread from a Motile client, often on another device. No need to mention \
+             this unless asked. You can show the user an image or a video"
         ),
         "{first}"
     );
