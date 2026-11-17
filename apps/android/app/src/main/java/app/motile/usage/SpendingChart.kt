@@ -110,7 +110,7 @@ fun SpendingChart(report: UsageReport, measure: Measure, period: UsageModel.Peri
         }
         if (pointed != null && pointed in 0 until count) {
             val x = xOf(pointed, size.width)
-            drawLine(palette.border, Offset(x, top), Offset(x, bottom), strokeWidth = 1.dp.toPx())
+            drawLine(palette.mutedStrongestForeground, Offset(x, top), Offset(x, bottom), strokeWidth = 1.dp.toPx())
         }
     }
 }

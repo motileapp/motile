@@ -118,14 +118,14 @@ fun SpendingView(report: UsageReport, measure: Measure, onMeasure: (Measure) -> 
                 val chart = @Composable { modifier: Modifier ->
                     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (report.loading) {
-                            PlaceholderBar(180.dp, Theme.ui(TextSize.Xs))
                             Box(
                                 Modifier.fillMaxWidth().height(spendingChartHeight).pulsing()
                                     .background(LocalSurface.current.color(Surface.Layer.Control), RoundedCornerShape(Radius.md)),
                             )
+                            PlaceholderBar(180.dp, Theme.ui(TextSize.Xs))
                         } else {
-                            Legend(report, measure, period, pointed)
                             SpendingChart(report, measure, period, pointed) { pointed = it }
+                            Legend(report, measure, period, pointed)
                         }
                     }
                 }

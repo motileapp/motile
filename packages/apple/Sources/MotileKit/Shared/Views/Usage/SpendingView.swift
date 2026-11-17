@@ -210,12 +210,12 @@ struct SpendingView: View {
     private var chart: some View {
         VStack(alignment: .leading, spacing: 10) {
             if report.loading {
-                PlaceholderBar(width: 180, size: .xs)
                 Pulsing { RoundedRectangle(cornerRadius: Radius.md, style: .continuous).fill(surface.color(.control)) }
                     .frame(height: Self.chartHeight)
+                PlaceholderBar(width: 180, size: .xs)
             } else {
-                legend
                 chartMarks
+                legend
             }
         }
     }
@@ -238,7 +238,7 @@ struct SpendingView: View {
             }
             if let index = pointedIndex {
                 RuleMark(x: .value("Time", report.starts[index]))
-                    .foregroundStyle(Color.themeBorder)
+                    .foregroundStyle(Color.themeMutedStrongestForeground)
                     .lineStyle(StrokeStyle(lineWidth: 1))
             }
         }
