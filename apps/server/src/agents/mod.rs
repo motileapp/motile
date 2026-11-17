@@ -40,7 +40,7 @@ pub fn instructions(turn: &Turn) -> String {
     };
     let mut text = format!(
         "You run in Motile through the {harness} harness, on a server: one of the user's machines. The user reads this \
-         thread from a Motile client, often on another device. No need to mention this unless asked. "
+         thread from a Motile client on another device. No need to mention this unless asked. "
     );
     text += SHOWING_MEDIA;
     match turn.mcp {
