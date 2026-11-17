@@ -351,6 +351,19 @@ pub struct ContextFill {
     pub tone: Tone,
 }
 
+impl ContextFill {
+    /// A thread whose agent has no session yet: an empty bar.
+    pub fn empty() -> Self {
+        ContextFill {
+            tokens: "Empty until first reply".to_string(),
+            window: None,
+            used_percent: Some(0.0),
+            used: None,
+            tone: Tone::Success,
+        }
+    }
+}
+
 pub fn context_fill(context: ContextUsed) -> ContextFill {
     let tokens = crate::activity::abbreviated(context.tokens);
     let Some(window) = context.window.filter(|window| *window > 0) else {

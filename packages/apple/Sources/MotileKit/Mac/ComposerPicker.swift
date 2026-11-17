@@ -532,9 +532,7 @@ private struct ComposerPicker: View {
         let current = store.composerAccess
         let open = store.composerAccessOpen
         return HStack(spacing: 0) {
-            if let fill = store.composerContextFill {
-                contextFill(fill)
-            }
+            contextFill(store.composerContextFill)
             Spacer(minLength: 0)
             ActionButton(current.label, icon: current.symbol, help: current.detail, variant: .ghost, size: .regular, selected: open || column == .access, opens: true, open: open, tint: .themeForeground) {
                 openAccess(!open)

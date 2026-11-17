@@ -625,9 +625,7 @@ impl ComposerPicker {
             .p(px(FOOTER_PADDING))
             .flex()
             .items_center()
-            .when_some(fill, |footer, fill| {
-                footer.child(context_fill(&fill, cx).pl(px(list::ROW_PADDING - (FOOTER_PADDING - PADDING))))
-            })
+            .child(context_fill(&fill, cx).pl(px(list::ROW_PADDING - (FOOTER_PADDING - PADDING))))
             .child(div().flex_1())
             .child(
                 ActionButton::new("picker-access", access_label(current))

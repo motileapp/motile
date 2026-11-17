@@ -1416,10 +1416,10 @@ impl Store {
             .unwrap_or(Access::Full)
     }
 
-    /// How much of its context window the open thread's agent session takes, once it has one.
-    pub fn composer_context_fill(&self) -> Option<ContextFill> {
-        self.selected_thread()?;
-        self.context.clone()
+    /// How much of its context window the open thread's agent session takes, or an empty bar
+    /// until it has one.
+    pub fn composer_context_fill(&self) -> ContextFill {
+        self.selected_thread().and(self.context.clone()).unwrap_or_else(ContextFill::empty)
     }
 
     /// What the composer's text and attachments are kept under: the open draft or thread.

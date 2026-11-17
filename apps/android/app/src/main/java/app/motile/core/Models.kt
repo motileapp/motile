@@ -1090,6 +1090,11 @@ data class ContextFill(
         used = json.optionalString("used"),
         tone = LimitsReport.Window.Tone.entries.firstOrNull { it.raw == json.string("tone") } ?: LimitsReport.Window.Tone.Success,
     )
+
+    companion object {
+        /** A thread whose agent has no session yet: an empty bar. */
+        val empty = ContextFill("Empty until first reply", null, 0.0, null, LimitsReport.Window.Tone.Success)
+    }
 }
 
 /** The agents a thread's agent started, and theirs, as the thread shows them. */

@@ -20,9 +20,7 @@ struct ThreadSettingsSheet: View {
             List {
                 models
                 options
-                if let fill = store.composerContextFill {
-                    context(fill)
-                }
+                context(store.composerContextFill)
                 if let project = store.composerProject {
                     workspace(project)
                 }
