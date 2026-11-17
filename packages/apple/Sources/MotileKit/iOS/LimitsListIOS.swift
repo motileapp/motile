@@ -38,7 +38,6 @@ struct LimitsListIOS: View {
             }
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
-        .refreshable { await model.refreshed() }
         // The gateway's accounts are among the limits while it is followed.
         .onAppear { store.watchGateway(true) }
         .onDisappear { store.watchGateway(false) }

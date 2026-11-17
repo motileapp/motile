@@ -57,6 +57,7 @@ import app.motile.ui.ButtonVariant
 import app.motile.ui.ActionMenu
 import app.motile.ui.Card
 import app.motile.ui.Chip
+import app.motile.ui.GlassButton
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
 import app.motile.ui.MenuBuilder
@@ -334,7 +335,7 @@ fun McpServerActivityPage() {
         store.mcpStep = null
         opened = first.id
     }
-    SettingsScreen("Activity") {
+    SettingsScreen("Activity", { GlassButton(Symbol.RefreshCw, "Refresh", onClick = { calls.reload() }, pending = calls.reloading) }) {
         LazyColumn(
             Modifier.fillMaxSize(),
             state = state,

@@ -106,15 +106,7 @@ final class UsageModel {
     private(set) var limits: Loaded<LimitsReport> = .loading
     private(set) var spending: Loaded<UsageReport> = .loading
     private(set) var activity: Loaded<ActivityReport> = .loading
-    private(set) var refreshing = false {
-        didSet {
-            guard !refreshing else { return }
-            waiting.forEach { $0.resume() }
-            waiting = []
-        }
-    }
-    /// What waits for the reading that runs to end.
-    @ObservationIgnored private var waiting: [CheckedContinuation<Void, Never>] = []
+    private(set) var refreshing = false
     @ObservationIgnored private weak var store: AppStore?
     /// Counts what was asked, so that only the last answer is shown.
     @ObservationIgnored private var asked = 0
@@ -127,13 +119,6 @@ final class UsageModel {
     /// Asks the servers again for what the tab shows.
     func refresh() {
         load()
-    }
-
-    /// Asks the servers again, and returns once they answered.
-    @MainActor func refreshed() async {
-        load()
-        guard refreshing else { return }
-        await withCheckedContinuation { waiting.append($0) }
     }
 
     /// The servers counted among these, or nil for all of them.

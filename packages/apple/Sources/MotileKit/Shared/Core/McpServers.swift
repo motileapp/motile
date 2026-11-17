@@ -271,6 +271,8 @@ final class McpServerCalls {
     private(set) var rows: [McpServerCallRow] = []
     private(set) var more = false
     private(set) var loading = false
+    /// Whether the newest page is being read again, not the next one.
+    private(set) var reloading = false
     private(set) var error: String?
     var errorsOnly = false {
         didSet {
@@ -285,6 +287,11 @@ final class McpServerCalls {
 
     func start(_ store: AppStore) {
         self.store = store
+        load(before: nil)
+    }
+
+    /// Reads the newest page again, keeping the rows shown until it comes.
+    func reload() {
         load(before: nil)
     }
 
@@ -323,10 +330,12 @@ final class McpServerCalls {
         asked += 1
         let number = asked
         loading = true
+        reloading = before == nil
         error = nil
         store.loadMcpServerCalls(before: before, errorsOnly: errorsOnly) { [weak self] result in
             guard let self, number == asked else { return }
             loading = false
+            reloading = false
             switch result {
             case .success(let page):
                 rows = before == nil ? page.rows : rows + page.rows

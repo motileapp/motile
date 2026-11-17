@@ -299,6 +299,8 @@ final class GatewayLog {
     private(set) var rows: [GatewayLogRow] = []
     private(set) var more = false
     private(set) var loading = false
+    /// Whether the newest page is being read again, not the next one.
+    private(set) var reloading = false
     private(set) var error: String?
     var errorsOnly = false {
         didSet {
@@ -350,10 +352,12 @@ final class GatewayLog {
         asked += 1
         let number = asked
         loading = true
+        reloading = before == nil
         error = nil
         store.loadGatewayLog(before: before, errorsOnly: errorsOnly) { [weak self] result in
             guard let self, number == asked else { return }
             loading = false
+            reloading = false
             switch result {
             case .success(let page):
                 rows = before == nil ? page.rows : rows + page.rows

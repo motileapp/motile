@@ -236,6 +236,25 @@ final class GestureTests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 3), .completed)
     }
 
+    /// Usage reads its page again from the button in its bar, so a finger dragging the page down
+    /// takes the sheet away instead.
+    func testUsageRefreshesFromItsButtonAndADragDownClosesIt() {
+        app.swipeRight()
+        XCTAssertTrue(shown(newThread))
+        app.buttons["Account"].tap()
+        app.buttons["Usage"].tap()
+        let title = app.navigationBars["Usage"]
+        XCTAssertTrue(shown(title))
+        let refresh = app.buttons["Refresh"]
+        XCTAssertTrue(shown(refresh))
+        refresh.tap()
+        let done = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: refresh)
+        XCTAssertEqual(XCTWaiter.wait(for: [done], timeout: 10), .completed)
+        let page = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+        page.press(forDuration: 0.05, thenDragTo: page.withOffset(CGVector(dx: 0, dy: app.frame.height * 0.6)), withVelocity: .slow, thenHoldForDuration: 0)
+        XCTAssertTrue(title.waitForNonExistence(timeout: 3))
+    }
+
     func testSettingsOpenInASheetWhoseSectionsPushAndCloseTakesThemAway() {
         app.swipeRight()
         XCTAssertTrue(shown(newThread))

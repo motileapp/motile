@@ -1,24 +1,16 @@
 package app.motile.usage
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -30,6 +22,7 @@ import app.motile.theme.IconSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.TextSize
 import app.motile.ui.Check
+import app.motile.ui.GlassButton
 import app.motile.ui.GlassCheckMenu
 import app.motile.ui.GlassPickMenu
 import app.motile.ui.glassButton
@@ -43,52 +36,30 @@ private val margin = 16.dp
 /**
  * What was done, what the agents spent and what is left of their plans, in a sheet: the tabs
  * in the navigation bar under it, and the period and the servers counted, once there are several,
- * in the bar's menus. Pulling the page down reads it again.
+ * in the bar's menus, beside the button that reads the page again.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun UsageSheet() {
     val store = LocalStore.current
-    val palette = LocalPalette.current
     val model = store.usage
     val close = LocalCloseSheet.current
     val servers = store.usageServers
     val picksServers = servers.size > 1
     val picksPeriod = model.tab != UsageModel.Tab.Limits
-    var pulled by remember { mutableStateOf(false) }
-    val refreshing = pulled && model.refreshing
-    val pull = rememberPullToRefreshState()
-    LaunchedEffect(model.refreshing) { if (!model.refreshing) pulled = false }
     Column(Modifier.fillMaxSize()) {
         SheetBar(
             "Usage",
             subtitle = if (picksServers) model.serversLabel(servers) else null,
             leading = { SheetCloseButton(onClose = close) },
-            trailing = if (picksPeriod || picksServers) {
-                {
-                    Row(Modifier.glassButton(CircleShape), verticalAlignment = Alignment.CenterVertically) {
-                        if (picksPeriod) PeriodMenu(model)
-                        if (picksServers) GlassCheckMenu(Symbol.Server, "Servers counted", model.serverChecks(servers), bare = true)
-                    }
+            trailing = {
+                Row(Modifier.glassButton(CircleShape), verticalAlignment = Alignment.CenterVertically) {
+                    if (picksPeriod) PeriodMenu(model)
+                    if (picksServers) GlassCheckMenu(Symbol.Server, "Servers counted", model.serverChecks(servers), bare = true)
+                    GlassButton(Symbol.RefreshCw, "Refresh", onClick = { model.refresh() }, bare = true, pending = model.refreshing)
                 }
-            } else {
-                null
             },
         )
-        PullToRefreshBox(
-            refreshing,
-            onRefresh = {
-                model.refresh()
-                pulled = model.refreshing
-            },
-            Modifier.weight(1f),
-            state = pull,
-            indicator = {
-                PullToRefreshDefaults.Indicator(
-                    pull, refreshing, Modifier.align(Alignment.TopCenter), containerColor = palette.popover, color = palette.foreground,
-                )
-            },
-        ) {
+        Box(Modifier.weight(1f)) {
             if (model.tab == UsageModel.Tab.Limits) LimitsList(model) else UsageContent(model, margin = margin, top = 4.dp)
         }
         UsageTabBar(model)
