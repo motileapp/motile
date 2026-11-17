@@ -1381,7 +1381,7 @@ final class AppStore {
     var composerAccess: Access { selectedThread?.access ?? selectedDraft?.access ?? .full }
 
     /// How much of its context window the open thread's agent session takes, once it has one.
-    var composerContextFill: ContextFill? { selectedThread == nil ? nil : activity.context }
+    var composerContextFill: ContextFill { (selectedThread == nil ? nil : activity.context) ?? .empty }
 
     /// The context window the thread or the draft runs with, when its model offers more than one.
     var composerContext: ModelContext? {

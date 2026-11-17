@@ -1344,8 +1344,8 @@ class AppStore(private val context: Context) {
 
     val composerAccess: Access get() = selectedThread?.access ?: selectedDraft?.access ?: Access.Full
 
-    /** How much of its context window the open thread's agent session takes, once it has one. */
-    val composerContextFill: ContextFill? get() = if (selectedThread == null) null else activity.context
+    /** How much of its context window the open thread's agent session takes, or an empty bar until it has one. */
+    val composerContextFill: ContextFill get() = (if (selectedThread == null) null else activity.context) ?: ContextFill.empty
 
     /** The context window the thread or the draft runs with, when its model offers more than one. */
     val composerContext: ModelContext?

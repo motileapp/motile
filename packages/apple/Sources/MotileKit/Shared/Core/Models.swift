@@ -1121,6 +1121,17 @@ struct ContextFill: Equatable {
     let used: String?
     let tone: LimitsReport.Window.Tone
 
+    /// A thread whose agent has no session yet: an empty bar.
+    static let empty = ContextFill(tokens: "Empty until first reply", window: nil, usedPercent: 0, used: nil, tone: .success)
+
+    init(tokens: String, window: String?, usedPercent: Double?, used: String?, tone: LimitsReport.Window.Tone) {
+        self.tokens = tokens
+        self.window = window
+        self.usedPercent = usedPercent
+        self.used = used
+        self.tone = tone
+    }
+
     init(json: JSON) {
         tokens = json.string("tokens")
         window = json.optionalString("window")
