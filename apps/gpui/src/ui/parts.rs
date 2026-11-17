@@ -784,8 +784,6 @@ pub struct CheckMenu {
 }
 
 impl CheckMenu {
-    const GAP: f32 = 4.;
-
     pub fn new(
         id: impl Into<ElementId>,
         title: impl Into<SharedString>,
@@ -884,13 +882,9 @@ impl RenderOnce for CheckMenu {
         if let Some(icon) = self.icon {
             button = button.symbol(icon);
         }
-        // Under the button, always: it scrolls when there is too little room below it.
         let dropdown = (shown > 0.).then(|| {
             let bounds = anchor.bounds();
-            let content = crate::window_frame::content_bounds(window);
-            let viewport = content.size;
-            let top = bounds.bottom() + px(Self::GAP);
-            let room = (content.bottom() - top - px(2. * Self::GAP)).max(px(0.));
+            let viewport = crate::window_frame::content_bounds(window).size;
             let rows = self.checks.into_iter().enumerate().map(|(index, check)| {
                 let group = SharedString::from(format!("check-{index}"));
                 let toggle = check.toggle;
@@ -907,11 +901,8 @@ impl RenderOnce for CheckMenu {
             });
             let card = dropdown_card(div(), cx)
                 .id("check-menu")
-                .absolute()
-                .left(bounds.origin.x)
-                .top(top)
                 .min_w(px(160.))
-                .max_h(room)
+                .max_h(crate::ui::dropdown::room(bounds, window))
                 .overflow_y_scroll()
                 .p(px(list::PADDING))
                 .opacity(shown)
@@ -937,7 +928,7 @@ impl RenderOnce for CheckMenu {
                         })
                         .on_mouse_down(MouseButton::Left, move |_, window, cx| close(false, window, cx))
                 })
-                .child(card);
+                .child(crate::ui::dropdown::drop_from(bounds, false, window).child(card));
             deferred(anchored().position(crate::window_frame::content_origin(window)).child(layer))
                 .with_priority(crate::ui::menu::PRIORITY)
         });

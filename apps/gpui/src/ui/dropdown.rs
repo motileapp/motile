@@ -1,6 +1,6 @@
 //! What drops from a button the app draws, as the Mac's `dropdown` modifier has it: under the
-//! button, or over it where there is too little room under it, lined up with its leading or its
-//! trailing edge. `ChoiceDropdown` is a button with a short list to pick one from.
+//! button, or over it where it fits better there, lined up with its leading or its trailing edge
+//! and kept inside the window. `ChoiceDropdown` is a button with a short list to pick one from.
 
 use std::rc::Rc;
 
@@ -17,27 +17,119 @@ type Run = Rc<dyn Fn(&mut Window, &mut App)>;
 
 /// The room between a dropdown and its button.
 const GAP: f32 = 4.;
-/// A dropdown with less room than this under its button, and more over it, opens over it.
-const ROOM_BELOW: f32 = 220.;
+/// The least room a dropdown leaves between itself and the window's edges.
+const MARGIN: f32 = 8.;
 
-/// Where a dropdown stands over the window's content, which the caller fills with it: against the
-/// button whose light is `button`, under it or over it, and lined up with its `trailing` edge or
-/// its leading one.
-pub fn drop_from(button: Bounds<Pixels>, trailing: bool, window: &Window) -> Div {
-    let content = content_bounds(window);
-    let below = content.bottom() - button.bottom();
-    let above = button.top() - content.top();
-    let up = below < px(ROOM_BELOW) && above > below;
-    let place = div().absolute();
-    let place = if trailing {
-        place.right(content.right() - button.right())
-    } else {
-        place.left(button.left() - content.left())
-    };
-    if up {
-        return place.bottom(content.bottom() - button.top() + px(GAP));
+/// A dropdown against the button whose light is `button`, over the window's content, which the
+/// caller fills with it. It opens under the button, or over it when it doesn't fit under and has
+/// more room there, lines up with the button's `trailing` edge or its leading one, and slides back
+/// inside the window where it would leave it.
+pub fn drop_from(button: Bounds<Pixels>, trailing: bool, window: &Window) -> Floating {
+    Floating { button, trailing, area: content_bounds(window), children: Vec::new() }
+}
+
+/// The most a dropdown from `button` can be tall, on whichever side of it has more room; one
+/// taller scrolls.
+pub fn room(button: Bounds<Pixels>, window: &Window) -> Pixels {
+    let area = content_bounds(window);
+    let below = area.bottom() - button.bottom();
+    let above = button.top() - area.top();
+    (below.max(above) - px(GAP + MARGIN)).max(px(0.))
+}
+
+/// Where a card of `card` size stands against `button` inside `area`, as `drop_from` places it.
+fn place(button: Bounds<Pixels>, card: Size<Pixels>, area: Bounds<Pixels>, trailing: bool) -> Point<Pixels> {
+    let (gap, margin) = (px(GAP), px(MARGIN));
+    let below = area.bottom() - margin - button.bottom() - gap;
+    let above = button.top() - gap - area.top() - margin;
+    let up = card.height > below && above > below;
+    let y = if up { button.top() - gap - card.height } else { button.bottom() + gap };
+    let x = if trailing { button.right() - card.width } else { button.left() };
+    let x = x.min(area.right() - margin - card.width).max(area.left() + margin);
+    point(x, y.min(area.bottom() - margin - card.height).max(area.top() + margin))
+}
+
+/// What `drop_from` makes: its card, placed once its size is known.
+pub struct Floating {
+    button: Bounds<Pixels>,
+    trailing: bool,
+    area: Bounds<Pixels>,
+    children: Vec<AnyElement>,
+}
+
+impl ParentElement for Floating {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children.extend(elements)
     }
-    place.top(button.bottom() - content.top() + px(GAP))
+}
+
+impl IntoElement for Floating {
+    type Element = Self;
+
+    fn into_element(self) -> Self {
+        self
+    }
+}
+
+impl Element for Floating {
+    type RequestLayoutState = Vec<LayoutId>;
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Vec<LayoutId>) {
+        let children: Vec<_> = self.children.iter_mut().map(|child| child.request_layout(window, cx)).collect();
+        let style = Style { position: Position::Absolute, display: Display::Flex, ..Style::default() };
+        (window.request_layout(style, children.iter().copied(), cx), children)
+    }
+
+    fn prepaint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        children: &mut Vec<LayoutId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let Some(card) = children.iter().map(|id| window.layout_bounds(*id)).reduce(|all, one| all.union(&one)) else {
+            return;
+        };
+        let at = place(self.button, card.size, self.area, self.trailing);
+        let offset = at - bounds.origin;
+        window.with_element_offset(point(offset.x.round(), offset.y.round()), |window| {
+            for child in &mut self.children {
+                child.prepaint(window, cx);
+            }
+        })
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut Vec<LayoutId>,
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        for child in &mut self.children {
+            child.paint(window, cx);
+        }
+    }
 }
 
 /// What a dropdown lies on: the window's content around it, as a menu owns the pointer. A press on
@@ -282,5 +374,45 @@ impl RenderOnce for ChoiceDropdown {
             .children(self.shortcut.map(|command| crate::keyboard::target_pressing(command, pressed)))
             .child(button)
             .children(dropdown)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui_kit::{Bounds, Pixels, point, px, size};
+
+    use super::place;
+
+    fn rect(x: f32, y: f32, width: f32, height: f32) -> Bounds<Pixels> {
+        Bounds::new(point(px(x), px(y)), size(px(width), px(height)))
+    }
+
+    const WINDOW: (f32, f32) = (1000., 800.);
+
+    fn placed(button: Bounds<Pixels>, card: (f32, f32), trailing: bool) -> (f32, f32) {
+        let at = place(button, size(px(card.0), px(card.1)), rect(0., 0., WINDOW.0, WINDOW.1), trailing);
+        (f32::from(at.x), f32::from(at.y))
+    }
+
+    #[test]
+    fn hangs_under_its_button_by_its_leading_edge() {
+        assert_eq!(placed(rect(100., 100., 40., 40.), (300., 200.), false), (100., 144.));
+    }
+
+    #[test]
+    fn lines_up_with_the_trailing_edge() {
+        assert_eq!(placed(rect(500., 100., 40., 40.), (300., 200.), true), (240., 144.));
+    }
+
+    #[test]
+    fn slides_back_inside_the_window_at_either_side() {
+        assert_eq!(placed(rect(900., 100., 40., 40.), (300., 200.), false).0, 692.);
+        assert_eq!(placed(rect(20., 100., 40., 40.), (300., 200.), true).0, 8.);
+    }
+
+    #[test]
+    fn opens_over_its_button_only_when_it_does_not_fit_under_it() {
+        assert_eq!(placed(rect(100., 650., 40., 40.), (300., 90.), false).1, 694.);
+        assert_eq!(placed(rect(100., 650., 40., 40.), (300., 200.), false).1, 446.);
     }
 }
