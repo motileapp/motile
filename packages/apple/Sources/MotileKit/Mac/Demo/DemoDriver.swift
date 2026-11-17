@@ -687,17 +687,25 @@ final class StallMonitor: @unchecked Sendable {
     private var waits: [Double] = []
     private var stopped = false
 
+    /// The wait ends when the main thread runs the work, not when this thread wakes after it, which
+    /// a busy machine can hold back by itself.
     init() {
-        Thread.detachNewThread { [weak self] in
+        let thread = Thread { [weak self] in
             while let self, !self.isStopped {
                 let asked = Date()
                 let ran = DispatchSemaphore(value: 0)
-                DispatchQueue.main.async { ran.signal() }
+                nonisolated(unsafe) var reached = asked
+                DispatchQueue.main.async {
+                    reached = Date()
+                    ran.signal()
+                }
                 ran.wait()
-                self.record(Date().timeIntervalSince(asked))
+                self.record(reached.timeIntervalSince(asked))
                 Thread.sleep(forTimeInterval: 0.01)
             }
         }
+        thread.qualityOfService = .userInteractive
+        thread.start()
     }
 
     private var isStopped: Bool {
