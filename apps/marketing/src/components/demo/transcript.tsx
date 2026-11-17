@@ -128,7 +128,7 @@ function Row({
             {item.lang}
             <CopyIcon className="size-4" />
           </div>
-          <pre className="overflow-x-auto px-3.5 pb-3 font-mono text-(length:--type-xs) leading-[18px] text-foreground">
+          <pre className="overflow-x-auto px-3.5 pb-3 font-mono text-(length:--type-xs) leading-[18px] text-foreground [text-box:trim-both_text]">
             {item.code.split("\n").map((line, index) => (
               <div key={index}>{line ? highlight(line) : " "}</div>
             ))}

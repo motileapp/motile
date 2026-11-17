@@ -81,7 +81,7 @@ object UiStyle {
         UiTextStyle.Readout -> Theme.uiDigits(TextSize.Xs, FontWeight.Medium).lined(18f)
         UiTextStyle.Tick -> Theme.uiDigits(TextSize.Xs).lined(16f)
         UiTextStyle.Timer -> Theme.uiDigits(TextSize.Xxl, FontWeight.SemiBold).lined(32f)
-        UiTextStyle.Code -> Theme.codeFont.copy(lineHeight = Theme.codeLineHeight)
+        UiTextStyle.Code -> Theme.codeFont.lined(Theme.codeLineHeight)
         UiTextStyle.WordBack -> Theme.proseFont.copy(fontWeight = FontWeight.Medium).lined(24f)
     }
 

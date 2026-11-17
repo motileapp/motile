@@ -12,6 +12,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import app.motile.platform.scaled
 import app.motile.theme.LocalForeground
@@ -36,7 +37,7 @@ fun Text(
     BasicText(
         text = text,
         modifier = modifier,
-        style = base.copy(color = color, textAlign = align ?: base.textAlign),
+        style = base.copy(color = color, textAlign = align ?: base.textAlign, lineHeightStyle = base.lineHeightStyle ?: CentredLines),
         maxLines = maxLines,
         overflow = overflow,
         onTextLayout = onTextLayout,
@@ -61,7 +62,7 @@ fun Text(
     BasicText(
         text = text,
         modifier = modifier,
-        style = base.copy(color = color, textAlign = align ?: base.textAlign),
+        style = base.copy(color = color, textAlign = align ?: base.textAlign, lineHeightStyle = base.lineHeightStyle ?: CentredLines),
         maxLines = maxLines,
         overflow = overflow,
         inlineContent = inlineContent,
@@ -69,8 +70,17 @@ fun Text(
     )
 }
 
+/**
+ * How text sits on lines taller than it, unless its style says otherwise: in their middle, without the room over the
+ * first line and under the last, so that what pads it pads it from the letters.
+ */
+val CentredLines = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both)
+
 /** The style with every line `height` tall, given as on the Mac, its text centred in it, the first and the last too. */
-fun TextStyle.lined(height: Float): TextStyle = copy(
-    lineHeight = scaled(height).sp,
+fun TextStyle.lined(height: Float): TextStyle = lined(scaled(height).sp)
+
+/** The style with every line `height` tall, already enlarged, its text centred in it. */
+fun TextStyle.lined(height: TextUnit): TextStyle = copy(
+    lineHeight = height,
     lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.None),
 )

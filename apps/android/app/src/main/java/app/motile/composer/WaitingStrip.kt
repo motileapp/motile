@@ -43,7 +43,7 @@ import app.motile.ui.Text
 object WaitingStrip {
     val padding = 12.dp
     internal val targetInset = 10.dp
-    internal val targetInsetVertical = 6.dp
+    internal val targetInsetVertical = 8.dp
 }
 
 @Composable
