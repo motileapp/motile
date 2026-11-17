@@ -1828,7 +1828,9 @@ fn changes_row(
                                     format!("{files} changed files")
                                 }),
                         )
-                        .child(div().ml(px(10.)).child(line_counts(added, removed, cx)))
+                        .when(added + removed > 0, |title| {
+                            title.child(div().ml(px(10.)).child(line_counts(added, removed, cx)))
+                        })
                         .child(div().flex_1())
                         .child(
                             RowButton::new(
@@ -1945,7 +1947,11 @@ fn change_entry(
                         .text_size(TextSize::Xs)
                         .text_color(color)
                 })
-                .child(div().ml(px(12.)).flex_none().child(line_counts(entry.added, entry.removed, cx))),
+                .child(div().ml(px(12.)).flex_none().map(|end| match (entry.added + entry.removed, entry.change) {
+                    (0, Some(change)) => end.child(crate::git::change_label(change, cx)),
+                    (0, None) => end,
+                    _ => end.child(line_counts(entry.added, entry.removed, cx)),
+                })),
         )
         .on_click(move |_, _, cx| {
             if folder {

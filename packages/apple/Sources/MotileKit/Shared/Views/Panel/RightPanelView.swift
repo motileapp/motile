@@ -443,7 +443,7 @@ struct DiffSurface: View {
         VStack(spacing: 0) {
             PanelBar {
                 scopeMenu(scope)
-                if let document = panel.diff.value, !document.files.isEmpty {
+                if let document = panel.diff.value, document.added + document.removed > 0 {
                     Text(AttributedString(LineCountText.text(added: document.added, removed: document.removed)))
                         .padding(.leading, 4)
                 }

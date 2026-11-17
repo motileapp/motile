@@ -44,7 +44,7 @@ fun DiffSurface(target: PanelTarget) {
     Column(Modifier.fillMaxSize()) {
         PanelBar {
             ScopeMenu(target, scope)
-            if (document != null && document.files.isNotEmpty()) {
+            if (document != null && document.added + document.removed > 0) {
                 Text(LineCountText.text(document.added, document.removed), Modifier.padding(start = 4.dp), style = LineCountText.style, maxLines = 1)
             }
             if (scope is DiffScope.PullRequest && page != null && store.pullRequestsExtended && page.viewed.isNotEmpty()) {

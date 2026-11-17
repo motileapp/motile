@@ -1344,9 +1344,13 @@ fn paint_heading(
         .unwrap_or_default();
     let name = crate::models::last_component(&file.path);
     let note = match file.change {
-        Some(Change::Added) => Some("new".to_string()),
-        Some(Change::Deleted) => Some("deleted".to_string()),
-        Some(Change::Renamed) => file.from.as_ref().map(|from| format!("was {from}")),
+        Some(change @ (Change::Added | Change::Deleted)) => {
+            let (word, color) = crate::git::change_word(change, c);
+            Some((word.to_string(), FontWeight::MEDIUM, color))
+        }
+        Some(Change::Renamed) => {
+            file.from.as_ref().map(|from| (format!("Was {from}"), FontWeight::NORMAL, c.muted_stronger_foreground))
+        }
         _ => None,
     };
     let mut text = String::new();
@@ -1360,9 +1364,9 @@ fn paint_heading(
     runs.push(run(name.len(), ui(FontWeight::MEDIUM), c.foreground));
     text.push_str(&name);
     // The note is a size smaller than the name, on the same baseline.
-    let note = note.map(|note| {
+    let note = note.map(|(note, weight, color)| {
         let note = format!("   {note}");
-        let runs = vec![run(note.len(), ui(FontWeight::NORMAL), c.muted_stronger_foreground)];
+        let runs = vec![run(note.len(), ui(weight), color)];
         window.text_system().shape_line(note.into(), TextSize::Xs.into(), &runs, None)
     });
     let note_width = note.as_ref().map_or(px(0.), |note| note.width);
@@ -1392,19 +1396,9 @@ pub fn counts_text(added: u32, removed: u32, c: &theme::Colors) -> (String, Vec<
         features: FontFeatures(std::sync::Arc::new(vec![("tnum".into(), 1)])),
         ..font(theme::UI_FONT, FontWeight::MEDIUM, false)
     };
-    let mut text = String::new();
-    let mut runs = Vec::new();
-    if added > 0 || removed == 0 {
-        let part = format!("+{added}");
-        runs.push(run(part.len(), digits.clone(), c.success));
-        text.push_str(&part);
-    }
-    if removed > 0 || added == 0 {
-        let part = format!("{}−{removed}", if text.is_empty() { "" } else { " " });
-        runs.push(run(part.len(), digits, c.destructive));
-        text.push_str(&part);
-    }
-    (text, runs)
+    let (plus, minus) = (format!("+{added}"), format!(" −{removed}"));
+    let runs = vec![run(plus.len(), digits.clone(), c.success), run(minus.len(), digits, c.destructive)];
+    (plus + &minus, runs)
 }
 
 #[cfg(test)]

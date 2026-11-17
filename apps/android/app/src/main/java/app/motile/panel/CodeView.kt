@@ -89,6 +89,7 @@ import app.motile.ui.ActionButton
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
 import app.motile.ui.MenuPopup
+import app.motile.transcript.Typesetter
 import app.motile.ui.Text
 import app.motile.ui.rememberMenuState
 import kotlinx.coroutines.launch
@@ -387,13 +388,14 @@ private fun headingTitle(file: CodeFile, palette: Palette): AnnotatedString = bu
     val folder = file.path.substringBeforeLast('/', "")
     if (folder.isNotEmpty()) withStyle(SpanStyle(color = palette.mutedForeground)) { append("$folder/") }
     withStyle(SpanStyle(color = palette.foreground, fontWeight = FontWeight.Medium)) { append(file.path.substringAfterLast('/')) }
-    val note = when (file.change) {
-        "added" -> "new"
-        "deleted" -> "deleted"
-        "renamed" -> file.from?.let { "was $it" }
-        else -> null
+    val small = Theme.ui(TextSize.Xs).fontSize
+    when (file.change) {
+        "added", "deleted" -> withStyle(SpanStyle(fontSize = small, fontWeight = FontWeight.Medium)) {
+            append("   ")
+            append(Typesetter.changeWord(file.change, palette))
+        }
+        "renamed" -> file.from?.let { from -> withStyle(SpanStyle(color = palette.mutedStrongerForeground, fontSize = small)) { append("   Was $from") } }
     }
-    if (note != null) withStyle(SpanStyle(color = palette.mutedStrongerForeground, fontSize = Theme.ui(TextSize.Xs).fontSize)) { append("   $note") }
 }
 
 /** The box that marks a file of a pull request viewed. */

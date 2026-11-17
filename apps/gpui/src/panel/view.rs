@@ -698,7 +698,7 @@ impl RightPanelView {
         let document = store.right_panel.diff.value().cloned();
         let all_closed =
             document.as_ref().is_some_and(|document| store.right_panel.collapsed.len() >= document.files.len());
-        let counts = document.as_ref().filter(|document| !document.files.is_empty()).map(|document| {
+        let counts = document.as_ref().filter(|document| document.added() + document.removed() > 0).map(|document| {
             let (text, runs) = counts_text(document.added(), document.removed(), colors(cx));
             div().pl(px(4.)).text_size(TextSize::Xs).child(StyledText::new(text).with_runs(runs))
         });

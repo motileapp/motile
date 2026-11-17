@@ -211,11 +211,21 @@ object Typesetter {
     /** The lines added and removed, as they are written everywhere: `+12 −3`. */
     fun lineCounts(added: Int, removed: Int, palette: Palette): AnnotatedString {
         val builder = AnnotatedString.Builder()
-        if (added > 0 || removed == 0) builder.withColor(palette.success) { "+$added" }
-        if (removed > 0 || added == 0) {
-            val space = if (builder.length > 0) " " else ""
-            builder.withColor(palette.destructive) { "$space−$removed" }
+        builder.withColor(palette.success) { "+$added" }
+        builder.withColor(palette.destructive) { " −$removed" }
+        return builder.toAnnotatedString()
+    }
+
+    /** What a file whose lines git doesn't count, as an image's, says instead: how it changed, in the colour of its counts. */
+    fun changeWord(change: String, palette: Palette): AnnotatedString {
+        val color = when (change) {
+            "added" -> palette.success
+            "deleted" -> palette.destructive
+            "modified" -> palette.warning
+            else -> palette.mutedStrongerForeground
         }
+        val builder = AnnotatedString.Builder()
+        builder.withColor(color) { if (change == "added") "New" else change.replaceFirstChar { it.uppercase() } }
         return builder.toAnnotatedString()
     }
 

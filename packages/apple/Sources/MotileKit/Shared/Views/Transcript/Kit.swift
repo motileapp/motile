@@ -519,15 +519,22 @@ enum LineCountText {
     static let font = PlatformFont.uiDigits(.xs, weight: .medium)
 
     static func text(added: Int, removed: Int) -> NSAttributedString {
-        let text = NSMutableAttributedString()
-        if added > 0 || removed == 0 {
-            text.append(NSAttributedString(string: "+\(added)", attributes: [.font: font, .foregroundColor: Theme.success]))
-        }
-        if removed > 0 || added == 0 {
-            let space = text.length > 0 ? " " : ""
-            text.append(NSAttributedString(string: "\(space)−\(removed)", attributes: [.font: font, .foregroundColor: Theme.destructive]))
-        }
+        let text = NSMutableAttributedString(string: "+\(added)", attributes: [.font: font, .foregroundColor: Theme.success])
+        text.append(NSAttributedString(string: " −\(removed)", attributes: [.font: font, .foregroundColor: Theme.destructive]))
         return text
+    }
+
+    /// What a file whose lines git doesn't count, as an image's, says instead: how it changed, in
+    /// the colour of its counts.
+    static func change(_ change: String) -> NSAttributedString {
+        let color: PlatformColor =
+            switch change {
+            case "added": Theme.success
+            case "deleted": Theme.destructive
+            case "modified": Theme.warning
+            default: Theme.mutedStrongerForeground
+            }
+        return NSAttributedString(string: change == "added" ? "New" : change.capitalized, attributes: [.font: font, .foregroundColor: color])
     }
 }
 
