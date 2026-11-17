@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.DisableSelection
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -116,7 +118,7 @@ fun UiRow(row: RowModel, content: UiContent) {
     }
 }
 
-/** The program's tree laid out in a column `width` points wide. */
+/** The program's tree laid out in a column `width` points wide, its texts selected as one. */
 @Composable
 fun UiProgram(tree: UiNode, width: Float) {
     val window = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp().value }
@@ -126,7 +128,9 @@ fun UiProgram(tree: UiNode, width: Float) {
         LocalUiExtent provides extent,
         LocalUiTextAlign provides null,
     ) {
-        UiColumnLayout(listOf(0f), UiAlign.Stretch, listOf(keepsWidth(tree)), Modifier.fillMaxWidth()) { UiNodeView(tree) }
+        SelectionContainer {
+            UiColumnLayout(listOf(0f), UiAlign.Stretch, listOf(keepsWidth(tree)), Modifier.fillMaxWidth()) { UiNodeView(tree) }
+        }
     }
 }
 
@@ -144,7 +148,7 @@ fun UiNodeView(node: UiNode) {
         is UiKind.Grid -> UiGridLayout(kind.columns, kind.minChildWidth, kind.gap, Modifier.uiNode(node)) { kind.children.forEach { UiNodeView(it) } }
         is UiKind.Card -> UiCard(node, kind)
         is UiKind.Carousel -> UiCarousel(node, kind)
-        is UiKind.Popover -> UiPopover(node, kind)
+        is UiKind.Popover -> DisableSelection { UiPopover(node, kind) }
         UiKind.Divider -> Box(Modifier.uiNode(node).fillMaxWidth().height(1.dp).background(LocalSurface.current.border))
         UiKind.Spacer -> Box(Modifier.uiNode(node))
         is UiKind.Title -> UiTitle(node, kind)
@@ -159,17 +163,17 @@ fun UiNodeView(node: UiNode) {
         is UiKind.Quote -> UiQuote(node, kind)
         is UiKind.Code -> UiCode(node, kind)
         is UiKind.Math -> UiCanvasView(node, kind.canvas)
-        is UiKind.Button -> UiButton(node, kind)
-        is UiKind.IconButton -> UiIconButton(node, kind)
-        is UiKind.Pressable -> UiPressable(node, kind)
-        is UiKind.Input -> UiInput(node, kind)
-        is UiKind.TextArea -> UiTextArea(node, kind)
-        is UiKind.Select -> UiSelect(node, kind)
-        is UiKind.SegmentedControl -> UiSegmented(node, kind)
-        is UiKind.Slider -> UiSlider(node, kind)
-        is UiKind.Checkbox -> UiCheckbox(node, kind)
-        is UiKind.RadioGroup -> UiRadioGroup(node, kind)
-        is UiKind.DatePicker -> UiDatePicker(node, kind)
+        is UiKind.Button -> DisableSelection { UiButton(node, kind) }
+        is UiKind.IconButton -> DisableSelection { UiIconButton(node, kind) }
+        is UiKind.Pressable -> DisableSelection { UiPressable(node, kind) }
+        is UiKind.Input -> DisableSelection { UiInput(node, kind) }
+        is UiKind.TextArea -> DisableSelection { UiTextArea(node, kind) }
+        is UiKind.Select -> DisableSelection { UiSelect(node, kind) }
+        is UiKind.SegmentedControl -> DisableSelection { UiSegmented(node, kind) }
+        is UiKind.Slider -> DisableSelection { UiSlider(node, kind) }
+        is UiKind.Checkbox -> DisableSelection { UiCheckbox(node, kind) }
+        is UiKind.RadioGroup -> DisableSelection { UiRadioGroup(node, kind) }
+        is UiKind.DatePicker -> DisableSelection { UiDatePicker(node, kind) }
         is UiKind.Timer -> UiTimer(node, kind)
         is UiKind.Form -> UiColumnLayout(kind.spacing, UiAlign.Stretch, kind.children.map(::keepsWidth), Modifier.uiNode(node)) {
             kind.children.forEach { UiNodeView(it) }
@@ -182,7 +186,7 @@ fun UiNodeView(node: UiNode) {
         is UiKind.Map -> UiMap(node, kind)
         is UiKind.MapMarker -> Unit
         is UiKind.YouTube -> UiYouTube(node, kind)
-        is UiKind.Flashcard -> UiFlashcard(node, kind)
+        is UiKind.Flashcard -> DisableSelection { UiFlashcard(node, kind) }
         is UiKind.Celebration -> UiCelebration(node, kind)
         is UiKind.Svg -> UiCanvasView(node, kind.canvas)
         is UiKind.G, is UiKind.Circle, is UiKind.Ellipse, is UiKind.Rect, is UiKind.Line, is UiKind.Path,

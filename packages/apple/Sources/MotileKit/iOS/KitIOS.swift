@@ -533,6 +533,18 @@ final class IconButton: UIButton {
 final class RowTextView: UITextView, UITextViewDelegate {
     /// Called when the user starts selecting here, so other rows can let go of their selection.
     var onSelect: (() -> Void)?
+    /// Its text is selected with the rest of its program's, by the program's row; a tap opens a link.
+    var selectsWithProgram = false {
+        didSet {
+            guard selectsWithProgram != oldValue else { return }
+            isSelectable = !selectsWithProgram
+            guard selectsWithProgram, linkTap == nil else { return }
+            let tap = UITapGestureRecognizer(target: self, action: #selector(tapped(_:)))
+            addGestureRecognizer(tap)
+            linkTap = tap
+        }
+    }
+    private var linkTap: UITapGestureRecognizer?
     private var system: TextSystem!
 
     static func make(wraps: Bool = true, trimsLineRoom: Bool = true) -> RowTextView {
@@ -610,6 +622,16 @@ final class RowTextView: UITextView, UITextViewDelegate {
         selectedTextRange = nil
     }
 
+    @objc private func tapped(_ tap: UITapGestureRecognizer) {
+        guard let url = textGeometry?.link(at: tap.location(in: self)) else { return }
+        Platform.open(url)
+    }
+
+    override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+        guard recognizer === linkTap else { return super.gestureRecognizerShouldBegin(recognizer) }
+        return textGeometry?.link(at: recognizer.location(in: self)) != nil
+    }
+
     func textViewDidChangeSelection(_ textView: UITextView) {
         guard selectedRange.length > 0 else { return }
         onSelect?()
@@ -620,6 +642,17 @@ final class RowTextView: UITextView, UITextViewDelegate {
         let selected = system.storage.attributedSubstring(from: selectedRange)
         UIPasteboard.general.string = TextSystem.withLineBreaks(Typesetter.words(of: selected))
     }
+}
+
+extension RowTextView: ProgramSelectable {
+    var selectableText: NSAttributedString { content }
+
+    var textGeometry: TextGeometry? {
+        TextGeometry(layout: layoutManager, container: textContainer, origin: CGPoint(x: textContainerInset.left, y: textContainerInset.top))
+    }
+
+    /// The row's text interaction draws the selection.
+    func showSelected(_ range: NSRange?) {}
 }
 
 /// Shows code that is wider than the column and scrolls it sideways.
