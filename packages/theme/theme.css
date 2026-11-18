@@ -71,6 +71,7 @@
   --color-accent-with-opacity: var(--accent-with-opacity);
   --color-accent-tinted: var(--accent-tinted);
   --color-border-composer: var(--border-composer);
+  --color-border-composer-stronger: var(--border-composer-stronger);
   --color-border-accent: var(--border-accent);
   --color-ring: var(--ring);
   --color-overlay: var(--overlay);

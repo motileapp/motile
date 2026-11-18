@@ -172,7 +172,7 @@ export function Composer({
           <ServerIcon className="size-3.5" />
           {thread.server.name}
         </span>
-        <span className="mx-2.5 h-3 w-px bg-border-composer" />
+        <span className="mx-2.5 h-3 w-px bg-border-composer-stronger" />
         <span className="flex items-center gap-1.5 font-medium">
           <ProjectIcon project={thread.project} />
           {thread.project.name}
@@ -185,7 +185,7 @@ export function Composer({
           )}
           {thread.worktree ? "Worktree" : "Local checkout"}
         </span>
-        <span className="ml-2.5 h-3 w-px bg-border-composer" />
+        <span className="ml-2.5 h-3 w-px bg-border-composer-stronger" />
         <span className="mr-[2px] flex items-center">
           <Control
             icon={<GitBranchIcon className="size-3.5" />}
@@ -239,7 +239,7 @@ function Setting({ icon, children }: { icon: ReactNode; children: ReactNode }) {
 
 /** The line between two of its parts, as far from the words before it as from the symbol after it. */
 function SettingDivider() {
-  return <span className="mr-[13px] ml-2 h-3.5 w-px bg-border-composer" />
+  return <span className="mr-[13px] ml-2 h-3.5 w-px bg-border-composer-stronger" />
 }
 
 /** A strip above or under the composer, narrower than it, with its outer corners rounded. */

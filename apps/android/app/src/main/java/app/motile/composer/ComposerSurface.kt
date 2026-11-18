@@ -102,6 +102,6 @@ fun Modifier.overhang(horizontal: Dp = 0.dp, vertical: Dp = 0.dp): Modifier = la
 @Composable
 fun ComposerDivider(modifier: Modifier = Modifier) {
     Box(modifier.width(0.dp).height(14.dp).overhang(horizontal = 0.5.dp)) {
-        Box(Modifier.width(1.dp).fillMaxHeight().background(Theme.colors.borderComposer))
+        Box(Modifier.width(1.dp).fillMaxHeight().background(Theme.colors.borderComposerStronger))
     }
 }

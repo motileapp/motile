@@ -770,7 +770,7 @@ pub fn composer_divider(c: &theme::Colors) -> Div {
         .w(px(0.))
         .h(px(14.))
         .flex_shrink_0()
-        .child(div().absolute().top_0().bottom_0().left(px(-0.5)).w(px(1.)).bg(c.border_composer))
+        .child(div().absolute().top_0().bottom_0().left(px(-0.5)).w(px(1.)).bg(c.border_composer_stronger))
 }
 
 /// Why the open thread's agent stopped before it finished, when its strip shows: the thread is
