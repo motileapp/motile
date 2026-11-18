@@ -250,12 +250,21 @@ final class DecoratingLayoutManager: NSLayoutManager {
     }
 }
 
+/// A container as tall as its text. UIKit sizes a text view's container to the view, which is
+/// exactly as tall as the trimmed lines, so a last line would not fit before `RowLayout` trims it.
+private final class UnboundedContainer: NSTextContainer {
+    override var size: CGSize {
+        get { super.size }
+        set { super.size = CGSize(width: newValue.width, height: .greatestFiniteMagnitude) }
+    }
+}
+
 /// The text system of a row's text: TextKit 1, whose layout can be asked for directly. A row's
 /// view and `TextMeasure` use the same one, so both lay text out alike.
 final class TextSystem {
     let storage = NSTextStorage()
     let layout: NSLayoutManager = DecoratingLayoutManager()
-    let container = NSTextContainer(size: CGSize(width: 100, height: CGFloat.greatestFiniteMagnitude))
+    let container: NSTextContainer = UnboundedContainer(size: CGSize(width: 100, height: CGFloat.greatestFiniteMagnitude))
 
     init(trimsLineRoom: Bool = true) {
         (layout as? DecoratingLayoutManager)?.trimsLineRoom = trimsLineRoom
