@@ -275,6 +275,10 @@ class AppStore(private val context: Context) {
     /** The skill the composer's text puts in place of the word typed, once. */
     var skillPick by mutableStateOf<SkillPick?>(null)
     var skillMenusAsked = 0
+    /** The menu of the word last typed is asked for and hasn't come. */
+    var skillMenuAsking = false
+    /** What a Return or Tab pressed before the menu came does once it has, with no skill to pick. */
+    var skillPickWaiting: (() -> Unit)? = null
     /** The word whose menu was put away, which stays away until another is typed. */
     var skillMenuDismissed: String? = null
     /** Counts up when a thread or a draft is brought to the front, which puts away a sidebar that lies over it. */

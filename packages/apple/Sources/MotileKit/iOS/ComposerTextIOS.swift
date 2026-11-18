@@ -132,6 +132,14 @@ struct ComposerTextView: UIViewRepresentable {
             }
         }
 
+        /// The on-screen keyboard's Return picks from the skills' menu while it is open or on its
+        /// way, and starts a new line when there is no skill to pick.
+        func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+            guard text == "\n", textView.markedTextRange == nil, let skills = parent.skills, skills.takesKeys() else { return true }
+            skills.key(.pick(orElse: { [weak textView] in textView?.insertText("\n") }))
+            return false
+        }
+
         func textViewDidChangeSelection(_ textView: UITextView) {
             guard let skills = parent.skills else { return }
             let selection = textView.selectedRange
@@ -241,27 +249,28 @@ final class ComposerUITextView: UITextView {
     }
 
     // Return sends from a keyboard with keys; with Shift or Option it is a line break. While the
-    // skills' menu is open, its keys are the menu's.
+    // skills' menu is open or on its way, its keys are the menu's.
     override var keyCommands: [UIKeyCommand]? {
         guard onSubmit != nil else { return nil }
         let send = UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(submit))
         let menu = [
             UIKeyCommand(input: UIKeyCommand.inputUpArrow, modifierFlags: [], action: #selector(skillUp)),
             UIKeyCommand(input: UIKeyCommand.inputDownArrow, modifierFlags: [], action: #selector(skillDown)),
-            UIKeyCommand(input: "\t", modifierFlags: [], action: #selector(submit)),
+            UIKeyCommand(input: "\t", modifierFlags: [], action: #selector(skillPick)),
             UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(skillDismiss)),
         ]
-        let commands = [send] + (skills?.menuOpen == true ? menu : [])
+        let commands = [send] + (skills?.takesKeys() == true ? menu : [])
         for command in commands { command.wantsPriorityOverSystemBehavior = true }
         return commands
     }
 
     @objc private func submit() {
         guard markedTextRange == nil else { return }
-        guard let skills, skills.menuOpen else { return onSubmit?() ?? () }
-        skills.key(.pick)
+        guard let skills, skills.takesKeys() else { return onSubmit?() ?? () }
+        skills.key(.pick(orElse: onSubmit))
     }
 
+    @objc private func skillPick() { skills?.key(.pick()) }
     @objc private func skillUp() { skills?.key(.up) }
     @objc private func skillDown() { skills?.key(.down) }
     @objc private func skillDismiss() { skills?.key(.dismiss) }
