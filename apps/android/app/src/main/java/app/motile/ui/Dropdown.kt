@@ -38,7 +38,7 @@ import kotlin.math.max
 
 /** The room a dropdown leaves around its card for the shadow, and between its button and itself. */
 private val shadowRoom = ShadowSize.Md.blur.dp
-private val gap = 4.dp
+private val gap = 6.dp
 
 /**
  * The look of what drops from a button or lies over the window: the popover's colour, a line

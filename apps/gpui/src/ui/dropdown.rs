@@ -15,8 +15,8 @@ use crate::window_frame::content_bounds;
 
 type Run = Rc<dyn Fn(&mut Window, &mut App)>;
 
-/// The room between a dropdown and its button.
-const GAP: f32 = 4.;
+/// The room between a dropdown and its button's light.
+pub const GAP: f32 = 6.;
 /// The least room a dropdown leaves between itself and the window's edges.
 const MARGIN: f32 = 8.;
 

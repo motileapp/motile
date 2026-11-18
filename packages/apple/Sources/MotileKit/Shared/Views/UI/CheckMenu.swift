@@ -89,6 +89,9 @@ struct CheckMenu: View {
 /// The dropdown that is open: what it shows, the button it hangs from or stands on, and how to
 /// close it.
 struct OpenDropdown: PreferenceKey {
+    /// The room between a dropdown and its button's light.
+    static let gap: CGFloat = 6
+
     struct Shown {
         let anchor: Anchor<CGRect>
         let content: AnyView
@@ -133,10 +136,10 @@ extension View {
     ) -> some View {
         background {
             Color.clear
-                .padding(inset)
                 .anchorPreference(key: OpenDropdown.self, value: .bounds) { anchor in
                     shown ? OpenDropdown.Shown(anchor: anchor, content: AnyView(content()), trailing: trailing, close: close) : nil
                 }
+                .padding(inset)
         }
     }
 
@@ -289,7 +292,7 @@ private struct DropdownLayer: View {
 /// and slid back inside the window where it would leave it. One too tall for its side is cut to
 /// it, to scroll.
 private struct DropdownPlacement: Layout {
-    private static let gap: CGFloat = 4
+    private static let gap = OpenDropdown.gap
     private static let margin: CGFloat = 8
 
     let button: CGRect
