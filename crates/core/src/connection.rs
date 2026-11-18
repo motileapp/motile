@@ -378,6 +378,12 @@ mod tests {
 
     #[test]
     fn a_server_gone_silent_is_given_up_before_quic_would() {
+        // CI has twice seen this take 30s; a failure shows the client's QUIC log to tell why.
+        let log = tracing_subscriber::fmt()
+            .with_env_filter("noq_proto=debug,noq=debug,iroh=debug")
+            .with_test_writer()
+            .with_ansi(false);
+        let _log = tracing::subscriber::set_default(log.finish());
         let (server, address) = server_that_can_vanish();
         let client = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         let endpoint = client.block_on(bind(&DeviceKey::generate(), true)).unwrap();

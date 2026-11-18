@@ -272,7 +272,11 @@ GPUI and wgpu carry patches of ours in `patches/`. `scripts/patch-crates.sh` unp
   or a big build, check what runs and how much memory is free (`memory_pressure`,
   `xcrun simctl list devices booted`, `pgrep -fl build/dev`), and wait if there is no headroom.
   Use one simulator or emulator at a time, and stop what you started (`scripts/dev-app.sh --stop`).
-- After you make code changes, run the checks below and fix what they raise.
+- Before every push, run `scripts/check.sh` and push only once it passes. It runs what CI runs on
+  what the branch changed, however small the change. Never decide a test can't be affected: the
+  GPUI app and the Android app have tests of their own that `cargo test --workspace` doesn't reach.
+- A change to a value a test pins (a size, a gap, a count, a string) updates that test in the same
+  change. Search the tests for the old value before you push.
 - A change must not break CI: the checks, the e2e tests, the iOS UI tests and the Mac app's demo
   (`DemoDriver.swift`). When a change touches what one of them does, update it in the same change
   and run it: `apps/macos/scripts/build-app.sh`, then `apps/macos/scripts/ci-demo.sh`, then read
@@ -295,17 +299,14 @@ Android app needs a JDK 21, the Android SDK with platform 37, the NDK, an emulat
     apps/macos/scripts/build-app.sh --open      # the Mac app, to sign in with Google
     open apps/ios/Motile.xcodeproj              # the iOS app, to run on a device from Xcode
 
-Checks (`cargo test` needs the compose Postgres; it creates a throwaway database per test):
+Checks: `scripts/check.sh` runs what CI runs on what the branch changed against `main`, committed or
+not: fmt, clippy and the tests of the Rust workspace and of the GPUI app, the Android app's lint,
+tests and build, the Apple kit's tests and the web projects' lint, typecheck and build. `--all` runs
+everything. It takes minutes, so run it in the background. `cargo test` needs the compose Postgres,
+which it starts.
 
-    export DATABASE_URL=postgres://motile:motile@localhost:5435/motile
-    cargo fmt --all && cargo clippy --workspace --all-targets && cargo test --workspace
-    pnpm -r lint && pnpm -r typecheck && pnpm -r build    # after changing either web project
-    packages/apple/scripts/check-ui.sh                    # after changing the clients' views
-    (cd apps/gpui && scripts/patch-crates.sh && cargo fmt && cargo clippy --all-targets && cargo test)
-                                                          # after changing the GPUI app, crates/core or crates/protocol
-    (cd apps/android && ./gradlew lintDebug testDebugUnitTest assembleDebug)
-                                                          # after changing the Android app, crates/core or crates/protocol
-    scripts/compare-frames.sh                             # after changing how a client lays out a program
+    scripts/check.sh                 # before every push
+    scripts/compare-frames.sh        # after changing how a client lays out a program
 
 The `Release` workflow runs the demo on every push to `main` that touches the client or the server:
 

@@ -381,7 +381,7 @@ impl RenderOnce for ChoiceDropdown {
 mod tests {
     use gpui_kit::{Bounds, Pixels, point, px, size};
 
-    use super::place;
+    use super::{GAP, place};
 
     fn rect(x: f32, y: f32, width: f32, height: f32) -> Bounds<Pixels> {
         Bounds::new(point(px(x), px(y)), size(px(width), px(height)))
@@ -396,12 +396,12 @@ mod tests {
 
     #[test]
     fn hangs_under_its_button_by_its_leading_edge() {
-        assert_eq!(placed(rect(100., 100., 40., 40.), (300., 200.), false), (100., 144.));
+        assert_eq!(placed(rect(100., 100., 40., 40.), (300., 200.), false), (100., 140. + GAP));
     }
 
     #[test]
     fn lines_up_with_the_trailing_edge() {
-        assert_eq!(placed(rect(500., 100., 40., 40.), (300., 200.), true), (240., 144.));
+        assert_eq!(placed(rect(500., 100., 40., 40.), (300., 200.), true), (240., 140. + GAP));
     }
 
     #[test]
@@ -412,7 +412,7 @@ mod tests {
 
     #[test]
     fn opens_over_its_button_only_when_it_does_not_fit_under_it() {
-        assert_eq!(placed(rect(100., 650., 40., 40.), (300., 90.), false).1, 694.);
-        assert_eq!(placed(rect(100., 650., 40., 40.), (300., 200.), false).1, 446.);
+        assert_eq!(placed(rect(100., 650., 40., 40.), (300., 90.), false).1, 690. + GAP);
+        assert_eq!(placed(rect(100., 650., 40., 40.), (300., 200.), false).1, 450. - GAP);
     }
 }
