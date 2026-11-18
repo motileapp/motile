@@ -79,9 +79,9 @@ struct SettingsPage: View {
             SettingsRow {
                 SettingsLabel("Motile \(store.updater.current)")
             } trailing: {
-                ActionButton("Check for Updates", variant: .outline, size: .large, pending: store.updater.state == .checking) { store.updater.check(asked: true) }
+                ActionButton("Check for Updates", variant: .outline, size: .large, pending: store.updater.checking) { store.updater.check(asked: true) }
             }
-            if store.updater.state != .idle {
+            if store.updater.state != .idle || store.updater.checking {
                 ThemeDivider()
                 AppUpdateRow(updater: store.updater, variant: .outline, size: .large)
                     .padding(.leading, settingsInset)

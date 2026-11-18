@@ -11,8 +11,6 @@ import Security
 final class AppUpdater: NSObject, URLSessionDownloadDelegate {
     enum State: Equatable {
         case idle
-        /// The user asked and the answer isn't here yet.
-        case checking
         case upToDate
         case available(String)
         case downloading(String, Double)
@@ -31,6 +29,8 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
     private static let checkEvery: TimeInterval = 5 * 60
 
     private(set) var state = State.idle
+    /// The user asked and the answer isn't here yet. What the state offers stays meanwhile.
+    private(set) var checking = false
     /// The newest release's version. The servers are compared with it as well.
     private(set) var latest: String?
     let current = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
@@ -57,11 +57,12 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
 
     /// `asked` is for when the user wants to know: finding nothing new is then said too.
     func check(asked: Bool = false) {
+        guard !checking else { return }
         switch state {
-        case .checking, .downloading, .installing, .ready: return
+        case .downloading, .installing, .ready: return
         default: break
         }
-        if asked { state = .checking }
+        if asked { checking = true }
         lastCheck = Date()
         var request = URLRequest(url: Self.latestRelease)
         request.httpMethod = "HEAD"
@@ -75,6 +76,7 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
     }
 
     private func found(_ version: String?, asked: Bool) {
+        if asked { checking = false }
         guard let version else {
             if asked { state = .failed("GitHub couldn’t be reached to look for a new version.") }
             return
@@ -125,7 +127,6 @@ final class AppUpdater: NSObject, URLSessionDownloadDelegate {
 
     /// Back to offering the update, after it failed.
     func retry() {
-        state = .idle
         check(asked: true)
     }
 

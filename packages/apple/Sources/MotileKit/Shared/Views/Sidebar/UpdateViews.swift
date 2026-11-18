@@ -10,10 +10,10 @@ struct AppUpdateRow: View {
 
     var body: some View {
         switch updater.state {
+        case .idle where updater.checking:
+            line("Checking for updates", symbol: .refreshCw, turning: true)
         case .idle:
             EmptyView()
-        case .checking:
-            line("Checking for updates", symbol: .refreshCw, turning: true)
         case .upToDate:
             HStack {
                 UpdateLabel.upToDate
@@ -47,7 +47,7 @@ struct AppUpdateRow: View {
         case .failed(let message):
             VStack(alignment: .leading, spacing: 4) {
                 line("The update didn’t work", symbol: .triangleAlert) {
-                    ActionButton("Try Again", size: .small) { updater.retry() }
+                    ActionButton("Try Again", size: .small, pending: updater.checking) { updater.retry() }
                 }
                 Text(message)
                     .font(.ui(.xs))

@@ -40,8 +40,6 @@ const RELAUNCHED: &str = "--relaunched";
 pub enum UpdateState {
     #[default]
     Idle,
-    /// The user asked and the answer isn't here yet.
-    Checking,
     UpToDate,
     Available(String),
     Downloading(String, f64),
@@ -54,7 +52,7 @@ pub enum UpdateState {
 impl UpdateState {
     /// Whether the sidebar has a row for it: something to do or to wait for.
     pub fn shows_row(&self) -> bool {
-        !matches!(self, UpdateState::Idle | UpdateState::Checking | UpdateState::UpToDate)
+        !matches!(self, UpdateState::Idle | UpdateState::UpToDate)
     }
 }
 
@@ -71,6 +69,8 @@ pub struct Updater {
     /// The newest release's version. The servers are compared with it as well.
     pub latest: Option<String>,
     pub state: UpdateState,
+    /// The user asked and the answer isn't here yet. What the state offers stays meanwhile.
+    pub checking: bool,
     cancelled: Arc<AtomicBool>,
     /// The wall clock's, which goes on while the computer sleeps.
     last_check: Option<SystemTime>,
@@ -85,6 +85,7 @@ impl Updater {
             current: release_version(),
             latest: None,
             state: UpdateState::Idle,
+            checking: false,
             cancelled: Arc::default(),
             last_check: None,
             _timer: None,
@@ -117,14 +118,13 @@ impl Updater {
 
     /// `asked` is for when the user wants to know: finding nothing new is then said too.
     pub fn check(&mut self, asked: bool, cx: &mut Context<Store>) {
-        if matches!(
-            self.state,
-            UpdateState::Checking | UpdateState::Downloading(..) | UpdateState::Installing(_) | UpdateState::Ready(_)
-        ) {
+        if self.checking
+            || matches!(self.state, UpdateState::Downloading(..) | UpdateState::Installing(_) | UpdateState::Ready(_))
+        {
             return;
         }
         if asked {
-            self.state = UpdateState::Checking;
+            self.checking = true;
             cx.notify();
         }
         self.last_check = Some(SystemTime::now());
@@ -152,6 +152,9 @@ impl Updater {
     }
 
     fn found(&mut self, version: Option<String>, asked: bool) {
+        if asked {
+            self.checking = false;
+        }
         let Some(version) = version else {
             if asked {
                 self.state = UpdateState::Failed("GitHub couldn’t be reached to look for a new version.".into());
@@ -163,8 +166,6 @@ impl Updater {
             self.state = UpdateState::Available(version);
         } else if asked {
             self.state = UpdateState::UpToDate;
-        } else if self.state == UpdateState::Checking {
-            self.state = UpdateState::Idle;
         }
     }
 
@@ -263,13 +264,13 @@ impl Updater {
 
     /// Back to offering the update, after it failed.
     pub fn retry(&mut self, cx: &mut Context<Store>) {
-        self.state = UpdateState::Idle;
         self.check(true, cx);
     }
 
     /// Shows a state without anything happening, for the dev app's pictures.
-    pub fn show(&mut self, state: UpdateState, latest: Option<String>) {
+    pub fn show(&mut self, state: UpdateState, checking: bool, latest: Option<String>) {
         self.state = state;
+        self.checking = checking;
         if latest.is_some() {
             self.latest = latest;
         }

@@ -108,6 +108,7 @@ impl Render for SidebarFooter {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let store = self.store.read(cx);
         let state = store.updater.state.clone();
+        let checking = store.updater.checking;
         let route_open = store.shows_usage || store.settings.section.is_some();
         let settings_help = store.shortcuts.help("Settings", "settings.open");
         let handle = self.store.clone();
@@ -169,7 +170,7 @@ impl Render for SidebarFooter {
             .child({
                 let store = handle.clone();
                 ActionButton::icon("check-updates", "refresh-cw", "Check for Updates")
-                    .pending(state == UpdateState::Checking)
+                    .pending(checking)
                     .margin(reach())
                     .on_click(move |_, _, cx| {
                         store.update(cx, |store, cx| {

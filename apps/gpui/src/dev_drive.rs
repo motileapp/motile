@@ -305,9 +305,8 @@ fn act(verb: &str, rest: &str, store: &Entity<Store>, window: &mut Window, cx: &
         }
         "updater" => {
             let mut words = rest.split_whitespace();
-            let (state, version) = (words.next().unwrap_or_default(), words.next().unwrap_or("9.9.9").to_string());
-            let state = match state {
-                "checking" => crate::updater::UpdateState::Checking,
+            let (name, version) = (words.next().unwrap_or_default(), words.next().unwrap_or("9.9.9").to_string());
+            let state = match name {
                 "uptodate" => crate::updater::UpdateState::UpToDate,
                 "available" => crate::updater::UpdateState::Available(version.clone()),
                 "downloading" => crate::updater::UpdateState::Downloading(version.clone(), 0.42),
@@ -317,7 +316,7 @@ fn act(verb: &str, rest: &str, store: &Entity<Store>, window: &mut Window, cx: &
                 _ => crate::updater::UpdateState::Idle,
             };
             store.update(cx, |store, cx| {
-                store.updater.show(state, Some(version));
+                store.updater.show(state, name == "checking", Some(version));
                 cx.notify();
             });
         }
