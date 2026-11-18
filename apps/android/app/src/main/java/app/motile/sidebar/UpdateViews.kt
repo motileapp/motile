@@ -107,8 +107,7 @@ fun AppUpdateRow(updater: AppUpdater, modifier: Modifier = Modifier, variant: Bu
         onPauseOrDispose {}
     }
     when (val state = updater.state) {
-        AppUpdater.State.Idle -> Unit
-        AppUpdater.State.Checking -> UpdateLine("Checking for updates", Symbol.RefreshCw, modifier, turning = true)
+        AppUpdater.State.Idle -> if (updater.checking) UpdateLine("Checking for updates", Symbol.RefreshCw, modifier, turning = true)
         AppUpdater.State.UpToDate -> UpdateLine("Up to date", Symbol.CircleCheck, modifier, tint = colors.success)
         is AppUpdater.State.Available -> UpdateLine("v${state.version} is available", Symbol.CircleArrowDown, modifier, tint = colors.success) {
             // Android lets a client install what it downloads once the user allows it in its settings.
@@ -129,7 +128,7 @@ fun AppUpdateRow(updater: AppUpdater, modifier: Modifier = Modifier, variant: Bu
         }
         is AppUpdater.State.Failed -> Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
             UpdateLine("The update didn’t work", Symbol.TriangleAlert) {
-                ActionButton("Try Again", size = ControlSize.Small) { updater.retry() }
+                ActionButton("Try Again", size = ControlSize.Small, pending = updater.checking) { updater.retry() }
             }
             Text(state.message, size = TextSize.Xs, color = colors.mutedForeground)
         }

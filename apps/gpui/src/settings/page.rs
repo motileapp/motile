@@ -236,17 +236,17 @@ impl SettingsPage {
     }
 
     fn updates(&self, cx: &mut Context<Self>) -> AnyElement {
-        let (state, current) = {
+        let (state, checking, current) = {
             let updater = &self.store.read(cx).updater;
-            (updater.state.clone(), updater.current)
+            (updater.state.clone(), updater.checking, updater.current)
         };
         let store = self.store.clone();
         let check = large("check-updates", "Check for Updates")
-            .pending(state == UpdateState::Checking)
+            .pending(checking)
             .on_click(move |_, _, cx| store.update(cx, |store, cx| store.updater.check(true, cx)));
         let leading = label(format!("Motile {current}"), None, None, Cut::Wraps, cx);
         let mut rows = vec![row(vec![leading], vec![check.into_any_element()]).into_any_element()];
-        if state != UpdateState::Idle {
+        if state != UpdateState::Idle || checking {
             rows.push(divider_on(Surface::Card, cx).into_any_element());
             let update = AppUpdateRow::new(&self.store)
                 .variant(Variant::Outline)

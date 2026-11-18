@@ -148,8 +148,8 @@ private fun SettingsGroups.general(
     }
     group("updates", header = "Updates") {
         row { SettingsLabeled("Version", store.updater.current) }
-        row { SettingsButton("Check for Updates", enabled = store.updater.state != AppUpdater.State.Checking) { store.updater.check(asked = true) } }
-        if (store.updater.state != AppUpdater.State.Idle) row {
+        row { SettingsButton("Check for Updates", enabled = !store.updater.checking) { store.updater.check(asked = true) } }
+        if (store.updater.state != AppUpdater.State.Idle || store.updater.checking) row {
             SettingsRow { AppUpdateRow(store.updater, Modifier.weight(1f), variant = ButtonVariant.Outline) }
         }
     }

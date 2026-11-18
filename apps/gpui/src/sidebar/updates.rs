@@ -120,11 +120,16 @@ fn line(label: UpdateLabel, trailing: Vec<AnyElement>) -> Div {
 impl RenderOnce for AppUpdateRow {
     fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
         let c = colors(cx);
-        let state = self.store.read(cx).updater.state.clone();
+        let (state, checking) = {
+            let updater = &self.store.read(cx).updater;
+            (updater.state.clone(), updater.checking)
+        };
         let size = self.size;
         match state {
+            UpdateState::Idle if checking => {
+                line(UpdateLabel::new("Checking for updates", "refresh-cw").turning(true), vec![])
+            }
             UpdateState::Idle => div(),
-            UpdateState::Checking => line(UpdateLabel::new("Checking for updates", "refresh-cw").turning(true), vec![]),
             UpdateState::UpToDate => line(UpdateLabel::up_to_date(cx), vec![]),
             UpdateState::Available(version) => line(
                 UpdateLabel::new(format!("v{version} is available"), "circle-arrow-down").tint(c.success),
@@ -191,6 +196,7 @@ impl RenderOnce for AppUpdateRow {
                     vec![
                         self.button("app-retry", "Try Again", |store, cx| store.updater.retry(cx))
                             .small()
+                            .pending(checking)
                             .into_any_element(),
                     ],
                 ))

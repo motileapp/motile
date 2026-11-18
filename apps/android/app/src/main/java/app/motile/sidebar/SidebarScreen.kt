@@ -628,7 +628,7 @@ private fun Footer(
     ) {
         // A new version of the client, where the sidebar ends, as on the Mac.
         val update = store.updater.state
-        if (update != AppUpdater.State.Idle && update != AppUpdater.State.Checking && update != AppUpdater.State.UpToDate) {
+        if (update != AppUpdater.State.Idle && update != AppUpdater.State.UpToDate) {
             AppUpdateRow(store.updater, Modifier.padding(start = sidebarEdge, end = sidebarEdge - serverButtonOutset, top = 8.dp, bottom = 8.dp))
             ThemeDivider()
         }

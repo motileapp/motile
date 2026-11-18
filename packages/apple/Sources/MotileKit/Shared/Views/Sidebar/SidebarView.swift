@@ -1431,7 +1431,7 @@ struct SidebarFooter: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if ![.idle, .checking, .upToDate].contains(store.updater.state) {
+            if ![.idle, .upToDate].contains(store.updater.state) {
                 AppUpdateRow(updater: store.updater)
                     .padding(.leading, sidebarEdge - Self.edge)
                     .padding(.trailing, sidebarEdge - Self.edge - serverButtonOutset)
@@ -1461,7 +1461,7 @@ struct SidebarFooter: View {
                     UpdateLabel.upToDate
                         .padding(.trailing, 2)
                 }
-                ActionButton(icon: .refreshCw, help: "Check for Updates", pending: store.updater.state == .checking,
+                ActionButton(icon: .refreshCw, help: "Check for Updates", pending: store.updater.checking,
                     margin: Self.reach
                 ) {
                     store.updater.check(asked: true)

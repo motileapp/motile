@@ -31,8 +31,6 @@ import kotlin.concurrent.thread
 class AppUpdater {
     sealed interface State {
         data object Idle : State
-        /** The user asked and the answer isn't here yet. */
-        data object Checking : State
         data object UpToDate : State
         data class Available(val version: String) : State
         data class Downloading(val version: String, val fraction: Double) : State
@@ -42,6 +40,9 @@ class AppUpdater {
     }
 
     var state by mutableStateOf<State>(State.Idle)
+        private set
+    /** The user asked and the answer isn't here yet. What the state offers stays meanwhile. */
+    var checking by mutableStateOf(false)
         private set
     /** The newest release's version. The servers are compared with it as well. */
     var latest by mutableStateOf<String?>(null)
@@ -77,8 +78,8 @@ class AppUpdater {
 
     /** `asked` is for when the user wants to know: finding nothing new is then said too. */
     fun check(asked: Boolean = false) {
-        if (state is State.Checking || state is State.Downloading || state is State.Installing) return
-        if (asked) state = State.Checking
+        if (checking || state is State.Downloading || state is State.Installing) return
+        if (asked) checking = true
         lastCheck = SystemClock.elapsedRealtime()
         val releases = releases
         thread(isDaemon = true) {
@@ -97,6 +98,7 @@ class AppUpdater {
     }
 
     private fun found(version: String?, asked: Boolean) {
+        if (asked) checking = false
         if (version == null) {
             if (asked) state = State.Failed("GitHub couldn’t be reached to look for a new version.")
             return
@@ -109,7 +111,6 @@ class AppUpdater {
                 state = State.UpToDate
                 main.postDelayed({ if (state == State.UpToDate) state = State.Idle }, 4000)
             }
-            state == State.Checking -> state = State.Idle
         }
     }
 
@@ -180,7 +181,6 @@ class AppUpdater {
 
     /** Back to offering the update, after it failed. */
     fun retry() {
-        state = State.Idle
         check(asked = true)
     }
 
