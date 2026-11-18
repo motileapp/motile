@@ -59,6 +59,7 @@ extension Theme {
     static let accentWithOpacity = tone(0x22242b, 0xd0d2d9)
     static let accentTinted = tone(0x22242b, 0xd0d2d9)
     static let borderComposer = tone(0xeaecf0, 0x1a1b21)
+    static let borderComposerStronger = tone(0xdfe2e8, 0x26272d)
     static let borderAccent = tone(0xd9dce5, 0x25262c)
     static let ring = tone(0x22242b, 0xd0d2d9)
     static let overlay = tone(0x000000, 0x000000)
@@ -165,6 +166,7 @@ extension Theme {
         case "accent-with-opacity": accentWithOpacity
         case "accent-tinted": accentTinted
         case "border-composer": borderComposer
+        case "border-composer-stronger": borderComposerStronger
         case "border-accent": borderAccent
         case "ring": ring
         case "overlay": overlay
@@ -271,6 +273,7 @@ extension Color {
     static let themeAccentWithOpacity = Color(platform: Theme.accentWithOpacity)
     static let themeAccentTinted = Color(platform: Theme.accentTinted)
     static let themeBorderComposer = Color(platform: Theme.borderComposer)
+    static let themeBorderComposerStronger = Color(platform: Theme.borderComposerStronger)
     static let themeBorderAccent = Color(platform: Theme.borderAccent)
     static let themeRing = Color(platform: Theme.ring)
     static let themeOverlay = Color(platform: Theme.overlay)

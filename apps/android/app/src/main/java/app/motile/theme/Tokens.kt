@@ -63,6 +63,7 @@ class Palette(
     val accentWithOpacity: Color,
     val accentTinted: Color,
     val borderComposer: Color,
+    val borderComposerStronger: Color,
     val borderAccent: Color,
     val ring: Color,
     val overlay: Color,
@@ -166,6 +167,7 @@ class Palette(
             accentWithOpacity = Color(0xFF22242B),
             accentTinted = Color(0xFF22242B),
             borderComposer = Color(0xFFEAECF0),
+            borderComposerStronger = Color(0xFFDFE2E8),
             borderAccent = Color(0xFFD9DCE5),
             ring = Color(0xFF22242B),
             overlay = Color(0xFF000000),
@@ -269,6 +271,7 @@ class Palette(
             accentWithOpacity = Color(0xFFD0D2D9),
             accentTinted = Color(0xFFD0D2D9),
             borderComposer = Color(0xFF1A1B21),
+            borderComposerStronger = Color(0xFF26272D),
             borderAccent = Color(0xFF25262C),
             ring = Color(0xFFD0D2D9),
             overlay = Color(0xFF000000),
@@ -374,6 +377,7 @@ class Palette(
         "accent-with-opacity" -> accentWithOpacity
         "accent-tinted" -> accentTinted
         "border-composer" -> borderComposer
+        "border-composer-stronger" -> borderComposerStronger
         "border-accent" -> borderAccent
         "ring" -> ring
         "overlay" -> overlay
