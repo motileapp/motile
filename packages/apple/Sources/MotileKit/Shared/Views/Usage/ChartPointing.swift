@@ -17,8 +17,13 @@ enum ChartMarks {
 }
 
 extension View {
+    /// Lets go of what a usage chart points at once a tap on its page misses every chart, or the page goes.
+    func lettingGo(_ action: @escaping () -> Void) -> some View {
+        modifier(LettingGo(action: action))
+    }
+
     /// The bucket a usage chart points at: where the pointer is on the Mac. On iOS where a finger
-    /// slides sideways across it, or the one tapped, which a tap on it again lets go.
+    /// slides sideways across it, or the one tapped, which a tap on it again or off the charts lets go.
     func chartPointing(_ pointed: Binding<Date?>, starts: [Date], marks: ChartMarks) -> some View {
         #if os(iOS)
         chartOverlay { proxy in
@@ -44,5 +49,16 @@ extension View {
         #else
         chartXSelection(value: pointed)
         #endif
+    }
+}
+
+private struct LettingGo: ViewModifier {
+    @Environment(\.usageLetGo) private var letGo
+    let action: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: letGo, action)
+            .onDisappear(perform: action)
     }
 }

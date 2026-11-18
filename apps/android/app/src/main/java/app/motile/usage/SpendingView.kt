@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -105,8 +104,7 @@ fun count(value: Long): String = value.abbreviated
 fun SpendingView(report: UsageReport, measure: Measure, onMeasure: (Measure) -> Unit, period: UsageModel.Period) {
     val store = LocalStore.current
     val palette = LocalPalette.current
-    var pointed by remember { mutableStateOf<Int?>(null) }
-    LaunchedEffect(period) { pointed = null }
+    var pointed by remember(period, LocalLetGo.current.intValue) { mutableStateOf<Int?>(null) }
     val outdated = store.servers.filter { it.state == Server.State.Connected && it.protocolVersion < 10 }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val width = maxWidth

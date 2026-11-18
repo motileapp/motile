@@ -94,7 +94,7 @@ final class GestureTests: XCTestCase {
 
     func testASwipeToTheLeftShowsThePanelAndOneBackHidesItWithoutTheSidebar() {
         let back = app.navigationBars.buttons["Back"]
-        app.swipeLeft()
+        swipeLeftAcrossTheTitle()
         XCTAssertTrue(shown(back))
         app.swipeRight()
         XCTAssertTrue(back.waitForNonExistence(timeout: 3))
@@ -183,6 +183,12 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(app.alerts.firstMatch.waitForNonExistence(timeout: 3))
     }
 
+    /// A swipe to the left across the thread's title, where nothing of the transcript scrolls sideways.
+    private func swipeLeftAcrossTheTitle() {
+        let title = app.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.095))
+        title.press(forDuration: 0.05, thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.095)), withVelocity: .fast, thenHoldForDuration: 0)
+    }
+
     /// Swipes the sidebar in, again if the client was still loading its threads.
     private func openSidebar() {
         for _ in 0..<3 {
@@ -213,10 +219,9 @@ final class GestureTests: XCTestCase {
         let below = app.staticTexts["When you work"]
         XCTAssertTrue(shown(heading))
         XCTAssertTrue(below.waitForExistence(timeout: 10))
-        let busiest = NSPredicate(format: "label BEGINSWITH %@ OR label BEGINSWITH %@", "You're in Motile", "You send")
-        XCTAssertTrue(app.staticTexts.matching(busiest).firstMatch.waitForExistence(timeout: 10))
         let pointedDay = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*[ ,][^·]+$")).firstMatch
         let cellSaid = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,.*· .* turns?$")).firstMatch
+        XCTAssertTrue(cellSaid.waitForExistence(timeout: 10))
         XCTAssertFalse(pointedDay.exists)
         let top = settled(heading)
         let middle = (app.buttons["Turns"].frame.maxY + below.frame.minY) / 2
@@ -234,6 +239,31 @@ final class GestureTests: XCTestCase {
         cells.press(forDuration: 0.05, thenDragTo: cells.withOffset(CGVector(dx: app.frame.width * 0.5, dy: 0)), withVelocity: .slow, thenHoldForDuration: 0)
         let moved = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", latest), object: cellSaid)
         XCTAssertEqual(XCTWaiter.wait(for: [moved], timeout: 3), .completed)
+    }
+
+    /// A day tapped on the usage chart stays while a button beside it is pressed, and a tap on the
+    /// page off the charts lets it go, so that the legend says the whole period again.
+    func testATapOffTheUsageChartsLetsGoTheDayTheyPointAt() {
+        app.swipeRight()
+        XCTAssertTrue(shown(newThread))
+        app.buttons["Account"].tap()
+        app.buttons["Usage"].tap()
+        app.buttons["Activity"].tap()
+        let heading = app.staticTexts["Over time"]
+        let below = app.staticTexts["When you work"]
+        XCTAssertTrue(shown(heading))
+        XCTAssertTrue(below.waitForExistence(timeout: 10))
+        let pointedDay = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*[ ,][^·]+$")).firstMatch
+        let cellSaid = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", "^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,.*· .* turns?$")).firstMatch
+        XCTAssertTrue(cellSaid.waitForExistence(timeout: 10))
+        XCTAssertFalse(pointedDay.exists)
+        let middle = (app.buttons["Turns"].frame.maxY + below.frame.minY) / 2
+        app.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: app.frame.width * 0.6, dy: middle)).tap()
+        XCTAssertTrue(pointedDay.waitForExistence(timeout: 3))
+        app.buttons["Turns"].tap()
+        XCTAssertTrue(pointedDay.waitForExistence(timeout: 3))
+        heading.tap()
+        XCTAssertTrue(pointedDay.waitForNonExistence(timeout: 3))
     }
 
     /// Usage reads its page again from the button in its bar, so a finger dragging the page down

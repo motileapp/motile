@@ -308,12 +308,15 @@ struct UsageRefreshButton: View {
 extension EnvironmentValues {
     /// How tall the usage page shows, which a long list in it is kept to a part of.
     @Entry var usagePageHeight: CGFloat = 800
+    /// Counts the taps on the usage page that missed its charts, each of which lets go what they point at.
+    @Entry var usageLetGo = 0
 }
 
 struct UsageContent: View {
 
     @Environment(AppStore.self) private var store
     @State private var pageHeight: CGFloat = 800
+    @State private var letGo = 0
     let model: UsageModel
     /// The tab shown, where it isn't the one picked.
     var shown: UsageModel.Tab?
@@ -326,6 +329,7 @@ struct UsageContent: View {
                 page
             }
             .environment(\.usagePageHeight, pageHeight)
+            .environment(\.usageLetGo, letGo)
             .frame(maxWidth: Theme.contentWidth, alignment: .leading)
             .padding(.horizontal, margin)
             .padding(.top, top)
@@ -333,6 +337,10 @@ struct UsageContent: View {
             .frame(maxWidth: .infinity)
         }
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { pageHeight = $0 }
+        #if os(iOS)
+        .contentShape(Rectangle())
+        .onTapGesture { letGo += 1 }
+        #endif
         .onAppear {
             guard shown == nil else { return }
             model.start(store)

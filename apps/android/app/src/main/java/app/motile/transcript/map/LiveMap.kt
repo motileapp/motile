@@ -2,6 +2,7 @@ package app.motile.transcript.map
 
 import android.content.Context
 import android.graphics.PointF
+import android.view.MotionEvent
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -63,6 +64,11 @@ class LiveMap(context: Context, style: String, camera: MapCamera?, water: Int, p
             .minZoomPreference(0.0)
         view = MapView(context, options)
         view.onCreate(null)
+        // A finger on the map is the map's from where it lands, so that the drawer and the transcript leave its drags be.
+        view.setOnTouchListener { touched, event ->
+            if (event.actionMasked == MotionEvent.ACTION_DOWN) touched.parent?.requestDisallowInterceptTouchEvent(true)
+            false
+        }
         view.addOnDidFailLoadingMapListener { tilesFailed = true }
         view.addOnTileActionListener { operation, _, _, _, _, _, source ->
             if (source != "openmaptiles") return@addOnTileActionListener

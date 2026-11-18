@@ -1,6 +1,8 @@
 package app.motile.gestures
 
 import android.content.Intent
+import android.graphics.Point
+import android.os.Build
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
@@ -60,9 +62,20 @@ class GestureTests {
 
     private val newThread: BySelector get() = By.desc("New thread")
 
-    private fun shown(selector: BySelector, timeout: Long = 3_000): Boolean = device.wait(Until.hasObject(selector), timeout)
+    private fun shown(selector: BySelector, timeout: Long = 3_000): Boolean = within(timeout) { device.hasObject(selector) }
 
-    private fun gone(selector: BySelector, timeout: Long = 3_000): Boolean = device.wait(Until.gone(selector), timeout)
+    private fun gone(selector: BySelector, timeout: Long = 3_000): Boolean = within(timeout) { !device.hasObject(selector) }
+
+    /** Whether `holds` comes true within the timeout, the screen read afresh each time. */
+    private fun within(timeout: Long, holds: () -> Boolean): Boolean {
+        val end = SystemClock.uptimeMillis() + timeout
+        while (true) {
+            readAfresh()
+            if (holds()) return true
+            if (SystemClock.uptimeMillis() >= end) return false
+            Thread.sleep(200)
+        }
+    }
 
     /** The thread's row in the sidebar. */
     private fun row(title: String): UiObject2? {
@@ -194,7 +207,7 @@ class GestureTests {
         val lowerTitle = if (upper === one) "Add API Rate Limiting" else "Use an F-String in Greet"
         val from = lower.visibleBounds
         val to = upper.visibleBounds
-        lower.drag(android.graphics.Point(to.centerX(), to.top + to.height() / 6), 400)
+        lower.drag(Point(to.centerX(), to.top + to.height() / 6), 400)
         assertTrue(ordered(lowerTitle, upperTitle))
         assertTrue(device.hasObject(newThread))
         launch()
@@ -240,7 +253,7 @@ class GestureTests {
         device.wait(Until.findObject(By.text("Activity")), 3_000).click()
         val heading = device.wait(Until.findObject(By.text("Over time")), 10_000) ?: return fail("no chart")
         val below = device.wait(Until.findObject(By.text("When you work")), 10_000) ?: return fail("no heatmap")
-        device.wait(Until.findObject(By.text(Pattern.compile("^You('re in Motile| send) the most.*"))), 10_000) ?: return fail("no activity")
+        device.wait(Until.findObject(By.text(Pattern.compile("^[0-9].* \\([0-9]+%\\)$"))), 10_000) ?: return fail("no activity")
         val pointedDay = By.text(Pattern.compile("^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*[ ,][^·]+$"))
         assertFalse(shown(pointedDay, 1_000))
         val top = settled(heading)
@@ -250,8 +263,11 @@ class GestureTests {
         device.swipe(width / 5, y, width * 7 / 10, y, 40)
         assertTrue(shown(pointedDay))
         assertEquals(top, settled(heading))
-        device.swipe(width / 5, y, width / 5, y - device.displayHeight / 4, 40)
+        dragAndRest(width / 5, y, width / 5, y - device.displayHeight / 4)
         assertTrue(settled(heading) < top - device.displayHeight / 20)
+        dragAndRest(width / 2, below.visibleBounds.top, width / 2, device.displayHeight / 5)
+        settled(below)
+        readAfresh()
         val cellSaid = By.text(Pattern.compile("^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,.*· .* turns?$"))
         val above = device.wait(Until.findObject(By.text("Messages sent")), 3_000) ?: return fail("no hour measures")
         val said = device.wait(Until.findObject(cellSaid), 3_000) ?: return fail("no cell said")
@@ -259,6 +275,30 @@ class GestureTests {
         val cellsY = (above.visibleBounds.bottom + said.visibleBounds.top) / 2
         device.swipe(width / 5, cellsY, width * 3 / 5, cellsY, 40)
         assertTrue(shown(By.text(Pattern.compile("^(?!" + Pattern.quote(latest) + "$).*· .* turns?$"))))
+    }
+
+    /**
+     * A day tapped on the usage chart stays while a button beside it is pressed, and a tap on the
+     * page off the charts lets it go, so that the legend says the whole period again.
+     */
+    @Test
+    fun aTapOffTheUsageChartsLetsGoTheDayTheyPointAt() {
+        openSidebar()
+        device.findObject(By.desc("Account")).click()
+        device.wait(Until.findObject(By.text("Usage")), 3_000).click()
+        device.wait(Until.findObject(By.text("Activity")), 3_000).click()
+        val heading = device.wait(Until.findObject(By.text("Over time")), 10_000) ?: return fail("no chart")
+        val below = device.wait(Until.findObject(By.text("When you work")), 10_000) ?: return fail("no heatmap")
+        device.wait(Until.findObject(By.text(Pattern.compile("^[0-9].* \\([0-9]+%\\)$"))), 10_000) ?: return fail("no activity")
+        val pointedDay = By.text(Pattern.compile("^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*[ ,][^·]+$"))
+        assertFalse(shown(pointedDay, 1_000))
+        val turns = device.findObject(By.text("Turns")) ?: return fail("no measures")
+        device.click(device.displayWidth * 3 / 5, (turns.visibleBounds.bottom + below.visibleBounds.top) / 2)
+        assertTrue(shown(pointedDay))
+        turns.click()
+        assertTrue(shown(pointedDay))
+        heading.click()
+        assertTrue(gone(pointedDay))
     }
 
     @Test
@@ -468,6 +508,17 @@ class GestureTests {
         }
     }
 
+    /** Drops what UiAutomator kept of the screen, which still holds what a scroll took away and misses what it brought. */
+    private fun readAfresh() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) InstrumentationRegistry.getInstrumentation().uiAutomation.clearCache()
+    }
+
+    /** A finger dragged from one place to another that rests there before it lifts, so that the page doesn't fling on. */
+    private fun dragAndRest(fromX: Int, fromY: Int, toX: Int, toY: Int) {
+        val to = Point(toX, toY)
+        device.swipe(arrayOf(Point(fromX, fromY), to, to), 40)
+    }
+
     /** Where the view's top is once the rows around it stop moving. */
     private fun settled(view: UiObject2): Int {
         var top = view.visibleBounds.top
@@ -502,15 +553,19 @@ class GestureTests {
         return null
     }
 
+    /** Deletes every thread of the title, those a run before left too. */
     private fun deleteThread(title: String) {
         openSidebar()
-        val thread = row(title) ?: return
-        thread.longClick()
-        repeat(2) {
-            val delete = device.wait(Until.findObject(By.text("Delete")), 3_000) ?: return
-            delete.click()
+        repeat(5) {
+            val thread = row(title) ?: return
+            thread.longClick()
+            repeat(2) {
+                val delete = device.wait(Until.findObject(By.text("Delete")), 3_000) ?: return
+                delete.click()
+            }
+            if (gone(By.textContains(title), 5_000)) return
         }
-        assertTrue(gone(By.textContains(title), 5_000))
+        fail("$title stays")
     }
 
     private fun searchField(): UiObject2 =

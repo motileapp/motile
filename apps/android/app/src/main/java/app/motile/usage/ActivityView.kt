@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -161,8 +160,7 @@ private val besideWidth = 640.dp
 fun ActivityView(report: ActivityReport, period: UsageModel.Period) {
     val store = LocalStore.current
     val palette = LocalPalette.current
-    var pointed by remember { mutableStateOf<Int?>(null) }
-    LaunchedEffect(period) { pointed = null }
+    var pointed by remember(period, LocalLetGo.current.intValue) { mutableStateOf<Int?>(null) }
     val outdated = store.servers.filter { it.state == Server.State.Connected && it.protocolVersion < 40 }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val beside = maxWidth >= besideWidth
@@ -564,7 +562,7 @@ private fun Heatmap(heatmap: ActivityReport.Heatmap, measure: HourMeasure, loadi
     val palette = LocalPalette.current
     val density = LocalDensity.current
     val surface = LocalSurface.current
-    var picked by remember(heatmap.columns, heatmap.cells.size, heatmap.latest) { mutableStateOf<Int?>(null) }
+    var picked by remember(heatmap.columns, heatmap.cells.size, heatmap.latest, LocalLetGo.current.intValue) { mutableStateOf<Int?>(null) }
     val chosen = if (loading) null else picked ?: heatmap.latest
     val cellAlpha = if (loading) pulse() else null
     val fills = listOf(
