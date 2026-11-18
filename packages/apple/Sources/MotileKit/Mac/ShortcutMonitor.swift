@@ -50,7 +50,7 @@ final class ShortcutMonitor {
         let editing = (responder as? NSTextView)?.isEditable == true
         let composing = (responder as? ComposerNSTextView)?.sends == true
         // The skills' menu takes its own keys.
-        if composing, store.skillMenu != nil, SkillMenuKey(event) != nil { return false }
+        if composing, store.skillMenuTakesKeys, SkillMenuKey(event) != nil { return false }
         var context = store.shortcutContext(composerFocus: composing, editableFocus: editing)
         if ZoomingScrollView.takesKeys { context.insert(Shortcuts.imageShown) }
         guard let command = command(of: event, in: context) else { return false }

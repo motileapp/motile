@@ -62,7 +62,7 @@ fn handle(store: &Entity<Store>, event: &KeystrokeEvent, window: &mut Window, cx
     let Some(press) = press_of(&event.keystroke) else { return false };
     let editing = event.context_stack.iter().any(|context| context.contains("Input"));
     let composing = editing && event.context_stack.iter().any(|context| context.contains("Composer"));
-    if let Some(key) = SkillKey::of(&event.keystroke).filter(|_| composing && state.skills.menu.is_some()) {
+    if let Some(key) = SkillKey::of(&event.keystroke).filter(|_| composing && state.skill_menu_takes_keys()) {
         store.update(cx, |store, cx| store.skill_key(key, cx));
         return true;
     }

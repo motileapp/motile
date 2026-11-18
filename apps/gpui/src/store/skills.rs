@@ -56,7 +56,10 @@ pub struct SkillPick {
 pub enum SkillKey {
     Up,
     Down,
-    Pick,
+    /// Picks the lit skill; with none to pick, sends.
+    Enter,
+    /// Picks the lit skill.
+    Tab,
     Dismiss,
 }
 
@@ -68,7 +71,8 @@ impl SkillKey {
         Some(match keystroke.key.as_str() {
             "up" => Self::Up,
             "down" => Self::Down,
-            "enter" | "tab" => Self::Pick,
+            "enter" => Self::Enter,
+            "tab" => Self::Tab,
             "escape" => Self::Dismiss,
             _ => return None,
         })
@@ -85,6 +89,10 @@ pub struct Skills {
     asked: u64,
     answered: u64,
     loading_soon: Option<Task<()>>,
+    /// The menu of the word last typed is asked for and hasn't come.
+    asking: bool,
+    /// A Return or Tab pressed before the menu came, which picks once it has.
+    waiting: Option<SkillKey>,
     /// The word whose menu was put away, which stays away until another is typed.
     dismissed: Option<String>,
 }
@@ -95,6 +103,11 @@ impl Store {
         let project = self.composer_project()?;
         self.server(Some(&project.server_id)).filter(|server| server.connected())?;
         Some((project.server_id, project.id))
+    }
+
+    /// The menu is open, or asked for and on its way.
+    pub fn skill_menu_takes_keys(&self) -> bool {
+        self.skills.menu.is_some() || self.skills.asking
     }
 
     /// Has the composer's skills listed before its menu opens, so that it opens with them.
@@ -114,6 +127,7 @@ impl Store {
             return self.close_skill_menu(cx);
         };
         self.skills.asked += 1;
+        self.skills.asking = true;
         let asked = self.skills.asked;
         let start = before_cursor.char_indices().rev().nth(199).map_or(0, |(at, _)| at);
         let command = Command::SkillMenu {
@@ -128,7 +142,15 @@ impl Store {
             }
             store.skills.answered = asked;
             store.skills.loading = false;
-            let Ok(answer) = result else { return cx.notify() };
+            store.skills.asking = false;
+            let waiting = store.skills.waiting.take();
+            let unpicked = |store: &mut Store, cx: &mut Context<Store>| {
+                if waiting == Some(SkillKey::Enter) {
+                    store.send_message(false, cx);
+                }
+                cx.notify();
+            };
+            let Ok(answer) = result else { return unpicked(store, cx) };
             let menu: SkillMenu = serde_json::from_value(answer).unwrap_or_default();
             let skills = &mut store.skills;
             if skills.dismissed.as_ref() != Some(&menu.typed) {
@@ -136,13 +158,16 @@ impl Store {
             }
             if menu.rows.is_empty() || skills.dismissed.is_some() {
                 skills.menu = None;
-                return cx.notify();
+                return unpicked(store, cx);
             }
             let names = |menu: &SkillMenu| menu.rows.iter().map(|row| row.name.clone()).collect::<Vec<_>>();
             if skills.menu.as_ref().map(names) != Some(names(&menu)) {
                 skills.highlight = 0;
             }
             skills.menu = Some(menu);
+            if waiting.is_some() {
+                store.pick_skill(None, cx);
+            }
             cx.notify();
         });
         self.skills.loading_soon = Some(cx.spawn(async move |this, cx| {
@@ -164,18 +189,22 @@ impl Store {
 
     pub fn close_skill_menu(&mut self, cx: &mut Context<Self>) {
         self.skills.asked += 1;
+        self.skills.asking = false;
+        self.skills.waiting = None;
         let loading = std::mem::take(&mut self.skills.loading);
         if self.skills.menu.take().is_some() || loading {
             cx.notify();
         }
     }
 
-    /// What a key does while the menu is open.
+    /// What a key does while the menu is open or on its way. Return and Tab pressed before it
+    /// came pick once it has.
     pub fn skill_key(&mut self, key: SkillKey, cx: &mut Context<Self>) {
         match key {
             SkillKey::Up => self.move_skill_highlight(-1),
             SkillKey::Down => self.move_skill_highlight(1),
-            SkillKey::Pick => self.pick_skill(None, cx),
+            SkillKey::Enter | SkillKey::Tab if self.skills.menu.is_none() => self.skills.waiting = Some(key),
+            SkillKey::Enter | SkillKey::Tab => self.pick_skill(None, cx),
             SkillKey::Dismiss => {
                 self.skills.dismissed = self.skills.menu.as_ref().map(|menu| menu.typed.clone());
                 self.close_skill_menu(cx);

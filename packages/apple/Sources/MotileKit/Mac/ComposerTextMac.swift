@@ -243,7 +243,7 @@ final class ComposerNSTextView: PointerTextView {
     var text: String { textStorage?.withSkillNames ?? string }
 
     override func keyDown(with event: NSEvent) {
-        if let skills, skills.menuOpen, !hasMarkedText(), let key = SkillMenuKey(event) {
+        if let skills, skills.takesKeys(), !hasMarkedText(), let key = SkillMenuKey(event, onReturn: onSubmit) {
             skills.key(key)
             return
         }
@@ -337,12 +337,14 @@ final class ComposerNSTextView: PointerTextView {
 }
 
 extension SkillMenuKey {
-    init?(_ event: NSEvent) {
+    /// Return picks, or with no skill to pick does `onReturn`; Tab only picks.
+    init?(_ event: NSEvent, onReturn: (() -> Void)? = nil) {
         guard event.modifierFlags.intersection([.shift, .option, .control, .command]).isEmpty else { return nil }
         switch event.keyCode {
         case 126: self = .up
         case 125: self = .down
-        case 36, 76, 48: self = .pick
+        case 36, 76: self = .pick(orElse: onReturn)
+        case 48: self = .pick()
         case 53: self = .dismiss
         default: return nil
         }

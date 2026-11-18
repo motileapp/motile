@@ -325,6 +325,10 @@ final class AppStore {
     var skillMenuLoading = false
     @ObservationIgnored var skillMenusAsked = 0
     @ObservationIgnored var skillMenusAnswered = 0
+    /// The menu of the word last typed is asked for and hasn't come.
+    @ObservationIgnored var skillMenuAsking = false
+    /// What a Return or Tab pressed before the menu came does once it has, with no skill to pick.
+    @ObservationIgnored var skillPickWaiting: (() -> Void)?
     /// The word whose menu was put away, which stays away until another is typed.
     @ObservationIgnored var skillMenuDismissed: String?
     /// Counts up when a thread or a draft is brought to the front, which puts away a sidebar

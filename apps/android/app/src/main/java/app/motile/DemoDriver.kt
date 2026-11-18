@@ -254,7 +254,7 @@ object DemoDriver {
             }
             "skill" -> {
                 val keys = mapOf("up" to SkillMenuKey.Up, "down" to SkillMenuKey.Down, "pick" to SkillMenuKey.Pick, "dismiss" to SkillMenuKey.Dismiss)
-                keys[rest]?.let(store::skillKey)
+                keys[rest]?.let { store.skillKey(it) }
             }
             "blur" -> Platform.endEditing()
             "access" -> store.setAccess(Access.of(rest) ?: Access.Full)

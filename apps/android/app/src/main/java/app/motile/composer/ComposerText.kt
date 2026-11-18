@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.InputTransformation
 import androidx.compose.foundation.text.input.OutputTransformation
+import androidx.compose.foundation.text.input.TextFieldBuffer
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
@@ -65,6 +66,7 @@ import app.motile.core.SkillPick
 import app.motile.core.readSkillMenu
 import app.motile.core.readSkillSpans
 import app.motile.core.skillKey
+import app.motile.core.skillMenuTakesKeys
 import app.motile.composer.SkillChip.drawBox
 import app.motile.platform.Platform
 import app.motile.platform.scaled
@@ -111,6 +113,8 @@ class ComposerTextModel(private val store: AppStore) {
     private var picked: Int? = store.skillPick?.id
     /** An edit put in more than a character at once, as a paste does. */
     private var pasted = false
+    /** What was last told to the menu as typed before the cursor. */
+    private var reported: String? = null
 
     /** The chips that are still where the text says, in order. */
     fun chips(text: CharSequence): List<ChipRange> = chips.filter { it.holds(text) }.sortedBy { it.start }
@@ -146,12 +150,14 @@ class ComposerTextModel(private val store: AppStore) {
         if (cursor > 0 && cursor <= text.length && text[cursor - 1].isWhitespace()) chipify(atEnd = false)
     }
 
-    /** Tells the menu what is typed before the cursor, or that nothing is. */
+    /** Tells the menu what is typed before the cursor, or that nothing is, when that changed. */
     fun readMenu() {
         val selection = state.selection
-        if (!focused || !selection.collapsed) return store.readSkillMenu("")
         val text = state.text.toString()
-        store.readSkillMenu(masked(text).substring(0, min(selection.start, text.length)))
+        val before = if (!focused || !selection.collapsed) "" else masked(text).substring(0, min(selection.start, text.length))
+        if (before == reported) return
+        reported = before
+        store.readSkillMenu(before)
     }
 
     /** Types the text where the cursor is, as a keyboard does. */
@@ -212,7 +218,19 @@ class ComposerTextModel(private val store: AppStore) {
             this.changes.getOriginalRange(index) to this.changes.getRange(index).length
         }
         if (edits.any { (removed, length) -> length - removed.length > 1 }) pasted = true
+        if (typedNewLine() && store.skillMenuTakesKeys) {
+            revertAllChanges()
+            store.skillKey(SkillMenuKey.Pick) { insert("\n") }
+            return@InputTransformation
+        }
         if (chips.isNotEmpty()) chips = shifted(chips, edits)
+    }
+
+    /** The edit is one new line typed where the cursor was. */
+    private fun TextFieldBuffer.typedNewLine(): Boolean {
+        if (changes.changeCount != 1 || !changes.getOriginalRange(0).collapsed) return false
+        val added = changes.getRange(0)
+        return added.length == 1 && asCharSequence()[added.min] == '\n'
     }
 
     /** Shows each chip's `$name` as its chip. */
@@ -287,7 +305,7 @@ fun ComposerTextField(model: ComposerTextModel, placeholder: String, focusReques
             .semantics { contentDescription = "Message" }
             .focusRequester(focusRequester)
             .onFocusChanged { model.focused = it.isFocused }
-            .onPreviewKeyEvent { store.composerKey(it) }
+            .onPreviewKeyEvent { store.composerKey(it, model) }
             .contentReceiver(PastedImages(store)),
         textStyle = style,
         inputTransformation = model.keeper,
@@ -317,16 +335,23 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawChips(
     for (range in model.shownChips()) drawBox(layout, range.first, range.last + 1, scroll.value.toFloat(), palette, dark)
 }
 
-/** What the composer does with a key of a keyboard with keys, ahead of the text: Enter sends, and the skills' menu takes its keys. */
-private fun AppStore.composerKey(event: KeyEvent): Boolean {
+private val menuKeys = setOf(Key.Enter, Key.NumPadEnter, Key.Tab, Key.DirectionUp, Key.DirectionDown, Key.Escape)
+
+/**
+ * What the composer does with a key, ahead of the text: Enter of a keyboard with keys sends, and the skills' menu takes its keys while it
+ * is open or on its way. Enter picks from it, or with no skill to pick sends, or starts a new line from the on-screen keyboard.
+ */
+private fun AppStore.composerKey(event: KeyEvent, model: ComposerTextModel): Boolean {
     if (event.isShiftPressed || event.isAltPressed || event.isCtrlPressed || event.isMetaPressed) return false
     val native = event.nativeKeyEvent
     val screenKey = native.deviceId == KeyCharacterMap.VIRTUAL_KEYBOARD || native.flags and AndroidKeyEvent.FLAG_SOFT_KEYBOARD != 0
-    val menuOpen = skillMenu != null
+    if (event.key in menuKeys) model.readMenu()
+    val menuOpen = skillMenuTakesKeys
     val action: () -> Unit = when (event.key) {
         Key.Enter, Key.NumPadEnter -> when {
+            menuOpen && screenKey -> ({ skillKey(SkillMenuKey.Pick) { model.insert("\n") } })
             screenKey -> return false
-            menuOpen -> ({ skillKey(SkillMenuKey.Pick) })
+            menuOpen -> ({ skillKey(SkillMenuKey.Pick) { send() } })
             else -> ({ send() })
         }
         Key.Tab -> if (menuOpen) ({ skillKey(SkillMenuKey.Pick) }) else return false

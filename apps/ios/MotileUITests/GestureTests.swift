@@ -301,6 +301,21 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(shown(newThread))
     }
 
+    func testTheKeyboardsReturnPutsInTheFirstSkillOfTheMenu() {
+        let composer = app.textViews.firstMatch
+        XCTAssertTrue(shown(composer))
+        composer.tap()
+        XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 3))
+        composer.typeText("$sh")
+        let menu = app.descendants(matching: .any)["Skills"]
+        XCTAssertTrue(menu.waitForExistence(timeout: 5))
+        app.keyboards.buttons.matching(NSPredicate(format: "label ==[c] %@", "return")).firstMatch.tap()
+        XCTAssertTrue(menu.waitForNonExistence(timeout: 3))
+        let written = composer.value as? String ?? ""
+        XCTAssertFalse(written.contains("$sh") || written.contains("\n"), written)
+        composer.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 4))
+    }
+
     func testCommandsOpenInASheetWhosePagesPushAndCloseTakesThemAway() {
         app.swipeRight()
         XCTAssertTrue(shown(newThread))

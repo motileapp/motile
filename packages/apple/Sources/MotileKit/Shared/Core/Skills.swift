@@ -52,9 +52,10 @@ struct SkillPick: Equatable {
 }
 
 /// What the composer's text does with skills: says what is typed before its cursor, gives the
-/// menu its keys while it is open, puts in the skill picked, and asks which `$name`s are skills.
+/// menu its keys while it is open or asked for, puts in the skill picked, and asks which `$name`s
+/// are skills.
 struct SkillTyping {
-    var menuOpen: Bool
+    var takesKeys: () -> Bool
     var pick: SkillPick?
     var typing: (String) -> Void
     var key: (SkillMenuKey) -> Void
@@ -62,7 +63,9 @@ struct SkillTyping {
 }
 
 enum SkillMenuKey {
-    case up, down, pick, dismiss
+    case up, down, dismiss
+    /// Picks the lit skill, once the menu has come; with none to pick, does `orElse`.
+    case pick(orElse: (() -> Void)? = nil)
 }
 
 extension Symbol {
@@ -81,20 +84,23 @@ extension Symbol {
 extension AppStore {
     var skillTyping: SkillTyping {
         SkillTyping(
-            menuOpen: skillMenu != nil,
+            takesKeys: { [weak self] in self?.skillMenuTakesKeys ?? false },
             pick: skillPick,
             typing: { [weak self] in self?.readSkillMenu(beforeCursor: $0) },
             key: { [weak self] key in
                 switch key {
                 case .up: self?.moveSkillHighlight(by: -1)
                 case .down: self?.moveSkillHighlight(by: 1)
-                case .pick: self?.pickSkill()
+                case .pick(let orElse): self?.pickLitSkill(orElse: orElse)
                 case .dismiss: self?.dismissSkillMenu()
                 }
             },
             spans: { [weak self] text, then in self?.readSkillSpans(in: text, then: then) }
         )
     }
+
+    /// The menu is open, or asked for and on its way.
+    var skillMenuTakesKeys: Bool { skillMenu != nil || skillMenuAsking }
 
     /// The composer's project on its server while it is connected, whose skills its menu offers.
     var composerSkillsKey: String? {
@@ -117,6 +123,7 @@ extension AppStore {
         }
         guard let project = composerProject, let account = composerAccount else { return closeSkillMenu() }
         skillMenusAsked += 1
+        skillMenuAsking = true
         let asked = skillMenusAsked
         let fields: JSON = [
             "server_id": project.serverID, "project_id": project.id, "account": account.id,
@@ -126,15 +133,19 @@ extension AppStore {
             guard let self, asked == skillMenusAsked else { return }
             skillMenusAnswered = asked
             skillMenuLoading = false
-            guard case .success(let answer) = result else { return }
+            skillMenuAsking = false
+            let waiting = skillPickWaiting
+            skillPickWaiting = nil
+            guard case .success(let answer) = result else { return waiting?() ?? () }
             let menu = SkillMenu(json: answer)
             if menu.typed != skillMenuDismissed { skillMenuDismissed = nil }
             guard !menu.rows.isEmpty, skillMenuDismissed == nil else {
                 skillMenu = nil
-                return
+                return waiting?() ?? ()
             }
             if menu.rows.map(\.name) != skillMenu?.rows.map(\.name) { skillHighlight.key(0) }
             skillMenu = menu
+            if waiting != nil { pickSkill() }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.skillMenuPatience) { [weak self] in
             guard let self, asked == skillMenusAsked, skillMenusAnswered < asked, skillMenu == nil, skillMenuDismissed == nil else { return }
@@ -149,6 +160,8 @@ extension AppStore {
         skillMenusAsked += 1
         skillMenu = nil
         skillMenuLoading = false
+        skillMenuAsking = false
+        skillPickWaiting = nil
     }
 
     /// Leaves the menu closed until something else is typed.
@@ -160,6 +173,14 @@ extension AppStore {
     func moveSkillHighlight(by step: Int) {
         guard let count = skillMenu?.rows.count, count > 0 else { return }
         skillHighlight.key((skillHighlight.index + step + count) % count)
+    }
+
+    /// Puts the lit skill in place of the word typed, once the menu has come when it is still on
+    /// its way. With no skill to put in, does `orElse`.
+    func pickLitSkill(orElse: (() -> Void)?) {
+        guard skillMenu == nil else { return pickSkill() }
+        guard skillMenuAsking else { return orElse?() ?? () }
+        skillPickWaiting = orElse ?? {}
     }
 
     /// Puts the skill, or the lit one, in place of the word typed.

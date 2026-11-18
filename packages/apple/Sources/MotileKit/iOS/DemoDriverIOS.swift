@@ -247,7 +247,7 @@ enum DemoDriver {
             composer?.becomeFirstResponder()
             composer?.insertText(rest)
         case "skill":
-            let keys: [String: SkillMenuKey] = ["up": .up, "down": .down, "pick": .pick, "dismiss": .dismiss]
+            let keys: [String: SkillMenuKey] = ["up": .up, "down": .down, "pick": .pick(), "dismiss": .dismiss]
             if let key = keys[rest] { store.skillTyping.key(key) }
         case "blur": Platform.endEditing()
         case "access": store.setAccess(Access(rawValue: rest) ?? .full)

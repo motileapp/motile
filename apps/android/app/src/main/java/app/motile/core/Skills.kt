@@ -44,6 +44,7 @@ fun AppStore.readSkillMenu(beforeCursor: String) {
     val project = composerProject ?: return closeSkillMenu()
     val account = composerAccount ?: return closeSkillMenu()
     skillMenusAsked += 1
+    skillMenuAsking = true
     val asked = skillMenusAsked
     val fields = mapOf(
         "server_id" to project.serverID, "project_id" to project.id, "account" to account.id,
@@ -51,22 +52,31 @@ fun AppStore.readSkillMenu(beforeCursor: String) {
     )
     core.send("skill_menu", fields) { result ->
         if (asked != skillMenusAsked) return@send
-        val answer = result.getOrNull() ?: return@send
+        skillMenuAsking = false
+        val waiting = skillPickWaiting
+        skillPickWaiting = null
+        val answer = result.getOrNull() ?: return@send waiting?.invoke() ?: Unit
         val menu = SkillMenu(answer)
         if (menu.typed != skillMenuDismissed) skillMenuDismissed = null
         if (menu.rows.isEmpty() || skillMenuDismissed != null) {
             skillMenu = null
-            return@send
+            return@send waiting?.invoke() ?: Unit
         }
         if (menu.rows.map { it.name } != skillMenu?.rows?.map { it.name }) skillHighlight = 0
         skillMenu = menu
+        if (waiting != null) pickSkill()
     }
 }
 
 fun AppStore.closeSkillMenu() {
     skillMenusAsked += 1
     skillMenu = null
+    skillMenuAsking = false
+    skillPickWaiting = null
 }
+
+/** The menu is open, or asked for and on its way. */
+val AppStore.skillMenuTakesKeys: Boolean get() = skillMenu != null || skillMenuAsking
 
 /** Leaves the menu closed until something else is typed. */
 fun AppStore.dismissSkillMenu() {
@@ -80,6 +90,13 @@ fun AppStore.moveSkillHighlight(step: Int) {
     skillHighlight = (skillHighlight + step + count) % count
 }
 
+/** Puts the lit skill in place of the word typed, once the menu has come when it is still on its way. With no skill to put in, does [orElse]. */
+fun AppStore.pickLitSkill(orElse: (() -> Unit)?) {
+    if (skillMenu != null) return pickSkill()
+    if (!skillMenuAsking) return orElse?.invoke() ?: Unit
+    skillPickWaiting = orElse ?: {}
+}
+
 /** Puts the skill, or the lit one, in place of the word typed. */
 fun AppStore.pickSkill(row: SkillRow? = null) {
     val menu = skillMenu ?: return
@@ -88,10 +105,11 @@ fun AppStore.pickSkill(row: SkillRow? = null) {
     closeSkillMenu()
 }
 
-fun AppStore.skillKey(key: SkillMenuKey) = when (key) {
+/** What a key does while the menu is open or on its way. A pick with no skill to pick does [orElse]. */
+fun AppStore.skillKey(key: SkillMenuKey, orElse: (() -> Unit)? = null) = when (key) {
     SkillMenuKey.Up -> moveSkillHighlight(-1)
     SkillMenuKey.Down -> moveSkillHighlight(1)
-    SkillMenuKey.Pick -> pickSkill()
+    SkillMenuKey.Pick -> pickLitSkill(orElse)
     SkillMenuKey.Dismiss -> dismissSkillMenu()
 }
 
