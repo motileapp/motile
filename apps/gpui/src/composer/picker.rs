@@ -15,7 +15,7 @@ use super::{access_symbol, effort_label, effort_symbol};
 use crate::models::{ACCESSES, AGENTS, ComposerPickerPart, ModelInfoExt, access_detail, access_label, agent_name};
 use crate::store::Store;
 use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, Surface, TextSize, colors};
-use crate::ui::dropdown::{backdrop, over_content};
+use crate::ui::dropdown::{GAP, backdrop, over_content};
 use crate::ui::dropdown_list::{self as list, PADDING};
 use crate::ui::menu::Anchor;
 use crate::ui::parts::{hidden_edges, with_edge_fades};
@@ -30,8 +30,6 @@ const SHORTEST: f32 = 180.;
 const HEADER_GAP: f32 = 6.;
 /// The picker and its lines, as wide as its columns make it.
 pub const WIDTH: f32 = RAIL_WIDTH + LIST_WIDTH + SETTINGS_WIDTH + 4.;
-/// The room between the picker and the button it opens from.
-pub const GAP: f32 = 4.;
 /// Around the access button, alike above, below and beside it.
 const FOOTER_PADDING: f32 = PADDING + 2.;
 const FOOTER_HEIGHT: f32 = ControlSize::Regular.height() + 2. * FOOTER_PADDING;
@@ -43,7 +41,7 @@ const ACCESS_MENU_PADDING: (f32, f32) = (12., 14.);
 /// How far the tabs reach past the words' edges, into the menu's padding.
 const ACCESS_TABS_OUTSET: f32 = 4.;
 /// Over the columns, just above the footer's button, as a menu opens above what opened it.
-const ACCESS_MENU_LIFT: f32 = FOOTER_HEIGHT + 4.;
+const ACCESS_MENU_LIFT: f32 = FOOTER_PADDING + ControlSize::Regular.height() + GAP;
 
 struct Group {
     title: String,

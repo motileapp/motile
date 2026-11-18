@@ -562,7 +562,7 @@ private struct ComposerPicker: View {
     }
 
     /// Over the columns, just above the footer's button, as a menu opens above what opened it.
-    private static let accessMenuLift = ControlSize.regular.height + 2 * footerPadding + 4
+    private static let accessMenuLift = footerPadding + ControlSize.regular.height + OpenDropdown.gap
 
     /// The access modes as one row of their symbols, the one under the pointer or the arrow keys
     /// named and told about under it.
