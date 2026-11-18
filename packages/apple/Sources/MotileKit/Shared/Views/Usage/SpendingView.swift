@@ -71,6 +71,7 @@ struct SpendingView: View {
         .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .onChange(of: period) { pointed = nil }
+        .lettingGo { pointed = nil }
     }
 
     private var summary: some View {

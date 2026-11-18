@@ -3,6 +3,7 @@ package app.motile.usage
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -10,7 +11,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -36,23 +40,29 @@ fun UsageModel.serverChecks(all: List<Server>): List<Check> =
 @Composable
 fun UsageContent(model: UsageModel, modifier: Modifier = Modifier, margin: Dp = 24.dp, top: Dp = 20.dp) {
     val scroll = rememberScrollState()
-    Box(modifier.fillMaxWidth().edgeFade(above = { scroll.value.toFloat() }, below = { 0f }).verticalScroll(scroll), contentAlignment = Alignment.TopCenter) {
-        Column(
-            Modifier.widthIn(max = Theme.contentWidth).fillMaxWidth().padding(start = margin, end = margin, top = top, bottom = 80.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            when (model.tab) {
-                // `LimitsList` shows it, as groups of its own.
-                UsageModel.Tab.Limits -> Unit
-                UsageModel.Tab.Activity -> when (val activity = model.activity) {
-                    Loaded.Loading -> UsageLoading()
-                    is Loaded.Failed -> UsageNote(activity.message)
-                    is Loaded.Ready -> ActivityView(activity.value, model.period)
-                }
-                UsageModel.Tab.Spend -> when (val spending = model.spending) {
-                    Loaded.Loading -> UsageLoading()
-                    is Loaded.Failed -> UsageNote(spending.message)
-                    is Loaded.Ready -> SpendingView(spending.value, model.measure, { model.measure = it }, model.period)
+    val letGo = remember { mutableIntStateOf(0) }
+    Box(
+        modifier.fillMaxSize().edgeFade(above = { scroll.value.toFloat() }, below = { 0f }).lettingGo(letGo).verticalScroll(scroll),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        CompositionLocalProvider(LocalLetGo provides letGo) {
+            Column(
+                Modifier.widthIn(max = Theme.contentWidth).fillMaxWidth().padding(start = margin, end = margin, top = top, bottom = 80.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                when (model.tab) {
+                    // `LimitsList` shows it, as groups of its own.
+                    UsageModel.Tab.Limits -> Unit
+                    UsageModel.Tab.Activity -> when (val activity = model.activity) {
+                        Loaded.Loading -> UsageLoading()
+                        is Loaded.Failed -> UsageNote(activity.message)
+                        is Loaded.Ready -> ActivityView(activity.value, model.period)
+                    }
+                    UsageModel.Tab.Spend -> when (val spending = model.spending) {
+                        Loaded.Loading -> UsageLoading()
+                        is Loaded.Failed -> UsageNote(spending.message)
+                        is Loaded.Ready -> SpendingView(spending.value, model.measure, { model.measure = it }, model.period)
+                    }
                 }
             }
         }

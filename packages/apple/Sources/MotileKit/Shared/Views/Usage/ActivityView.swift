@@ -99,6 +99,7 @@ struct ActivityView: View {
         .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .onChange(of: period) { pointed = nil }
+        .lettingGo { pointed = nil }
     }
 
     // MARK: Tiles
@@ -828,6 +829,7 @@ private struct ActivityHeatmap: View {
             caption
         }
         .onChange(of: [heatmap.columns, heatmap.cells.count, heatmap.latest]) { chosen = nil }
+        .lettingGo { chosen = nil }
     }
 
     private var cells: some View {
