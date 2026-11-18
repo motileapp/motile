@@ -178,7 +178,7 @@ private struct ComposerPicker: View {
                 settingsColumn(settings)
                     .frame(width: Self.settingsWidth)
             }
-            .frame(minHeight: Self.shortest, maxHeight: Self.height)
+            .frame(minHeight: Self.shortest, idealHeight: Self.height, maxHeight: Self.height)
             ThemeDivider()
             footer
         }
