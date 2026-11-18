@@ -1,0 +1,43 @@
+name: Retry
+
+# When GitHub has no macOS runner free, it cancels the job after 15 minutes ("The job was not acquired
+# by Runner of type hosted even after multiple attempts") and the run fails without having run a check.
+# Runs those jobs again, once, while the run's commit is still its branch's latest.
+on:
+  workflow_run:
+    workflows: [CI, Release, iOS, Android, macOS]
+    types: [completed]
+
+permissions:
+  actions: write
+  checks: read
+  contents: read
+
+jobs:
+  retry:
+    if: >-
+      github.event.workflow_run.run_attempt == 1 &&
+      (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'cancelled')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN: ${{ github.event.workflow_run.id }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+      BRANCH: ${{ github.event.workflow_run.head_branch }}
+    steps:
+      - name: Retry the jobs no runner took
+        run: |
+          latest="$(gh api "repos/$GITHUB_REPOSITORY/commits/$BRANCH" --jq .sha)"
+          if [ "$latest" != "$SHA" ]; then
+            echo "$BRANCH has moved on; nothing to retry."
+            exit 0
+          fi
+          for job in $(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/jobs" --jq '.jobs[] | select(.conclusion == "cancelled") | .id'); do
+            if gh api "repos/$GITHUB_REPOSITORY/check-runs/$job/annotations" --jq '.[].message' | grep -q "not acquired by Runner"; then
+              echo "Job $job got no runner; running the failed jobs again."
+              gh run rerun "$RUN" --failed --repo "$GITHUB_REPOSITORY"
+              exit 0
+            fi
+          done
+          echo "No job went without a runner."

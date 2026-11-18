@@ -786,6 +786,18 @@ async fn states_until_connected(events: &mut mpsc::UnboundedReceiver<(String, Li
     states
 }
 
+/// Waits for the link to say `state`, past what the connection before it still says.
+async fn reaches(events: &mut mpsc::UnboundedReceiver<(String, LinkEvent)>, state: State) {
+    loop {
+        let (_, event) = tokio::time::timeout(TIMEOUT, events.recv()).await.expect("the link didn't change").unwrap();
+        if let LinkEvent::Status(status) = event
+            && status.state == state
+        {
+            return;
+        }
+    }
+}
+
 #[tokio::test]
 async fn a_link_given_a_new_endpoint_leaves_the_old_one_and_connects_again() {
     let harness = Harness::start("fixtures/read-and-bash.jsonl", "0").await;
@@ -795,7 +807,8 @@ async fn a_link_given_a_new_endpoint_leaves_the_old_one_and_connects_again() {
     assert_eq!(states_until_connected(&mut received).await, [State::Connected]);
 
     link.redial_on(bind(&harness.app_key, true).await.unwrap());
-    assert_eq!(states_until_connected(&mut received).await, [State::Connecting, State::Connected]);
+    reaches(&mut received, State::Connecting).await;
+    reaches(&mut received, State::Connected).await;
 
     stale.close().await;
     let add = Request::AddProject { path: harness.folder("project") };
