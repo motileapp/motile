@@ -33,6 +33,7 @@ pub fn questions(store: &Entity<Store>, approval: &Waiting, room: StripRoom, cx:
         option_row(store, index, position, option, picked, question.multiple, cx)
     });
     let typed = state.typed_answer(approval).trim().to_string();
+    let written_chosen = state.is_written_chosen(approval);
     let (back, refuse, next) = (store.clone(), store.clone(), store.clone());
     let refuse_id = approval.id.clone();
     let text = div()
@@ -55,6 +56,7 @@ pub fn questions(store: &Entity<Store>, approval: &Waiting, room: StripRoom, cx:
         store,
         index,
         typed,
+        written_chosen,
         question.multiple,
         cx,
     ));
@@ -200,13 +202,20 @@ fn option_row(
 }
 
 /// The last row, which shows the answer written in the composer, or says to write one there.
-fn own_answer(store: &Entity<Store>, index: usize, typed: String, multiple: bool, cx: &App) -> Stateful<Div> {
+fn own_answer(
+    store: &Entity<Store>,
+    index: usize,
+    typed: String,
+    picked: bool,
+    multiple: bool,
+    cx: &App,
+) -> Stateful<Div> {
     let c = colors(cx);
     let written = !typed.is_empty();
-    let (pressed, face) = row(SharedString::from("own-answer"), written, cx);
+    let (pressed, face) = row(SharedString::from("own-answer"), picked, cx);
     let store = store.clone();
     let mark = if written {
-        PickMark::new(SharedString::from(format!("pick-{index}-own")), true, multiple).into_any_element()
+        PickMark::new(SharedString::from(format!("pick-{index}-own")), picked, multiple).into_any_element()
     } else {
         div()
             .w(px(PickMark::SIZE))
@@ -230,6 +239,9 @@ fn own_answer(store: &Entity<Store>, index: usize, typed: String, multiple: bool
     );
     pressed.child(face).on_click(move |_, _, cx| {
         store.update(cx, |store, cx| {
+            if !multiple {
+                store.choose_written();
+            }
             store.composer_focus += 1;
             cx.notify();
         })

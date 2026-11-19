@@ -24,10 +24,12 @@ import app.motile.core.Approval
 import app.motile.core.Question
 import app.motile.core.canGoOn
 import app.motile.core.choose
+import app.motile.core.chooseWritten
 import app.motile.core.goBack
 import app.motile.core.goOn
 import app.motile.core.isChosen
 import app.motile.core.isLastQuestion
+import app.motile.core.isWrittenChosen
 import app.motile.core.question
 import app.motile.core.questionIndex
 import app.motile.core.typedAnswer
@@ -128,14 +130,19 @@ private fun OwnAnswerRow(approval: Approval, multiple: Boolean) {
     val store = LocalStore.current
     val palette = Theme.colors
     val written = store.typedAnswer(approval).trim()
-    HighlightButton({ store.focusComposer() }, Modifier.fillMaxWidth(), radius = Radius.md, fill = palette.borderComposer) {
-        Row(Modifier.fillMaxWidth().picked(written.isNotEmpty(), pickedLook()).padding(horizontal = optionReach, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(markGap)) {
+    val picked = store.isWrittenChosen(approval)
+    val choose = {
+        if (!multiple) store.chooseWritten(approval)
+        store.focusComposer()
+    }
+    HighlightButton(choose, Modifier.fillMaxWidth(), radius = Radius.md, fill = palette.borderComposer) {
+        Row(Modifier.fillMaxWidth().picked(picked, pickedLook()).padding(horizontal = optionReach, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(markGap)) {
             if (written.isEmpty()) {
                 Box(Modifier.width(PickMark.size).padding(top = 2.dp), contentAlignment = Alignment.Center) {
                     Icon(Symbol.PencilLine, IconSize.Sm, color = palette.mutedForeground)
                 }
             } else {
-                PickMark(true, multiple, Modifier.padding(top = 2.dp))
+                PickMark(picked, multiple, Modifier.padding(top = 2.dp))
             }
             Text(
                 written.ifEmpty { if (multiple) "Add your own answer below" else "Or type your own answer below" }, Modifier.weight(1f), size = TextSize.Sm, weight = FontWeight.Medium,

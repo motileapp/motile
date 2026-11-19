@@ -100,7 +100,9 @@ struct QuestionsView: View {
     /// The last row, which shows the answer written in the composer, or says to write one there.
     private func ownAnswer(multiple: Bool) -> some View {
         let written = store.typedAnswer(approval).trimmingCharacters(in: .whitespacesAndNewlines)
+        let picked = store.isWrittenChosen(approval)
         return Button {
+            if !multiple { store.chooseWritten(in: approval) }
             store.focusComposer()
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: Self.markGap) {
@@ -110,7 +112,7 @@ struct QuestionsView: View {
                             .foregroundStyle(Color.themeMutedForeground)
                             .frame(width: PickMark.size)
                     } else {
-                        PickMark(picked: true, multiple: multiple)
+                        PickMark(picked: picked, multiple: multiple)
                     }
                 }
                 .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 4.5 }
@@ -124,7 +126,7 @@ struct QuestionsView: View {
             .multilineTextAlignment(.leading)
             .padding(.vertical, 8)
             .padding(.horizontal, Self.optionReach)
-            .picked(!written.isEmpty)
+            .picked(picked)
         }
         .buttonStyle(.highlight(radius: Radius.md))
     }

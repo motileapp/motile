@@ -1,6 +1,6 @@
 //! How far the questions of a tool call are answered: the one that shows, the options chosen for
-//! each, and what was written for each in the composer: in place of the one option a question
-//! takes, or beside those of one that takes several.
+//! each, what was written for each in the composer, and the questions taking one answer whose
+//! chosen answer is what was written. What was written stays when an option is chosen instead.
 
 use std::collections::{BTreeSet, HashMap};
 use std::time::Duration;
@@ -15,6 +15,7 @@ pub struct QuestionAnswers {
     index: usize,
     chosen: HashMap<String, BTreeSet<String>>,
     typed: HashMap<String, String>,
+    written_chosen: BTreeSet<String>,
 }
 
 impl Store {
@@ -45,21 +46,41 @@ impl Store {
         answers.and_then(|answers| answers.typed.get(question)).cloned().unwrap_or_default()
     }
 
+    /// Writing chooses what is written as the answer.
     pub(super) fn write_answer(&mut self, text: String) {
         let Some(approval) = self.asking() else { return };
+        if text == self.typed_answer(approval) {
+            return;
+        }
         let (id, question) = (approval.id.clone(), self.question(approval).text.clone());
-        let typed = &mut self.question_answers.entry(id).or_default().typed;
+        let answers = self.question_answers.entry(id).or_default();
+        answers.written_chosen.insert(question.clone());
         if text.is_empty() {
-            typed.remove(&question);
+            answers.typed.remove(&question);
         } else {
-            typed.insert(question, text);
+            answers.typed.insert(question, text);
         }
     }
 
-    /// What is written counts in place of the one option a question takes, so none shows as chosen
-    /// beside it.
+    /// Whether what is written counts: beside the options of a question that takes several, or as
+    /// the one answer when it was written or chosen last.
+    pub fn is_written_chosen(&self, approval: &Waiting) -> bool {
+        if self.typed_answer(approval).trim().is_empty() {
+            return false;
+        }
+        let question = self.question(approval);
+        let answers = self.question_answers.get(&approval.id);
+        question.multiple || answers.is_some_and(|answers| answers.written_chosen.contains(&question.text))
+    }
+
+    pub fn choose_written(&mut self) {
+        let Some(approval) = self.asking() else { return };
+        let (id, question) = (approval.id.clone(), self.question(approval).text.clone());
+        self.question_answers.entry(id).or_default().written_chosen.insert(question);
+    }
+
     pub fn is_chosen(&self, approval: &Waiting, label: &str) -> bool {
-        if !self.question(approval).multiple && !self.typed_answer(approval).trim().is_empty() {
+        if !self.question(approval).multiple && self.is_written_chosen(approval) {
             return false;
         }
         let question = &self.question(approval).text;
@@ -75,8 +96,8 @@ impl Store {
             (approval.id.clone(), self.question(approval).clone(), self.question_index(approval));
         let advances = !question.multiple && !self.is_last_question(approval);
         let answers = self.question_answers.entry(id.clone()).or_default();
-        if !question.multiple && answers.typed.remove(&question.text).is_some() {
-            self.draft_version += 1;
+        if !question.multiple {
+            answers.written_chosen.remove(&question.text);
         }
         let picked = answers.chosen.entry(question.text).or_default();
         if !question.multiple {
@@ -107,7 +128,8 @@ impl Store {
         let state = self.question_answers.get(&approval.id).cloned().unwrap_or_default();
         let mut answers = HashMap::new();
         for question in &approval.questions {
-            let written = state.typed.get(&question.text).map(|text| text.trim()).unwrap_or_default();
+            let typed = state.typed.get(&question.text).map(|text| text.trim()).unwrap_or_default();
+            let written = if question.multiple || state.written_chosen.contains(&question.text) { typed } else { "" };
             let chosen = state.chosen.get(&question.text);
             let picked: Vec<&str> = question
                 .options

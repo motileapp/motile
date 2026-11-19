@@ -5,13 +5,14 @@ import android.os.Looper
 
 /**
  * How far the questions of a tool call are answered: the one that shows, the options chosen for
- * each, and what was written for each in the composer: in place of the one option a question
- * takes, or beside those of one that takes several.
+ * each, what was written for each in the composer, and the questions taking one answer whose
+ * chosen answer is what was written. What was written stays when an option is chosen instead.
  */
 data class QuestionAnswers(
     val index: Int = 0,
     val chosen: Map<String, Set<String>> = emptyMap(),
     val typed: Map<String, String> = emptyMap(),
+    val writtenChosen: Set<String> = emptySet(),
 )
 
 private val main = Handler(Looper.getMainLooper())
@@ -39,14 +40,29 @@ fun AppStore.isLastQuestion(approval: Approval): Boolean = questionIndex(approva
 /** What was written for the question that shows. */
 fun AppStore.typedAnswer(approval: Approval): String = answersOf(approval).typed[question(approval).id] ?: ""
 
+/** Writing chooses what is written as the answer. */
 fun AppStore.writeAnswer(text: String, approval: Approval) {
+    if (text == typedAnswer(approval)) return
     val id = question(approval).id
-    update(approval) { it.copy(typed = if (text.isEmpty()) it.typed - id else it.typed + (id to text)) }
+    update(approval) {
+        it.copy(typed = if (text.isEmpty()) it.typed - id else it.typed + (id to text), writtenChosen = it.writtenChosen + id)
+    }
 }
 
-/** What is written counts in place of the one option a question takes, so none shows as chosen beside it. */
+/** Whether what is written counts: beside the options of a question that takes several, or as the one answer when it was written or chosen last. */
+fun AppStore.isWrittenChosen(approval: Approval): Boolean {
+    if (typedAnswer(approval).isBlank()) return false
+    val question = question(approval)
+    return question.multiple || question.id in answersOf(approval).writtenChosen
+}
+
+fun AppStore.chooseWritten(approval: Approval) {
+    val id = question(approval).id
+    update(approval) { it.copy(writtenChosen = it.writtenChosen + id) }
+}
+
 fun AppStore.isChosen(option: Question.Choice, approval: Approval): Boolean {
-    if (!question(approval).multiple && typedAnswer(approval).isNotBlank()) return false
+    if (!question(approval).multiple && isWrittenChosen(approval)) return false
     return answersOf(approval).chosen[question(approval).id]?.contains(option.label) == true
 }
 
@@ -61,8 +77,8 @@ fun AppStore.choose(option: Question.Choice, approval: Approval) {
             option.label in picked -> picked - option.label
             else -> picked + option.label
         }
-        val typed = if (question.multiple) answers.typed else answers.typed - question.id
-        answers.copy(typed = typed, chosen = answers.chosen + (question.id to chosen))
+        val writtenChosen = if (question.multiple) answers.writtenChosen else answers.writtenChosen - question.id
+        answers.copy(writtenChosen = writtenChosen, chosen = answers.chosen + (question.id to chosen))
     }
     if (question.multiple || isLastQuestion(approval)) return
     main.postDelayed({
@@ -77,7 +93,8 @@ fun AppStore.answers(approval: Approval): Map<String, String> {
     val state = answersOf(approval)
     return buildMap {
         for (question in approval.questions) {
-            val written = (state.typed[question.id] ?: "").trim()
+            val typed = (state.typed[question.id] ?: "").trim()
+            val written = if (question.multiple || question.id in state.writtenChosen) typed else ""
             val picked = question.options.map { it.label }.filter { state.chosen[question.id]?.contains(it) == true }
             val parts = if (question.multiple) picked + written else listOf(written.ifEmpty { picked.firstOrNull() ?: "" })
             val answer = parts.filter { it.isNotEmpty() }.joinToString(", ")
