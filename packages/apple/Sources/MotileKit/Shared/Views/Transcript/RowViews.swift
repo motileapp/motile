@@ -24,6 +24,8 @@ protocol RowOwner: AnyObject {
     func cancelFetch(id: String)
     /// Opens the images and videos in the viewer, on the one at `index`.
     func view(_ media: [ViewedMedia], at index: Int)
+    /// Opens an HtmlView's page over the window.
+    func expand(_ page: ExpandedPage)
     /// Gives the agent a queued message now, or takes it back into the composer.
     func sendQueued(messageID: String)
     func cancelQueued(messageID: String)

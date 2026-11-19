@@ -36,6 +36,7 @@ struct TranscriptRepresentable {
         view.onFetchFile = { id, done in store.fetchMedia(id, done: done) }
         view.onCancelFetch = { id in store.cancelMedia(id) }
         view.onViewMedia = { media, index in store.view(media, at: index) }
+        view.onExpandPage = { page in store.expand(page) }
         view.onSendQueued = { messageID in store.sendNow(queued: messageID) }
         view.onCancelQueued = { messageID in store.takeBack(queued: messageID) }
         view.onOpenAgent = { itemID in store.rightPanel.showAgent(itemID) }

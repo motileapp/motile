@@ -37,10 +37,17 @@ class UiFrames {
         if (label != null) labels[id] = label
     }
 
-    /** The bounds in the window, in pixels, of the last node laid out with the label. */
+    /** Controls that aren't nodes, as the pill under a page, by their label: found, but not among the frames. */
+    private val controls = HashMap<String, LayoutCoordinates>()
+
+    fun control(label: String, coordinates: LayoutCoordinates) {
+        controls[label] = coordinates
+    }
+
+    /** The bounds in the window, in pixels, of the last node laid out with the label, else of the control. */
     fun bounds(label: String): Rect? {
-        val id = nodes.keys.lastOrNull { labels[it] == label } ?: return null
-        return nodes[id]?.takeIf { it.isAttached }?.boundsInWindow()
+        val coordinates = nodes.keys.lastOrNull { labels[it] == label }?.let(nodes::get) ?: controls[label] ?: return null
+        return coordinates.takeIf { it.isAttached }?.boundsInWindow()
     }
 
     /** `{"<node id>": [x, y, width, height], …}` in points from the row's top left, while the views are on screen. */
@@ -66,6 +73,13 @@ val LocalUiFrames = staticCompositionLocalOf<UiFrames?> { null }
 fun Modifier.uiFrame(id: String, label: String? = null): Modifier {
     val frames = LocalUiFrames.current ?: return this
     return onGloballyPositioned { frames.node(id, it, label) }
+}
+
+/** Records where a control that isn't a node is, by its label, while frames are being taken. */
+@Composable
+fun Modifier.uiControl(label: String): Modifier {
+    val frames = LocalUiFrames.current ?: return this
+    return onGloballyPositioned { frames.control(label, it) }
 }
 
 /**

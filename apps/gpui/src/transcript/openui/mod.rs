@@ -26,6 +26,7 @@ use motile_core::render::rows::RowKind;
 #[allow(unused_imports, reason = "for the cross-client drift test")]
 pub use frames::frame_dump;
 pub use frames::{Framed, record as record_frames, recorded as recorded_frames};
+pub use web::full_screen as full_screen_page;
 
 use super::model::RowModel;
 use super::rows::{RowContext, error_box, row_key};

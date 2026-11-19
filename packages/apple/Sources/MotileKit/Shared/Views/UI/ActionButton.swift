@@ -81,7 +81,7 @@ struct ControlLook {
         case .ghost: AnyShapeStyle(selected ? surface.color(.controlLit) : lit ? ghostLit : .clear)
         case .link: lit ? AnyShapeStyle(Color.themePrimary.wash()) : AnyShapeStyle(Color.clear)
         case .accent: AnyShapeStyle(Color.themePrimary.wash(lit: lit))
-        case .overlay: AnyShapeStyle(lit ? Color.themeControlLitOverPicture : Color.themeControlOverPicture)
+        case .overlay: AnyShapeStyle(lit ? Color.themeControlBorderOverPicture : Color.themeControlOverPicture)
         }
     }
 
@@ -186,7 +186,7 @@ extension ControlLook {
         case .ghost: return selected ? surface.platform(.controlLit) : lit ? platformGhostLit : .clear
         case .link: return lit ? Theme.primaryTint : .clear
         case .accent: return lit ? Theme.primaryTintStronger : Theme.primaryTint
-        case .overlay: return lit ? Theme.controlLitOverPicture : Theme.controlOverPicture
+        case .overlay: return lit ? Theme.controlBorderOverPicture : Theme.controlOverPicture
         }
     }
 
@@ -243,6 +243,8 @@ struct ControlLabel: View {
     var proxied = false
     /// What the words name is pinned to one of the gateway's accounts, which a pin after its symbol says.
     var pinned = false
+    /// Its symbol stands as far from its side as its words do, which a pill's round ends want.
+    var centered = false
 
     private var wordless: Bool { title == nil && !chevron }
     private var markSize: IconSize {
@@ -273,7 +275,7 @@ struct ControlLabel: View {
             }
         }
         .frame(maxWidth: fills ? .infinity : nil, alignment: Alignment(horizontal: alignment, vertical: .center))
-        .padding(.leading, wordless ? 0 : sidePadding - (icon == nil ? 0 : size.symbolOutset) + pictureInset)
+        .padding(.leading, wordless ? 0 : sidePadding - (icon == nil || centered ? 0 : size.symbolOutset) + pictureInset)
         .padding(.trailing, wordless ? 0 : sidePadding - (chevron ? size.chevronOutset : 0))
         .frame(minWidth: size.height)
         .frame(height: size.height)
@@ -656,7 +658,7 @@ struct ActionButton: View {
                 pendingTitle: pendingTitle, fills: fills,
                 alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding, detail: detail, place: place,
                 tinted: look.tint.flatMap { tint in tinted.map { (words: $0, color: tint) } }, proxied: proxied,
-                pinned: pinned
+                pinned: pinned, centered: look.round
             )
             .padding(reach.around)
         }

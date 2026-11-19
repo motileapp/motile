@@ -23,6 +23,13 @@ struct WebPage: Decodable {
     let script: String?
     let handler: String
     let height: Heights
+    let fit: Fit
+
+    /// How the page is zoomed to fill the window it is open over (`web::Fit`).
+    struct Fit: Decodable {
+        let script: String
+        let max: CGFloat
+    }
 
     /// What the page's reporter says.
     enum Message {
@@ -101,6 +108,21 @@ enum WebHeights {
 final class WebPageView: FlippedView, WKNavigationDelegate, WKUIDelegate {
     /// Called on the main thread with each height the page reports.
     var onHeight: ((CGFloat) -> Void)?
+    /// Open over the window, it is zoomed to fill as much of it as it can.
+    var fills = false {
+        didSet {
+            guard fills != oldValue else { return }
+            guard fills else {
+                onContent = nil
+                return webView.pageZoom = 1
+            }
+            refit()
+        }
+    }
+    /// Called while it fills with how tall its content is drawn, zoomed, so that what holds it can
+    /// leave out the room the page doesn't use.
+    var onContent: ((CGFloat) -> Void)?
+    private var fitting = false
 
     private let page: WebPage
     private let player: Bool
@@ -144,14 +166,38 @@ final class WebPageView: FlippedView, WKNavigationDelegate, WKUIDelegate {
     override func layout() {
         super.layout()
         webView.frame = bounds
+        refitSoon()
     }
     #else
     override func layoutSubviews() {
         super.layoutSubviews()
         webView.frame = bounds
         webView.scrollView.isScrollEnabled = reported > bounds.height + 1
+        refitSoon()
     }
     #endif
+
+    /// Once the page has been laid out at its new size.
+    private func refitSoon() {
+        guard fills else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in self?.refit() }
+    }
+
+    /// Zooms the page by what core's script says it has room for; the height it reports then
+    /// asks again, until the answer settles.
+    private func refit() {
+        guard fills, !fitting else { return }
+        fitting = true
+        webView.evaluateJavaScript(page.fit.script, in: nil, in: .world(name: "motile")) { [weak self] result in
+            guard let self else { return }
+            fitting = false
+            guard fills, case .success(let answer) = result, let ratio = (answer as? NSNumber).map({ CGFloat($0.doubleValue) }), ratio.isFinite else { return }
+            let zoom = min(max(webView.pageZoom * ratio, 1), page.fit.max)
+            guard abs(zoom - webView.pageZoom) > 0.01 else { return }
+            webView.pageZoom = zoom
+            onContent?(reported * zoom)
+        }
+    }
 
     /// The height the page last reported, which a taller page than its view scrolls inside.
     private var reported: CGFloat = 0
@@ -172,6 +218,8 @@ final class WebPageView: FlippedView, WKNavigationDelegate, WKUIDelegate {
         #if os(iOS)
         setNeedsLayout()
         #endif
+        refit()
+        if fills { onContent?(height * webView.pageZoom) }
         onHeight?(height)
     }
 

@@ -118,6 +118,10 @@ final class ProgramRowView: RowView, ProgramHost {
 
     var streaming: Bool { content?.complete == false }
 
+    func expand(_ page: ExpandedPage) {
+        owner?.expand(page)
+    }
+
     func watchViewport(_ image: ProgramImageView) {
         images.add(image)
         guard !lookingSoon else { return }

@@ -467,6 +467,8 @@ final class AppStore {
     private var attachmentsByKey: [String: [Attachment]] = [:]
     /// The images and videos the viewer has open over the window.
     private(set) var viewing: Viewing?
+    /// An HtmlView's page open over the window.
+    private(set) var expandedPage: ExpandedPage?
 
     /// Counts up when the folder the open thread works in may have changed: a turn ended there,
     /// or git did something.
@@ -2363,7 +2365,7 @@ final class AppStore {
     /// maximized right panel, or hides a right panel that only has its blank tab. Nothing while
     /// the command panel, the viewer or the branches have it.
     var escapes: (() -> Void)? {
-        guard panel == nil, viewing == nil, !showsBranches else { return nil }
+        guard panel == nil, viewing == nil, expandedPage == nil, !showsBranches else { return nil }
         if settings != nil || showsUsage { return { [self] in closeRoute() } }
         if find.active { return { [self] in closeFind() } }
         if rightPanel.isMaximized { return { [self] in rightPanel.toggleMaximized() } }
@@ -3273,6 +3275,18 @@ final class AppStore {
 
     func closeViewer() {
         viewing = nil
+        composerFocus += 1
+    }
+
+    func expand(_ page: ExpandedPage) {
+        expandedPage?.close()
+        expandedPage = page
+    }
+
+    func closeExpandedPage() {
+        guard let page = expandedPage else { return }
+        expandedPage = nil
+        page.close()
         composerFocus += 1
     }
 

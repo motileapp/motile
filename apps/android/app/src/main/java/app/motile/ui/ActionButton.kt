@@ -198,7 +198,7 @@ data class ControlLook(
             }
             ButtonVariant.Link -> if (lit) palette.primary.at(Opacity.ColorTint, dark) else Color.Transparent
             ButtonVariant.Accent -> palette.primary.at(if (lit) Opacity.ColorTintStronger else Opacity.ColorTint, dark)
-            ButtonVariant.Overlay -> if (lit) OverPicture.controlLit else OverPicture.control
+            ButtonVariant.Overlay -> if (lit) OverPicture.controlBorder else OverPicture.control
         }
     }
 
@@ -355,6 +355,8 @@ fun ControlLabel(
     chevronUp: Boolean = false,
     /** Its words are the prose's, as the text it stands under. */
     prose: Boolean = false,
+    /** Its symbol stands as far from its side as its words do, which a pill's round ends want. */
+    centered: Boolean = false,
 ) {
     val font = if (prose) Theme.proseFont else size.font
     val (wordsShift, chevronShift) = if (prose) proseShifts(size.height) else 0.dp to 0.dp
@@ -363,7 +365,7 @@ fun ControlLabel(
     val waitingTitle = if (pending) pendingTitle else null
     val sidePadding = padding ?: size.padding
     val pictureInset = if (icon is ControlIcon.Picture && symbolSize != null) (size.symbolSide - symbolSide(symbolSize)) / 2 else 0.dp
-    val leading = if (wordless) 0.dp else sidePadding - (if (icon == null) 0.dp else size.symbolOutset) + pictureInset
+    val leading = if (wordless) 0.dp else sidePadding - (if (icon == null || centered) 0.dp else size.symbolOutset) + pictureInset
     val trailing = if (wordless) 0.dp else sidePadding - (if (chevron) size.chevronOutset else 0.dp)
     val width = if (fills) Modifier.fillMaxWidth() else Modifier
     val pictureSide = symbolSide(markSize)
@@ -667,6 +669,7 @@ fun ActionButton(
             words, ControlIcon.of(icon, picture, pictures), size, chevron = opens || expanded != null, pending = pending, pendingTitle = pendingTitle, fills = fills,
             alignment = alignment, symbolSize = symbolSize, gap = gap, padding = padding, detail = detail, place = place,
             tinted = tinted?.let { tail -> tint?.let { tail to it } }, proxied = proxied, pinned = pinned, chevronUp = expanded == true, prose = prose,
+            centered = round,
         )
     }
     if (!inline) {

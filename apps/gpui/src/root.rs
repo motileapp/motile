@@ -268,6 +268,7 @@ impl Render for Root {
             })
             .children(self.panel.clone())
             .children(self.viewer.clone())
+            .children(crate::transcript::openui::full_screen_page(&self.moving, window, cx))
             .children(crate::ui::menu::layer(window, cx))
             .when_some(error, |root, (error, leaving)| {
                 let (title, message) = error_alert(&error);

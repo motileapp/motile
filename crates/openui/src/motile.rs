@@ -146,7 +146,10 @@ const MEDIUM_RULE: &str = "Pick the medium that shows the idea: Chart for number
                            or glTF, inline, in three.js) to rotate and zoom. An HtmlView page starts on the \
                            thread's own background and text color, light or dark as the user's Motile is: a page \
                            that paints its own reads them with getComputedStyle (the root's background and \
-                           color-scheme, the body's color), so that it sits in the thread.";
+                           color-scheme, the body's color), so that it sits in the thread. The user can open an \
+                           HtmlView full screen, at any size and shape: lay its main area out to fill the viewport \
+                           (100vw and 100vh, flex), not at a fixed width or height, unless what it draws needs a \
+                           fixed aspect ratio.";
 
 const CHANGE_RULE: &str = "To change a program from an earlier answer, write a patch with the statements that \
                            change, keeping its statement and $variable names. When you write a new program instead, \

@@ -51,7 +51,6 @@ enum Theme {
     /// A control as it is in the dark, over a picture: the background's accent, stronger when lit,
     /// inside a line of the strongest accent.
     static let controlOverPicture = resolved(backgroundAccent, dark: true)
-    static let controlLitOverPicture = resolved(backgroundAccentStronger, dark: true)
     static let controlBorderOverPicture = resolved(backgroundAccentStrongest, dark: true)
     /// A colour's wash: the colour at color-tint. Chips, notices, diff lines.
     static let primaryTint = thinned(primary, .colorTint)
@@ -476,7 +475,6 @@ extension Color {
     static let themeForegroundOverPicture = Color(platform: Theme.foregroundOverPicture)
     static let themeMutedForegroundOverPicture = Color(platform: Theme.mutedForegroundOverPicture)
     static let themeControlOverPicture = Color(platform: Theme.controlOverPicture)
-    static let themeControlLitOverPicture = Color(platform: Theme.controlLitOverPicture)
     static let themeControlBorderOverPicture = Color(platform: Theme.controlBorderOverPicture)
     static let themeScrim = Color(platform: Theme.scrim)
     static let themeScrimStronger = Color(platform: Theme.scrimStronger)

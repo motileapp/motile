@@ -94,6 +94,8 @@ func fieldFill(_ surface: Surface) -> PlatformColor {
 /// is given, with what it says in its middle.
 class ControlView: FlippedView {
     let size: ControlSize
+    /// Its symbol in another size than its words', as `ActionButton`'s `symbolSize`.
+    let symbolSize: IconSize?
     var variant: ButtonVariant { didSet { paint() } }
     var title: String? { didSet { paint(); relayout() } }
     var symbol: Symbol? { didSet { showMark() } }
@@ -112,6 +114,8 @@ class ControlView: FlippedView {
     /// Its words are what it shows while nothing is chosen, in a field's placeholder colour.
     var placeholder = false { didSet { paint() } }
     var fills = false
+    /// A pill, its ends round.
+    var round = false { didSet { paint() } }
     /// Its words start at its start and its chevron stands at its end, as a select's do.
     var opens = false {
         didSet {
@@ -130,10 +134,11 @@ class ControlView: FlippedView {
 
     init(
         _ title: String?, symbol: Symbol? = nil, help: String? = nil, variant: ButtonVariant = .secondary, size: ControlSize = .regular,
-        action: @escaping () -> Void
+        symbolSize: IconSize? = nil, action: @escaping () -> Void
     ) {
         self.title = title
         self.symbol = symbol
+        self.symbolSize = symbolSize
         self.help = help
         self.variant = variant
         self.size = size
@@ -161,28 +166,42 @@ class ControlView: FlippedView {
     private func showMark() {
         mark.isHidden = !hasMark
         if let symbol {
-            mark.show(symbol, size: size.symbol)
+            mark.show(symbol, size: symbolSize ?? size.symbol)
         } else if let glyph {
-            mark.image = .lucide(glyph, side: size.symbolSide)
+            mark.image = .lucide(glyph, side: markSide)
         }
         relayout()
     }
 
     private var wordless: Bool { (title ?? "").isEmpty && !opens }
 
+    private var markSide: CGFloat { Self.symbolSide(size, symbolSize) }
+
+    private static func symbolSide(_ size: ControlSize, _ symbolSize: IconSize?) -> CGFloat {
+        symbolSize.map(PlatformImage.symbolSide) ?? size.symbolSide
+    }
+
+    /// How much nearer its side its symbol stands than words do, as `ControlSize.symbolOutset`; on
+    /// a pill none, as a pill's round ends want.
+    private static func symbolOutset(_ size: ControlSize, _ symbolSize: IconSize?, round: Bool) -> CGFloat {
+        round ? 0 : (symbolSide(size, symbolSize) / 5 * 2).rounded() / 2
+    }
+
     /// How wide it is when nothing cuts its words short.
-    static func width(title: String?, symbol: Bool, size: ControlSize, opens: Bool = false) -> CGFloat {
+    static func width(
+        title: String?, symbol: Bool, size: ControlSize, symbolSize: IconSize? = nil, round: Bool = false, opens: Bool = false
+    ) -> CGFloat {
         let words = title.map { ControlText.width(ControlText.line($0, font: font(size), color: Theme.foreground)) } ?? 0
         guard words > 0 || opens else { return size.height }
-        var width = size.padding - (symbol ? size.symbolOutset : 0) + words + size.padding
-        if symbol { width += size.symbolSide + size.gap }
+        var width = size.padding - (symbol ? symbolOutset(size, symbolSize, round: round) : 0) + words + size.padding
+        if symbol { width += symbolSide(size, symbolSize) + size.gap }
         if opens { width += size.gap + PlatformImage.symbol(.chevronDown, size: size.chevron, trimmed: true).size.width - size.chevronOutset }
         return max(size.height, ceil(width))
     }
 
-    var naturalWidth: CGFloat { Self.width(title: title, symbol: hasMark, size: size, opens: opens) }
+    var naturalWidth: CGFloat { Self.width(title: title, symbol: hasMark, size: size, symbolSize: symbolSize, round: round, opens: opens) }
 
-    override var focusShape: (rect: CGRect, radius: CGFloat) { (face.frame, size.radius) }
+    override var focusShape: (rect: CGRect, radius: CGFloat) { (face.frame, face.radius) }
 
     /// How far around it a finger still presses it.
     private var reach: CGRect {
@@ -204,7 +223,7 @@ class ControlView: FlippedView {
         let height = size.height
         let top = ((bounds.height - height) / 2).rounded()
         face.frame = CGRect(x: 0, y: top, width: bounds.width, height: height)
-        let side = size.symbolSide
+        let side = markSide
         guard !wordless else {
             mark.frame = CGRect(x: ((bounds.width - side) / 2).rounded(), y: top + ((height - side) / 2).rounded(), width: side, height: side)
             return
@@ -212,7 +231,7 @@ class ControlView: FlippedView {
         let text = words.text
         let textWidth = ControlText.width(text)
         let chevronWidth = opens ? chevron.image?.size.width ?? 0 : 0
-        let leading = size.padding - (hasMark ? size.symbolOutset : 0)
+        let leading = size.padding - (hasMark ? Self.symbolOutset(size, symbolSize, round: round) : 0)
         let trailing = size.padding - (opens ? size.chevronOutset : 0)
         let content = (hasMark ? side + size.gap : 0) + textWidth + (opens ? size.gap + chevronWidth : 0)
         var x = opens || !fills ? leading : max(leading, ((bounds.width - content) / 2).rounded())
@@ -236,7 +255,7 @@ class ControlView: FlippedView {
         let look = ControlLook(variant: variant, size: size, selected: selected, lit: lit && enabled, surface: surface)
         face.fill = look.platformFill
         face.stroke = look.platformBorder
-        face.radius = size.radius
+        face.radius = round ? size.height / 2 : size.radius
         let ink = placeholder ? Theme.mutedStrongerForeground : (tint.flatMap { look.takesTint ? $0 : nil } ?? look.platformForeground)
         words.text = ControlText.line(title ?? "", font: Self.font(size), color: ink)
         mark.tint = ink

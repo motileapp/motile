@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -58,6 +59,7 @@ import app.motile.sidebar.CustomSnoozeSheet
 import app.motile.thread.CommitSheet
 import app.motile.thread.ThreadSettingsSheet
 import app.motile.transcript.canvas.ConfettiLayer
+import app.motile.transcript.openui.ExpandedPageCover
 import app.motile.ui.Answer
 import app.motile.ui.Asking
 import app.motile.ui.ButtonVariant
@@ -167,6 +169,14 @@ fun Root(store: AppStore) {
                 properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
             ) {
                 EngagedWindow { MediaViewer(viewing) }
+            }
+        }
+        store.expandedPage?.let { page ->
+            Dialog(
+                onDismissRequest = { store.closeExpandedPage() },
+                properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+            ) {
+                EngagedWindow { key(page) { ExpandedPageCover(page) } }
             }
         }
         store.errorMessage?.let {

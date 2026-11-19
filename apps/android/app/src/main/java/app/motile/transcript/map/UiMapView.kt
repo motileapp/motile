@@ -61,6 +61,7 @@ import app.motile.core.UiKind
 import app.motile.core.UiRouteKind
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.theme.ControlSize
 import app.motile.theme.LocalDark
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
@@ -73,9 +74,8 @@ import app.motile.transcript.openui.UiStyle
 import app.motile.ui.Choice
 import app.motile.ui.Choices
 import app.motile.ui.DropdownCard
-import app.motile.ui.GlassButton
-import app.motile.ui.GlassCapsule
-import app.motile.ui.GlassSize
+import app.motile.ui.ActionButton
+import app.motile.ui.ButtonVariant
 import app.motile.ui.Text
 import app.motile.ui.lined
 import kotlinx.coroutines.Dispatchers
@@ -254,30 +254,29 @@ private fun BoxScope.MapChrome(node: UiKind.Map, director: MapDirector, expanded
     val palette = LocalPalette.current
     var infoOpen by remember { mutableStateOf(false) }
     var choosing by remember { mutableStateOf(emptyList<Choice>()) }
-    Row(Modifier.align(Alignment.TopStart).padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.align(Alignment.TopStart).padding(MAP_INSET), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         if (node.categories.size > 1) {
-            GlassCapsule(node.filter ?: "All places", Symbol.ChevronDown, onClick = {
+            MapButton(node.filter ?: "All places", opens = true) {
                 choosing = listOf(Choice("All places", chosen = node.filter == null) { onFilter(null) }) +
                     node.categories.map { category -> Choice(category, chosen = node.filter == category) { onFilter(category) } }
-            }, help = "Filter places")
+            }
         }
-        GlassButton(Symbol.LocateFixed, "Show every place", onClick = director::recenter, size = GlassSize.Inline)
-        GlassButton(Symbol.Info, "About this map", onClick = { infoOpen = !infoOpen }, size = GlassSize.Inline, state = if (infoOpen) "Expanded" else "Collapsed")
+        MapButton(icon = Symbol.LocateFixed, help = "Show every place", onClick = director::recenter)
+        MapButton(icon = Symbol.Info, help = "About this map", selected = infoOpen, modifier = Modifier.semantics { selected = infoOpen }) { infoOpen = !infoOpen }
     }
-    GlassCapsule(
+    MapButton(
         if (expanded) "Collapse" else "Expand",
         if (expanded) Symbol.Minimize2 else Symbol.Maximize2,
+        modifier = Modifier.align(Alignment.TopEnd).padding(MAP_INSET),
         onClick = onExpand,
-        modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
-        size = GlassSize.Compact,
     )
-    if (infoOpen) MapNote(node.note, Modifier.align(Alignment.TopStart).padding(start = 12.dp, top = 56.dp))
-    if (tilesFailed) MapNote("Map tiles are temporarily unavailable. The places are still shown.", Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 28.dp))
+    if (infoOpen) MapNote(node.note, Modifier.align(Alignment.TopStart).padding(start = MAP_INSET, top = 56.dp))
+    if (tilesFailed) MapNote("Map tiles are temporarily unavailable. The places are still shown.", Modifier.align(Alignment.BottomStart).padding(start = MAP_INSET, bottom = 28.dp))
     val lit = LocalSurface.current.color.at(Opacity.Lit)
     if (node.route == UiRouteKind.Overview) {
         Text(
             "Route overview",
-            Modifier.align(Alignment.BottomStart).padding(start = 12.dp, bottom = 22.dp).background(lit, RoundedCornerShape(Radius.sm)).padding(horizontal = 7.dp, vertical = 2.dp),
+            Modifier.align(Alignment.BottomStart).padding(start = MAP_INSET, bottom = 22.dp).background(lit, RoundedCornerShape(Radius.sm)).padding(horizontal = 7.dp, vertical = 2.dp),
             style = Theme.ui(TextSize.Xxs).lined(16f),
             color = palette.mutedForeground,
         )
@@ -285,6 +284,25 @@ private fun BoxScope.MapChrome(node: UiKind.Map, director: MapDirector, expanded
     Attribution(Modifier.align(Alignment.BottomStart).background(lit).padding(start = 8.dp, end = 4.dp, top = 1.dp, bottom = 1.dp))
     Choices(choosing) { choosing = emptyList() }
 }
+
+/** One of its buttons, as the image viewer's: a round overlay pill, a symbol alone a circle, a symbol beside words a small one. */
+@Composable
+private fun MapButton(
+    title: String? = null,
+    icon: Symbol? = null,
+    modifier: Modifier = Modifier,
+    help: String? = null,
+    opens: Boolean = false,
+    selected: Boolean = false,
+    onClick: () -> Unit,
+) = ActionButton(
+    title, icon, modifier, help = help, variant = ButtonVariant.Overlay, size = MAP_CONTROL, symbolSize = title?.let { MAP_CONTROL.smallSymbol },
+    selected = selected, round = true, opens = opens, onClick = onClick,
+)
+
+/** How far its buttons, boxes and "Route overview" are from its edges. */
+private val MAP_INSET = 8.dp
+private val MAP_CONTROL = ControlSize.Regular
 
 @Composable
 private fun MapNote(text: String, modifier: Modifier) {
