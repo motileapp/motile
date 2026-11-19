@@ -158,15 +158,10 @@ enum MapLayout {
     /// How far the expanded map is from the window's edges, and under which width it is nearer.
     static func expandedInset(windowWidth: CGFloat) -> CGFloat { windowWidth < 520 ? 12 : 24 }
 
-    static let inset: CGFloat = 12
+    static let inset: CGFloat = 8
     static let gap: CGFloat = 8
-    static let roundSide: CGFloat = 34
-    static let roundSymbol: CGFloat = 18
-    static let filterPadding = (leading: CGFloat(12), trailing: CGFloat(30))
-    static let smallSymbol: CGFloat = 14
-    static let expandHeight: CGFloat = 28
-    static let expandPadding: CGFloat = 10
-    static let zoomSide: CGFloat = 28
+    /// Its buttons are the image viewer's: the kit's overlay pills.
+    static let control = ControlSize.regular
     static let noteTop: CGFloat = 56
     static let noteWidth: CGFloat = 275
     static let notePadding: CGFloat = 12

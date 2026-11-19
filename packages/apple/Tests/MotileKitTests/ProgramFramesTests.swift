@@ -51,16 +51,18 @@ final class ProgramFramesTests: XCTestCase {
         XCTAssertEqual(ProgramLayout.columns(justFits, width: 390), 3)
     }
 
+    /// The page's height, with the Full screen chip under it.
     func testAPageIsAsTallAsItsOwnHeightThenTheOneItReportedThenTheStart() {
         let video: JSON = ["id": "", "component": "YouTube", "url": "https://www.youtube-nocookie.com/embed/abc", "title": "A video"]
         XCTAssertEqual(ProgramFrames.frames(tree: video, width: 720)[""]?[3], 405)
+        let chip = Double(ProgramWeb.chipGap + ProgramWeb.chipSize.height)
         let page: JSON = ["id": "", "component": "HtmlView", "html": "<p>Hi</p>", "title": "", "streaming": false]
-        XCTAssertEqual(ProgramFrames.frames(tree: page, width: 720)[""]?[3], 360)
+        XCTAssertEqual(ProgramFrames.frames(tree: page, width: 720)[""]?[3], 360 + chip)
         WebHeights.set(212, row: "", node: "")
         defer { WebHeights.set(360, row: "", node: "") }
-        XCTAssertEqual(ProgramFrames.frames(tree: page, width: 720)[""]?[3], 212)
+        XCTAssertEqual(ProgramFrames.frames(tree: page, width: 720)[""]?[3], 212 + chip)
         let sized = page.merging(["height": 150]) { $1 }
-        XCTAssertEqual(ProgramFrames.frames(tree: sized, width: 720)[""]?[3], 150)
+        XCTAssertEqual(ProgramFrames.frames(tree: sized, width: 720)[""]?[3], 150 + chip)
     }
 
     /// The ids of the nodes a program shows in its row: not those of a popover's panel, which shows

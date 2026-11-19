@@ -263,6 +263,12 @@ struct RootView: View {
                     .environment(store)
             }
         }
+        .fullScreenCover(isPresented: Binding(get: { store.expandedPage != nil }, set: { if !$0 { store.closeExpandedPage() } })) {
+            if let page = store.expandedPage {
+                ExpandedPageCover(page: page)
+                    .environment(store)
+            }
+        }
         .alert(
             store.errorAlert.title,
             isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })

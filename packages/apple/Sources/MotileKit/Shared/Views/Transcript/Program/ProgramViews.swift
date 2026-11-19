@@ -21,10 +21,13 @@ protocol ProgramHost: AnyObject {
     var streaming: Bool { get }
     /// Tells the image whenever the viewport moves.
     func watchViewport(_ image: ProgramImageView)
+    /// Opens an HtmlView's page over the window.
+    func expand(_ page: ExpandedPage)
 }
 
 extension ProgramHost {
     var streaming: Bool { false }
+    func expand(_ page: ExpandedPage) {}
     func press(_ node: String) { send(node, ["type": "press"]) }
     func value(_ node: String, _ value: Any) { send(node, ["type": "value", "value": value]) }
 }

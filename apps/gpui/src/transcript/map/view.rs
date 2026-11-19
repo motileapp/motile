@@ -1,6 +1,6 @@
 //! The live map: a resolved `Map` node drawn over its tiles, with the camera of
-//! open-intelligent-ui's `map.tsx` (core's maths), its gestures and its glass controls, inline
-//! or expanded over the window.
+//! open-intelligent-ui's `map.tsx` (core's maths), its gestures and its controls, inline or
+//! expanded over the window.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -18,7 +18,7 @@ use super::paint::{self, Pin, View};
 use super::style::style;
 use super::tiles::{self, Slot};
 use super::{height, pool};
-use crate::theme::{ControlSize, Opacity, Radius, ShadowSize, Surface, TextSize, colors};
+use crate::theme::{ControlSize, Opacity, Radius, ShadowSize, TextSize, colors};
 use crate::transcript::kit::paint_corners;
 use crate::ui::control::{ActionButton, ActionMenu, Variant};
 use crate::ui::menu::Menu;
@@ -26,6 +26,10 @@ use crate::ui::{beside, edges, motion};
 
 /// The room between the map's buttons' lights, which their clicks share.
 const CONTROL_GAP: f32 = 8.;
+/// How far the buttons, the note, the error and "Route overview" are from the map's edges.
+const INSET: f32 = 8.;
+/// The map's buttons are the image viewer's: the kit's overlay pills.
+const CONTROL: ControlSize = ControlSize::Regular;
 /// The framed key is set this long after the fly starts, as `map.tsx`'s timer does.
 const FRAMED_MS: u64 = FLY_MS as u64 + 40;
 const ZOOM_MS: u64 = 250;
@@ -627,7 +631,7 @@ impl MapView {
 
     fn controls(&self, window: &mut Window, cx: &mut Context<Self>) -> Div {
         let c = colors(cx);
-        let glass = |button: ActionButton| button.variant(Variant::Glass).surface(Surface::Background).round(true);
+        let overlay = |button: ActionButton| button.variant(Variant::Overlay).size(CONTROL).round(true);
         let filter = (self.node.categories.len() >= 2).then(|| {
             let categories = self.node.categories.clone();
             let chosen = self.node.filter.clone();
@@ -651,15 +655,13 @@ impl MapView {
                 menu
             })
             .margin(beside(0., CONTROL_GAP / 2.))
-            .button(|button| glass(button).size(ControlSize::Large).help("Filter places"))
+            .button(|button| overlay(button).help("Filter places"))
         });
         let filters = filter.is_some();
-        let recenter = glass(ActionButton::icon(("map-recenter", self.id), "locate-fixed", "Show every place"))
-            .size(ControlSize::Large)
+        let recenter = overlay(ActionButton::icon(("map-recenter", self.id), "locate-fixed", "Show every place"))
             .margin(beside(if filters { CONTROL_GAP / 2. } else { 0. }, CONTROL_GAP / 2.))
             .on_click(cx.listener(|map, _, _, cx| map.recenter(cx)));
-        let info = glass(ActionButton::icon(("map-info", self.id), "info", "About this map"))
-            .size(ControlSize::Large)
+        let info = overlay(ActionButton::icon(("map-info", self.id), "info", "About this map"))
             .margin(beside(CONTROL_GAP / 2., 0.))
             .selected(self.info_open)
             .on_click(cx.listener(|map, _, _, cx| {
@@ -667,10 +669,9 @@ impl MapView {
                 cx.notify();
             }));
         let expand =
-            glass(ActionButton::new(("map-expand", self.id), if self.expanded { "Collapse" } else { "Expand" }))
+            overlay(ActionButton::new(("map-expand", self.id), if self.expanded { "Collapse" } else { "Expand" }))
                 .symbol(if self.expanded { "minimize-2" } else { "maximize-2" })
-                .symbol_after()
-                .size(ControlSize::Regular)
+                .symbol_size(CONTROL.small_symbol())
                 .on_click(cx.listener(|map, _, window, cx| {
                     let expanded = !map.expanded;
                     map.set_expanded(expanded, window, cx);
@@ -683,15 +684,14 @@ impl MapView {
             cx,
         );
         let zoom = |id: &'static str, symbol: &'static str, help: &'static str, by: f64, margin: Edges<f32>| {
-            glass(ActionButton::icon((id, self.id), symbol, help))
-                .size(ControlSize::Regular)
+            overlay(ActionButton::icon((id, self.id), symbol, help))
                 .margin(margin)
                 .on_click(cx.listener(move |map, _, _, cx| map.zoom_by(by, None, true, cx)))
         };
         let popover = |text: SharedString| {
             div()
                 .absolute()
-                .left(px(12.))
+                .left(px(INSET))
                 .max_w(px(275.))
                 .p(px(12.))
                 .bg(c.popover)
@@ -709,15 +709,15 @@ impl MapView {
             .absolute()
             .inset_0()
             .child(
-                pressable(div().absolute().top(px(12.)).left(px(12.)).flex().items_center())
+                pressable(div().absolute().top(px(INSET)).left(px(INSET)).flex().items_center())
                     .children(filter)
                     .child(recenter)
                     .child(info),
             )
-            .child(pressable(div().absolute().top(px(12.)).right(px(12.))).child(expand))
+            .child(pressable(div().absolute().top(px(INSET)).right(px(INSET))).child(expand))
             .when(shown > 0., |controls| {
                 controls.child(
-                    pressable(div().absolute().bottom(px(12.)).right(px(12.)))
+                    pressable(div().absolute().bottom(px(INSET)).right(px(INSET)))
                         .flex()
                         .flex_col()
                         .opacity(shown)
@@ -732,7 +732,7 @@ impl MapView {
                     div()
                         .absolute()
                         .bottom(px(22.))
-                        .left(px(12.))
+                        .left(px(INSET))
                         .px(px(7.))
                         .py(px(2.))
                         .rounded(px(Radius::SM))

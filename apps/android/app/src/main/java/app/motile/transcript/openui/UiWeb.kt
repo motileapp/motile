@@ -57,6 +57,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import app.motile.LocalStore
 import app.motile.core.Native
 import app.motile.core.UiKind
 import app.motile.core.UiNode
@@ -72,6 +73,7 @@ import app.motile.theme.Palette
 import app.motile.theme.Theme
 import app.motile.transcript.LocalTranscriptMoves
 import app.motile.ui.ActionButton
+import app.motile.ui.ButtonVariant
 import app.motile.ui.Spinner
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
@@ -87,8 +89,20 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-/** A page core built for a web view, and how to load it (`web::Page`). */
-class UiPage(val html: String, val base: String?, val handler: String, val start: Float, val min: Float, val max: Float) {
+/**
+ * A page core built for a web view, and how to load it (`web::Page`). Open over the window, it is
+ * zoomed by what `fitScript` answers, up to `maxFit`.
+ */
+class UiPage(
+    val html: String,
+    val base: String?,
+    val handler: String,
+    val start: Float,
+    val min: Float,
+    val max: Float,
+    val fitScript: String = "1",
+    val maxFit: Float = 1f,
+) {
     /** The height in a message the page sent, within the page's bounds; none for any other message. */
     fun height(message: String): Float? {
         val json = message(message, HEIGHT_MESSAGE) ?: return null
@@ -120,6 +134,7 @@ class UiPage(val html: String, val base: String?, val handler: String, val start
             val html = json["html"]?.jsonPrimitive?.content ?: return null
             val height = json["height"]?.jsonObject ?: return null
             fun bound(key: String) = height[key]?.jsonPrimitive?.floatOrNull ?: 0f
+            val fit = json["fit"]?.jsonObject
             return UiPage(
                 html = html,
                 base = (json["base"] as? JsonPrimitive)?.takeIf { it.isString }?.content,
@@ -127,6 +142,8 @@ class UiPage(val html: String, val base: String?, val handler: String, val start
                 start = bound("start"),
                 min = bound("min"),
                 max = bound("max"),
+                fitScript = fit?.get("script")?.jsonPrimitive?.content ?: "1",
+                maxFit = fit?.get("max")?.jsonPrimitive?.floatOrNull ?: 1f,
             )
         }
     }
@@ -148,10 +165,12 @@ private object UiWebHeights {
 /**
  * The program's page in a sandboxed web view: its height `height`, else what the page reports, 360
  * until it does, leaving room above and below it in the window to scroll the transcript past it.
- * While the program streams, the spinner in its place.
+ * While the program streams, the spinner in its place. Under it, centred, the pill that opens it
+ * over the window, where it goes on as it was; the row keeps its place, empty, meanwhile.
  */
 @Composable
 fun UiHtmlView(node: UiNode, kind: UiKind.HtmlView) {
+    val store = LocalStore.current
     val palette = LocalPalette.current
     val surface = LocalSurface.current
     val dark = LocalDark.current
@@ -177,23 +196,38 @@ fun UiHtmlView(node: UiNode, kind: UiKind.HtmlView) {
     }
     var reported by remember(key) { mutableFloatStateOf(UiWebHeights.get(key) ?: 0f) }
     var gone by remember(key) { mutableStateOf(false) }
+    val shown = remember(key) { Shown() }
     val window = with(LocalDensity.current) { LocalWindowInfo.current.containerSize.height.toDp().value }
     val height = minOf(kind.height ?: reported.takeIf { it > 0f } ?: page?.start ?: START_HEIGHT, UiPage.maxHeight(window))
-    Box(
-        Modifier.uiNode(node).fillMaxWidth().height(height.dp).clip(shape).background(background, shape).border(1.dp, surface.border, shape),
-        contentAlignment = Alignment.Center,
-    ) {
-        val loaded = page
-        when {
-            kind.streaming -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Spinner(ControlSize.Small.symbol, color = palette.mutedForeground)
-                Text("Preparing the interactive view", style = UiStyle.text(UiTextStyle.Small), color = palette.mutedForeground)
+    Column(Modifier.uiNode(node).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(CHIP_GAP)) {
+        Box(
+            Modifier.fillMaxWidth().height(height.dp).clip(shape).background(background, shape).border(1.dp, surface.border, shape),
+            contentAlignment = Alignment.Center,
+        ) {
+            val loaded = page
+            when {
+                kind.streaming -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Spinner(ControlSize.Small.symbol, color = palette.mutedForeground)
+                    Text("Preparing the interactive view", style = UiStyle.text(UiTextStyle.Small), color = palette.mutedForeground)
+                }
+                gone -> Still(kind.title, "Interactive view") { gone = false }
+                loaded != null -> PageView(
+                    loaded, Modifier.fillMaxSize(), opensYouTube = false, shown = shown,
+                    onGone = {
+                        gone = true
+                        if (shown.away != null) store.closeExpandedPage()
+                    },
+                ) { reportedHeight ->
+                    UiWebHeights.set(key, reportedHeight)
+                    reported = reportedHeight
+                }
             }
-            gone -> Still(kind.title, "Interactive view") { gone = false }
-            loaded != null -> PageView(loaded, Modifier.fillMaxSize(), opensYouTube = false, onGone = { gone = true }) { reportedHeight ->
-                UiWebHeights.set(key, reportedHeight)
-                reported = reportedHeight
-            }
+        }
+        ActionButton(
+            FULL_SCREEN, Symbol.Maximize2, Modifier.uiControl(FULL_SCREEN), variant = ButtonVariant.Outline, size = CHIP_SIZE,
+            symbolSize = CHIP_SIZE.smallSymbol, round = true, disabled = kind.streaming,
+        ) {
+            shown.expand(kind.title, reported)?.let(store::expand)
         }
     }
 }
@@ -243,14 +277,25 @@ private fun Still(title: String, kind: String, reload: () -> Unit) {
  * drawer then leave to it. YouTube's links open in the browser.
  */
 @Composable
-private fun PageView(page: UiPage, modifier: Modifier, opensYouTube: Boolean, onGone: () -> Unit, onHeight: ((Float) -> Unit)? = null) {
+private fun PageView(
+    page: UiPage,
+    modifier: Modifier,
+    opensYouTube: Boolean,
+    onGone: () -> Unit,
+    shown: Shown = remember { Shown() },
+    onHeight: ((Float) -> Unit)? = null,
+) {
     val gone by rememberUpdatedState(onGone)
-    val shown = remember { Shown() }
     val caught = modifier.catchesFling(LocalTranscriptMoves.current)
     AndroidView(
-        factory = { context -> sandboxed(context, opensYouTube) { gone() }.also { shown.view = it } },
+        factory = { context ->
+            val view = sandboxed(context, opensYouTube) { gone() }.also { shown.view = it }
+            FrameLayout(context).apply { addView(view, matching()) }.also { shown.frame = it }
+        },
         modifier = if (onHeight == null) caught else caught.scrollsInside(shown),
-        update = { view ->
+        update = {
+            if (shown.away != null) return@AndroidView
+            val view = shown.view ?: return@AndroidView
             if (view.tag == page || view.tag === Gone) return@AndroidView
             view.tag = page
             if (onHeight != null && WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
@@ -258,24 +303,54 @@ private fun PageView(page: UiPage, modifier: Modifier, opensYouTube: Boolean, on
                 WebViewCompat.addWebMessageListener(view, page.handler, setOf("*")) { _, message, _, isMainFrame, _ ->
                     val data = message.data
                     if (!isMainFrame || data == null) return@addWebMessageListener
-                    page.height(data)?.let(onHeight)
+                    val height = page.height(data)
+                    val away = shown.away
+                    if (height != null && away != null) away.reported(height) else if (height != null) onHeight(height)
                     if (page.holds(data) == true) view.requestDisallowInterceptTouchEvent(true)
                 }
             }
             view.loadDataWithBaseURL(page.base, page.html, "text/html", "utf-8", null)
         },
-        onRelease = { view ->
-            if (view.tag === Gone) return@AndroidView
-            (view.webChromeClient as? FullScreenChrome)?.leave()
-            view.destroy()
+        onRelease = {
+            shown.frame = null
+            val view = shown.view ?: return@AndroidView
+            if (shown.away == null) discard(view)
         },
     )
 }
 
-/** The web view a page is shown in, once made. */
+/** The web view a page is shown in, once made, what holds it in the row, and the page while it is open over the window. */
 private class Shown {
     var view: WebView? = null
+    var frame: FrameLayout? = null
+    var away by mutableStateOf<ExpandedPage?>(null)
+
+    /** Takes the page out of its row to open it over the window, with the last height it reported. */
+    fun expand(title: String, reported: Float): ExpandedPage? {
+        val view = view ?: return null
+        val page = view.tag as? UiPage ?: return null
+        if (away != null) return null
+        frame?.removeView(view)
+        return ExpandedPage(title, view, page, reported, ::takeBack).also { away = it }
+    }
+
+    /** The page comes back from over the window, unless the row let it go meanwhile. */
+    private fun takeBack(view: WebView) {
+        away = null
+        val frame = frame
+        if (frame == null || view.tag === Gone) return discard(view)
+        frame.addView(view, matching())
+    }
 }
+
+/** Lets a web view go for good, unless its renderer already went. */
+private fun discard(view: WebView) {
+    if (view.tag === Gone) return
+    (view.webChromeClient as? FullScreenChrome)?.leave()
+    view.destroy()
+}
+
+private fun matching() = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
 
 /**
  * A finger that lands while the user's scroll still moves the transcript is the transcript's, which
@@ -300,7 +375,7 @@ private fun Modifier.scrollsInside(shown: Shown): Modifier = pointerInput(shown)
             if (!change.pressed) return@awaitEachGesture
             val move = change.position - down.position
             if (move.getDistance() < viewConfiguration.touchSlop / 2) continue
-            val view = shown.view ?: return@awaitEachGesture
+            val view = shown.view?.takeIf { shown.away == null } ?: return@awaitEachGesture
             if (abs(move.y) > abs(move.x) && view.canScrollVertically(if (move.y < 0) 1 else -1)) view.requestDisallowInterceptTouchEvent(true)
             return@awaitEachGesture
         }
@@ -344,7 +419,7 @@ private fun sandboxed(context: Context, opensYouTube: Boolean, onGone: () -> Uni
 }
 
 /** What a web view's tag is once its renderer is gone: the view is destroyed. */
-private object Gone
+internal object Gone
 
 /** A page shows no dialogs and doesn't go full screen. */
 private open class Chrome : WebChromeClient() {
@@ -427,3 +502,6 @@ private fun css(color: Color): String {
 }
 
 private const val START_HEIGHT = 360f
+private const val FULL_SCREEN = "Full screen"
+private val CHIP_SIZE = ControlSize.Small
+private val CHIP_GAP = 6.dp

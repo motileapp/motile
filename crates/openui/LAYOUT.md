@@ -494,18 +494,20 @@ control, the pair a column.
   LineString of core's points) and the `pins` source (Points with `label`, `number`, `icon` (an
   image id, for an emoji pin) and `selected`), and adds each emoji pin's image: the emoji drawn at 18
   into a 34 square, named by its `icon` id, at the screen's scale.
-- Controls (Motile's `GlassButton` look over the map): at the top left, 12 in, 8 apart: the filter
-  (only with two categories or more: a glass capsule 34 tall, `control` text "All places" or the
-  category, Lucide `chevron-down` 14, 12 and 30 padding; its choices are `Choice`s), recenter (34
-  round, Lucide `locate-fixed` 18, "Show every place") and info (34 round, Lucide `info` 18, "About
-  this map", expanded state). At the top right, 12 in: Expand / Collapse (a capsule 28 tall, padding
-  4 and 10, Lucide `maximize-2` / `minimize-2` 14 after the text). Zoom: pinch on touch; on Mac and
-  GPUI + and − buttons, 28 each, glass, at the bottom right, showing while the pointer is over the
-  map.
-- Note (info open): 56 from the top, 12 from the left, at most 275 wide, padding 12, Motile's popover
+- Controls: the kit's `regular` round buttons in the `overlay` variant, as the image viewer's
+  (`control-over-picture`, lit `control-lit-over-picture`, a 1 edge in
+  `control-border-over-picture`, `foreground-over-picture`), a symbol alone a circle at the size's
+  `wordlessSymbol`. At the top left, 8 in, 8 apart: the filter (only with two categories or more:
+  "All places" or the category, with the kit's chevron; its choices are `Choice`s), recenter
+  (Lucide `locate-fixed`, "Show every place") and info (Lucide `info`, "About this map", selected
+  while its note shows). At the top right, 8 in: Expand / Collapse (Lucide `maximize-2` /
+  `minimize-2` at the size's `smallSymbol`, before the words). Zoom: pinch on touch; on Mac and GPUI
+  `plus` and `minus` buttons, 8 apart, at the bottom right, 8 in, showing while the pointer is over
+  the map.
+- Note (info open): 56 from the top, 8 from the left, at most 275 wide, padding 12, Motile's popover
   look, `caption` in `muted-foreground`: core's text. Error: the same box 28 from the bottom: "Map
   tiles are temporarily unavailable. The places are still shown." Route overview: 22 from the
-  bottom, 12 from the left, padding 2 and 7, `Radius.sm`, the surface's colour at `lit`, xxs 10 / 16
+  bottom, 8 from the left, padding 2 and 7, `Radius.sm`, the surface's colour at `lit`, xxs 10 / 16
   `muted-foreground`: "Route overview".
 - Attribution: the style's, at the bottom left, xxs 10 / 12 in `muted-foreground` on the surface's colour
   at `lit`, links opening in the browser.
@@ -558,6 +560,21 @@ control, the pair a column.
   does, at most the window's height less max(120, 0.2 × the window's height) above and below
   (`web::max_height`), so that the transcript can always be scrolled past it. A taller page scrolls
   inside it. 1 in the surface's border, `Radius.lg`, clipped, the surface's colour behind.
+- 6 under the page, centred, a `small` outline pill button with `maximize-2` at the size's
+  `smallSymbol` and "Full screen", as the way back to a parent thread is drawn. It lies outside the
+  page, so that it never covers what the page draws; it is disabled while the program streams.
+- Full screen moves the page's web view, as it is, over the whole window, and back when it closes,
+  so that the page keeps its state; the row keeps its place and height, empty, meanwhile. Over the
+  window the page fills everything but the pill that puts it back, a `large` outline pill with
+  `minimize-2` at its `smallSymbol` and "Exit full screen": on the Mac at the end of the window's
+  top bar, 12 from its edge, as the viewer's close button is, since the top bar's middle moves the
+  window; on iOS and Android centred 12 under the page, above the safe area, where the thumb is; a page
+  shorter than the room there is only as tall as its content (its reported height, zoomed), and
+  both sit at the bottom, so that the room left over is above the page, not between it and the pill. There the page is
+  zoomed by what core's `web::FIT` answers, between 1 and `web::MAX_FIT`, so that a page drawn at
+  a fixed size fills the window one way; one that fills it already stays as it is. Every gesture
+  on the page is the page's: nothing but that pill, Esc on the Mac and GPUI and the system's back
+  on Android closes it. Its height reports change nothing in the row.
 - A gesture is the page's when it starts on it and the page takes it, until it ends; otherwise it
   is the transcript's, which also keeps one that started elsewhere when the page slides under it,
   and one that starts on the page while the transcript is still dragged or glides (a fling, a

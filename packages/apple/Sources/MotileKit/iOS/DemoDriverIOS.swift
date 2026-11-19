@@ -37,6 +37,7 @@ import UIKit
 ///     access <supervised|…>             sets how much the agent may do without asking
 ///     slide <label> <share>             drags the program's slider with that label to a share of its track
 ///     press <label>                     presses the program's button with that label
+///     page close                        puts a program's page open over the screen back in its row
 enum DemoDriver {
     private static var watcher: Timer?
     private static var done = 0
@@ -268,6 +269,7 @@ enum DemoDriver {
             slider.onDrag?(.began, CGPoint(x: slider.bounds.width / 2, y: y))
             slider.onDrag?(.moved, CGPoint(x: slider.bounds.width * share, y: y))
             slider.onDrag?(.ended, CGPoint(x: slider.bounds.width * share, y: y))
+        case "page" where rest == "close": store.closeExpandedPage()
         case "press":
             let button: FlippedView? = views(ControlView.self).last { $0.title == rest } ?? views(ExpandButton.self).last { !$0.isHidden && $0.words == rest }
             guard let button else { return }
@@ -295,7 +297,7 @@ enum DemoDriver {
             switch words[0] {
             case "pin": map?.press(pin: words[1])
             case "filter": map?.onFilter(words[1] == "All places" ? nil : words[1])
-            default: views(GlassButtonView.self).last { $0.title == words[1] || $0.help == words[1] }?.press()
+            default: views(ControlView.self).last { $0.title == words[1] || $0.help == words[1] }?.press()
             }
         case "branches":
             guard let project = store.composerProject else { return }

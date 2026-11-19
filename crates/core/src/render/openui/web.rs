@@ -51,6 +51,18 @@ pub fn max_height(window: f32) -> f32 {
     (window - 2. * margin).clamp(MIN_HEIGHT, MAX_HEIGHT)
 }
 
+/// How many times larger a page open over the window can be drawn, as its client zooms it: the
+/// window's height over the page's, and its width over what the body's children take with the
+/// body's padding, whichever is less. A page that fills the window answers 1; one drawn at a
+/// fixed size answers what lets it fill the window one way. The client multiplies its zoom by it,
+/// between 1 and [`MAX_FIT`]; the page then reports its height again, and the answer settles at 1.
+pub const FIT: &str = "(function(){var d=document.documentElement,b=document.body,h=d.getBoundingClientRect().height,l=Infinity,r=-Infinity;\
+    if(!b||!h)return 1;for(var i=0;i<b.children.length;i++){var e=b.children[i].getBoundingClientRect();\
+    if(e.width>0&&e.height>0){l=Math.min(l,e.left);r=Math.max(r,e.right)}}\
+    var s=getComputedStyle(b),w=r>l?r-l+parseFloat(s.paddingLeft)+parseFloat(s.paddingRight):innerWidth;\
+    return Math.min(innerHeight/h,innerWidth/w)})()";
+pub const MAX_FIT: f32 = 4.;
+
 /// How a page reaches its client.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -108,7 +120,19 @@ pub struct Page {
     pub script: Option<String>,
     pub handler: &'static str,
     pub height: Heights,
+    pub fit: Fit,
 }
+
+/// How a page open over the window is zoomed to fill it.
+#[derive(Serialize, PartialEq, Debug)]
+pub struct Fit {
+    /// Answers how many times larger the page can be drawn: see [`FIT`].
+    pub script: &'static str,
+    /// The largest zoom.
+    pub max: f32,
+}
+
+const PAGE_FIT: Fit = Fit { script: FIT, max: MAX_FIT };
 
 #[derive(Serialize, PartialEq, Debug)]
 pub struct Heights {
@@ -244,6 +268,7 @@ pub fn page(request: &PageRequest) -> Page {
             script: (*bridge == Bridge::WebKit).then(|| reporter(Bridge::WebKit)),
             handler: HANDLER,
             height: HEIGHTS,
+            fit: PAGE_FIT,
         },
         PageRequest::YouTube { url, title, autoplay } => Page {
             html: youtube_page(url, title, *autoplay),
@@ -251,6 +276,7 @@ pub fn page(request: &PageRequest) -> Page {
             script: None,
             handler: HANDLER,
             height: HEIGHTS,
+            fit: PAGE_FIT,
         },
     }
 }

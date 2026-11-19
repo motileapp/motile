@@ -14,6 +14,7 @@ import app.motile.panel.PanelTarget
 import app.motile.panel.RightPanel
 import app.motile.platform.Platform
 import app.motile.transcript.RowModel
+import app.motile.transcript.openui.ExpandedPage
 import java.io.File
 import java.util.TimeZone
 import java.util.UUID
@@ -433,6 +434,9 @@ class AppStore(private val context: Context) {
     private var attachmentsByKey by mutableStateOf(mapOf<String, List<Attachment>>())
     /** The images and videos the viewer has open over the window. */
     var viewing by mutableStateOf<Viewing?>(null)
+        private set
+    /** An HtmlView's page open over the window. */
+    var expandedPage by mutableStateOf<ExpandedPage?>(null)
         private set
     /** How much of each image, video or file an agent sent has arrived, by its media id. */
     val mediaProgress = mutableStateMapOf<String, Double>()
@@ -2265,7 +2269,7 @@ class AppStore(private val context: Context) {
     val escapes: (() -> Unit)?
         get() {
             if (find.active) return { closeFind() }
-            if (panel != null || viewing != null || showsBranches) return null
+            if (panel != null || viewing != null || expandedPage != null || showsBranches) return null
             if (settings != null || showsUsage) return { closeRoute() }
             if (rightPanel.isMaximized) return { rightPanel.toggleMaximized() }
             if (rightPanel.isOpen && rightPanel.tabs.isBlank) return { rightPanel.isOpen = false }
@@ -3091,6 +3095,18 @@ class AppStore(private val context: Context) {
 
     fun closeViewer() {
         viewing = null
+        composerFocus += 1
+    }
+
+    fun expand(page: ExpandedPage) {
+        expandedPage?.close()
+        expandedPage = page
+    }
+
+    fun closeExpandedPage() {
+        val page = expandedPage ?: return
+        expandedPage = null
+        page.close()
         composerFocus += 1
     }
 

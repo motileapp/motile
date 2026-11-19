@@ -25,6 +25,7 @@ final class TranscriptView: FlippedView, RowOwner {
     var onFetchFile: ((String, @escaping (Result<URL, Error>) -> Void) -> Void)?
     var onCancelFetch: ((String) -> Void)?
     var onViewMedia: (([ViewedMedia], Int) -> Void)?
+    var onExpandPage: ((ExpandedPage) -> Void)?
     /// A queued message is to be given to the agent now, or taken back.
     var onSendQueued: ((String) -> Void)?
     var onCancelQueued: ((String) -> Void)?
@@ -1100,6 +1101,8 @@ final class TranscriptView: FlippedView, RowOwner {
     func cancelFetch(id: String) { onCancelFetch?(id) }
 
     func view(_ media: [ViewedMedia], at index: Int) { onViewMedia?(media, index) }
+
+    func expand(_ page: ExpandedPage) { onExpandPage?(page) }
 
     func sendQueued(messageID: String) { onSendQueued?(messageID) }
 

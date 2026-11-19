@@ -11,6 +11,16 @@ enum ProgramWeb {
     static let startHeight: CGFloat = 360
     static let spinnerGap: CGFloat = 8
     static let waiting = "Preparing the interactive view"
+    /// The chip under a page that opens it over the window.
+    static let fullScreen = "Full screen"
+    static let chipSize = ControlSize.small
+    static let chipSymbol = ControlSize.small.smallSymbol
+    /// Over the window, where it is the one control, it is larger.
+    static let exitSize = ControlSize.large
+    static let exitSymbol = ControlSize.large.smallSymbol
+    /// Between a page open over the screen and the chip under it.
+    static let exitGap: CGFloat = 12
+    static let chipGap: CGFloat = 6
 
     /// The tallest a page is in a window `window` tall (`web::max_height`).
     static func maxHeight(window: CGFloat) -> CGFloat {
@@ -23,13 +33,17 @@ enum ProgramWeb {
         return ProgramBox(node, size: CGSize(width: width, height: height), surface: env.surface)
     }
 
-    /// Its own height, else the one its page reported in this row, else the start, leaving room
-    /// above and below it in the window to scroll the transcript past it.
+    /// The page: its own height, else the one it reported in this row, else the start, leaving
+    /// room above and below it in the window to scroll the transcript past it. Under it, centred,
+    /// the chip that opens it over the window.
     static func htmlView(_ node: UiNode, _ view: UiKind.HtmlView, width: CGFloat, env: ProgramEnv) -> ProgramBox {
         let wanted = view.height.map { CGFloat($0) } ?? WebHeights.height(row: env.row, node: node.id) ?? startHeight
         let height = min(wanted, maxHeight(window: env.window.height))
-        let size = CGSize(width: width, height: height)
-        guard view.streaming else { return ProgramBox(node, size: size, surface: env.surface) }
+        let chipWidth = min(width, ControlView.width(title: fullScreen, symbol: true, size: chipSize, symbolSize: chipSymbol, round: true))
+        let chip = CGRect(x: ((width - chipWidth) / 2).rounded(), y: height + chipGap, width: chipWidth, height: chipSize.height)
+        let size = CGSize(width: width, height: chip.maxY)
+        let rects = ["page": CGRect(x: 0, y: 0, width: width, height: height), "chip": chip]
+        guard view.streaming else { return ProgramBox(node, size: size, surface: env.surface, rects: rects) }
         let look = ProgramStyle.look(.small)
         let text = ProgramText.plain(waiting, look: look, color: Theme.mutedForeground)
         let side = ControlSize.small.symbolSide
@@ -40,24 +54,36 @@ enum ProgramWeb {
             text: text, frame: CGRect(x: x + side + spinnerGap, y: y, width: textWidth, height: look.lineHeight),
             lift: ControlText.lift(look.font, lineHeight: look.lineHeight), oneLine: true)
         let spinner = CGRect(x: x, y: ((height - side) / 2).rounded(), width: side, height: side)
-        return ProgramBox(node, size: size, surface: env.surface, texts: ["waiting": part], rects: ["spinner": spinner])
+        return ProgramBox(node, size: size, surface: env.surface, texts: ["waiting": part], rects: rects.merging(["spinner": spinner]) { $1 })
     }
 }
 
 /// HtmlView and YouTube: the page core builds in a sandboxed web view, made while its row is on
-/// screen and let go when it leaves. A program's page has the surface's border and colour, and
-/// the spinner in its place while the reply streams; YouTube's player is on black.
+/// screen and let go when it leaves. A program's page has the surface's border and colour, the
+/// spinner in its place while the reply streams, and a chip under it that opens it over the
+/// window; YouTube's player is on black.
 final class ProgramWebView: ProgramNodeView {
+    /// What the page lies in, rounded and edged; the chip is outside it.
+    private let card = FlippedView()
     private let face = SurfaceView()
     private let spinner = SpinnerView(size: ControlSize.small.symbol)
+    private var chip: ControlView!
     private var page: WebPageView?
+    /// The page while it is open over the window, which the row leaves alone.
+    private var away: WebPageView?
     /// What the page shown, or being built, was made from.
     private var wanted: String?
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        addSubview(face)
-        addSubview(spinner)
+        addSubview(card)
+        card.addSubview(face)
+        card.addSubview(spinner)
+        chip = ControlView(ProgramWeb.fullScreen, symbol: .maximize2, variant: .outline, size: ProgramWeb.chipSize, symbolSize: ProgramWeb.chipSymbol) {
+            [weak self] in self?.expand()
+        }
+        chip.round = true
+        addSubview(chip)
         #if os(iOS)
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: Self, _: UITraitCollection) in
             view.paintEdge()
@@ -87,35 +113,52 @@ final class ProgramWebView: ProgramNodeView {
     #endif
 
     override func configure(_ box: ProgramBox) {
+        let side = min(pageFrame.width, pageFrame.height)
         switch box.node.kind {
         case .youTube(let node):
             face.fill = Theme.overlay
-            face.radius = ProgramStyle.radius(node.radius, side: min(box.size.width, box.size.height))
+            face.radius = ProgramStyle.radius(node.radius, side: side)
         case .htmlView(let node):
             face.fill = box.surface.platform
-            face.radius = ProgramStyle.radius(node.radius, side: min(box.size.width, box.size.height))
+            face.radius = ProgramStyle.radius(node.radius, side: side)
+            chip.surface = box.surface
+            chip.enabled = !node.streaming
         default:
             break
         }
-        clip(radius: face.radius)
+        chip.isHidden = box.rects["chip"] == nil
+        clipCard(radius: face.radius)
         paintEdge()
         spinner.isHidden = box.rects["spinner"] == nil
         spinner.frame = box.rects["spinner"] ?? .zero
     }
 
-    /// A program's page has its border over it, as the layer's own, which lies over what is inside.
+    private func clipCard(radius: CGFloat) {
+        #if os(macOS)
+        card.wantsLayer = true
+        card.layer?.cornerRadius = radius
+        card.layer?.cornerCurve = .continuous
+        card.layer?.masksToBounds = true
+        #else
+        card.layer.cornerRadius = radius
+        card.layer.cornerCurve = .continuous
+        card.clipsToBounds = true
+        #endif
+    }
+
+    /// A program's page has its border over it, as the card layer's own, which lies over what is inside.
     private func paintEdge() {
         guard let box else { return }
         let edge: PlatformColor? = if case .htmlView = box.node.kind { box.surface.platformBorder } else { nil }
         #if os(macOS)
-        wantsLayer = true
+        card.wantsLayer = true
         var color = edge?.cgColor
         effectiveAppearance.performAsCurrentDrawingAppearance { color = edge?.cgColor }
-        layer?.borderColor = color
-        layer?.borderWidth = edge == nil ? 0 : 1
+        card.layer?.borderColor = color
+        card.layer?.borderWidth = edge == nil ? 0 : 1
         #else
-        layer.borderColor = edge?.resolvedColor(with: traitCollection).cgColor
-        layer.borderWidth = edge == nil ? 0 : 1
+        card.layer.borderColor = edge?.resolvedColor(with: traitCollection).cgColor
+        card.layer.borderWidth = edge == nil ? 0 : 1
         #endif
     }
 
@@ -123,25 +166,50 @@ final class ProgramWebView: ProgramNodeView {
         reload()
     }
 
+    private var pageFrame: CGRect { box?.rects["page"] ?? bounds }
+
     override func layoutNow() {
-        face.frame = bounds
-        page?.frame = bounds
+        card.frame = pageFrame
+        face.frame = card.bounds
+        chip.frame = box?.rects["chip"] ?? .zero
+        if page !== away { page?.frame = card.bounds }
     }
 
     override func leave() {
         super.leave()
-        page?.removeFromSuperview()
-        page = nil
+        dropPage()
         wanted = nil
+    }
+
+    private func dropPage() {
+        if page !== away { page?.removeFromSuperview() }
+        page = nil
+    }
+
+    /// Opens the page over the window, where it goes on as it was.
+    private func expand() {
+        guard let page, away == nil, case .htmlView(let node)? = box?.node.kind else { return }
+        away = page
+        host?.expand(ExpandedPage(title: node.title, page: page) { [weak self] page in self?.takeBack(page) })
+    }
+
+    /// The page comes back from over the window, unless the row has another by now.
+    private func takeBack(_ view: WebPageView) {
+        away = nil
+        view.fills = false
+        guard view === page else { return view.removeFromSuperview() }
+        card.addSubview(view)
+        view.frame = card.bounds
+        reload()
     }
 
     /// Builds the page the node asks for, off the main thread, when it isn't the one shown.
     private func reload() {
+        guard away == nil else { return }
         guard window != nil, let box, let request = request(box) else { return leave() }
         guard request.key != wanted else { return }
         wanted = request.key
-        page?.removeFromSuperview()
-        page = nil
+        dropPage()
         let (row, node) = (host?.rowID ?? "", box.id)
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let built = request.build()
@@ -154,15 +222,15 @@ final class ProgramWebView: ProgramNodeView {
 
     private func show(_ built: WebPage, row: String, node: String) {
         let view = WebPageView(page: built)
-        view.frame = bounds
+        view.frame = CGRect(origin: .zero, size: pageFrame.size)
         view.onHeight = { [weak self] height in
-            guard let self, case .htmlView(let html)? = self.box?.node.kind, html.height == nil else { return }
+            guard let self, self.away == nil, case .htmlView(let html)? = self.box?.node.kind, html.height == nil else { return }
             guard WebHeights.height(row: row, node: node).map({ abs($0 - height) > 0.5 }) ?? true else { return }
             WebHeights.set(height, row: row, node: node)
-            guard abs(height - self.bounds.height) > 0.5 else { return }
+            guard abs(height - self.pageFrame.height) > 0.5 else { return }
             self.host?.resized(node)
         }
-        addSubview(view)
+        card.addSubview(view)
         page = view
     }
 

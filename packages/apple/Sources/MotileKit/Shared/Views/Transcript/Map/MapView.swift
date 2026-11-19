@@ -48,12 +48,12 @@ final class MapView: FlippedView {
     private let placeholder = SurfaceView()
     let stage = MapStage()
     private let still = MapStillView()
-    private let filter = GlassButtonView(height: MapLayout.roundSide) {}
-    private let recenter = GlassButtonView(symbol: .locateFixed, symbolSide: MapLayout.roundSymbol, help: "Show every place", height: MapLayout.roundSide) {}
-    private let info = GlassButtonView(symbol: .info, symbolSide: MapLayout.roundSymbol, help: "About this map", height: MapLayout.roundSide) {}
-    private let expand = GlassButtonView("Expand", symbol: .maximize2, symbolSide: MapLayout.smallSymbol, height: MapLayout.expandHeight) {}
-    private let zoomIn = GlassButtonView(symbol: .plus, help: "Zoom in", height: MapLayout.zoomSide) {}
-    private let zoomOut = GlassButtonView(symbol: .minus, help: "Zoom out", height: MapLayout.zoomSide) {}
+    private let filter = MapView.button("All places")
+    private let recenter = MapView.button(symbol: .locateFixed, help: "Show every place")
+    private let info = MapView.button(symbol: .info, help: "About this map")
+    private let expand = MapView.button("Expand", symbol: .maximize2)
+    private let zoomIn = MapView.button(symbol: .plus, help: "Zoom in")
+    private let zoomOut = MapView.button(symbol: .minus, help: "Zoom out")
     private let note = MapBoxView()
     private let failure = MapBoxView()
     private let overview = MapOverviewView()
@@ -70,9 +70,6 @@ final class MapView: FlippedView {
         stage.addSubview(still)
         for view in [note, failure, overview, attribution, filter, recenter, info, expand, zoomIn, zoomOut] as [PlatformView] { stage.addSubview(view) }
         filter.opens = true
-        filter.padding = MapLayout.filterPadding
-        expand.symbolTrails = true
-        expand.padding = (MapLayout.expandPadding, MapLayout.expandPadding)
         filter.action = { [weak self] in self?.offerFilter() }
         recenter.action = { [weak self] in self?.pilot.recenter() }
         info.action = { [weak self] in self?.toggleInfo() }
@@ -88,6 +85,16 @@ final class MapView: FlippedView {
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    /// One of its buttons, as the image viewer's: a round overlay pill, a symbol alone a circle.
+    private static func button(_ title: String? = nil, symbol: Symbol? = nil, help: String? = nil) -> ControlView {
+        let size = MapLayout.control
+        let button = ControlView(
+            title, symbol: symbol, help: help, variant: .overlay, size: size, symbolSize: title == nil ? size.wordlessSymbol : size.smallSymbol
+        ) {}
+        button.round = true
+        return button
+    }
 
     /// How tall the map is in a window this wide. The measuring pass asks it and never makes a map.
     static func height(node: UiKind.Map, windowWidth: CGFloat) -> CGFloat {
@@ -173,14 +180,13 @@ final class MapView: FlippedView {
         pilot.resize(to: bounds.size)
         let inset = MapLayout.inset
         var x = inset
+        let side = MapLayout.control.height
         for button in [filter, recenter, info] where !button.isHidden {
-            let width = button === filter ? button.naturalWidth : MapLayout.roundSide
-            button.frame = CGRect(x: x, y: inset, width: width, height: MapLayout.roundSide)
-            x += width + MapLayout.gap
+            button.frame = CGRect(x: x, y: inset, width: button.naturalWidth, height: side)
+            x += button.naturalWidth + MapLayout.gap
         }
         let expandWidth = expand.naturalWidth
-        expand.frame = CGRect(x: bounds.width - inset - expandWidth, y: inset, width: expandWidth, height: MapLayout.expandHeight)
-        let side = MapLayout.zoomSide
+        expand.frame = CGRect(x: bounds.width - inset - expandWidth, y: inset, width: expandWidth, height: side)
         zoomOut.frame = CGRect(x: bounds.width - inset - side, y: bounds.height - inset - side, width: side, height: side)
         zoomIn.frame = zoomOut.frame.offsetBy(dx: 0, dy: -side - MapLayout.gap)
         let boxWidth = max(0, min(MapLayout.noteWidth, bounds.width - 2 * inset))
@@ -201,14 +207,13 @@ final class MapView: FlippedView {
         let categories = node?.categories ?? []
         filter.isHidden = categories.count < 2
         filter.title = node?.filter ?? "All places"
-        info.expanded = infoOpen
+        info.selected = infoOpen
         note.text = node?.note ?? ""
         note.isHidden = !infoOpen
         failure.isHidden = !tilesFailed
         overview.isHidden = node?.route != .overview
         expand.title = expansion == nil ? "Expand" : "Collapse"
         expand.symbol = expansion == nil ? .maximize2 : .minimize2
-        expand.expanded = expansion != nil
         stage.radius = expansion == nil ? radius : Radius.xl
         placeholder.radius = radius
         stage.relayout()

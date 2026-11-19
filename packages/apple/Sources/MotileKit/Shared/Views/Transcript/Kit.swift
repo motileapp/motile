@@ -279,7 +279,7 @@ final class OverlayButton: FlippedView {
     }
 
     private func light(_ lit: Bool) {
-        fill.fill = lit ? Theme.controlLitOverPicture : Theme.controlOverPicture
+        fill.fill = lit ? Theme.controlBorderOverPicture : Theme.controlOverPicture
     }
 }
 

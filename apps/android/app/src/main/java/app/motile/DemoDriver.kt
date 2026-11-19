@@ -61,6 +61,7 @@ import java.util.concurrent.Executors
  *     access <supervised|…>             sets how much the agent may do without asking
  *     slide <label> <share>             drags the program's slider with that label to a share of its track
  *     press <label>                     presses the program's button with that label
+ *     page close                        puts a program's page open over the screen back in its row
  */
 object DemoDriver {
     private val main = Handler(Looper.getMainLooper())
@@ -278,6 +279,7 @@ object DemoDriver {
                 val button = programBounds(store, rest) ?: return
                 drag(button.center.x, button.center.x, button.center.y)
             }
+            "page" -> if (rest == "close") store.closeExpandedPage()
             "steers" -> Preferences.set(AppStore.STEERS_KEY, rest == "on")
             "drop" -> store.dropTargeted = rest == "on"
         }

@@ -154,7 +154,7 @@ impl Look {
             Variant::Accent => c.wash(c.primary, lit),
             Variant::Overlay => {
                 if lit {
-                    c.control_lit_over_picture
+                    c.control_border_over_picture
                 } else {
                     c.control_over_picture
                 }
@@ -280,6 +280,8 @@ pub struct ControlLabel {
     pub spread: bool,
     /// Its symbol stands after its words, as an Expand button's.
     pub symbol_after: bool,
+    /// Its symbol stands as far from its side as its words do, which a pill's round ends want.
+    pub centered: bool,
     /// Its words are the prose's, as the text it stands under.
     pub prose: bool,
     /// Its chevron points up, at what it hides again.
@@ -311,6 +313,7 @@ impl ControlLabel {
             placeholder: false,
             spread: false,
             symbol_after: false,
+            centered: false,
             prose: false,
             chevron_up: false,
             chevron_turn: 0.,
@@ -387,7 +390,7 @@ impl ControlLabel {
 
     /// How much nearer its sides its symbol and its chevron stand than its words would.
     fn outsets(&self) -> (f32, f32) {
-        let symbol = if self.icon.is_some() { self.size.symbol_outset() } else { 0. };
+        let symbol = if self.icon.is_some() && !self.centered { self.size.symbol_outset() } else { 0. };
         let chevron = if self.chevron { self.size.chevron_outset() } else { 0. };
         if self.symbol_after { (0., symbol.max(chevron)) } else { (symbol, chevron) }
     }
@@ -793,6 +796,7 @@ impl ActionButton {
 
     pub fn round(mut self, round: bool) -> Self {
         self.look.round = round;
+        self.label.centered = round;
         self
     }
 
@@ -918,7 +922,7 @@ impl ActionButton {
             true => (size.height() - self.label.symbol_size.unwrap_or(size.wordless_symbol()).side()) / 2.,
             false => {
                 self.label.padding.unwrap_or(size.padding())
-                    - if self.label.icon.is_some() { size.symbol_outset() } else { 0. }
+                    - if self.label.icon.is_some() && !self.label.centered { size.symbol_outset() } else { 0. }
             }
         };
         (leading, vertical.max(0.))

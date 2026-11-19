@@ -219,7 +219,7 @@ struct RootView: View {
             }
         }
         // The viewer's top bar lets clicks through, to move the window.
-        .allowsHitTesting(store.viewing == nil)
+        .allowsHitTesting(store.viewing == nil && store.expandedPage == nil)
         .overlay { EscapeKey() }
         .dropdowns()
         .toolbar {
@@ -250,6 +250,11 @@ struct RootView: View {
         .overlay {
             if let viewing = store.viewing {
                 MediaViewer(viewing: viewing)
+            }
+        }
+        .overlay {
+            if let page = store.expandedPage {
+                ExpandedPageOverlay(page: page)
             }
         }
         .modal(isPresented: $store.showsAddServer) {
@@ -373,9 +378,12 @@ struct MainView: View {
             .toolbar {
                 if store.settings == nil {
                     ToolbarItem(placement: .navigation) {
+                        // Kept in place under an expanded page, as the toolbar would shrink without it.
                         ToolbarButton(symbol: .panelLeft, help: store.shortcuts.help(sidebarHidden ? "Show the sidebar" : "Hide the sidebar", "sidebar.toggle")) {
                             sidebarHidden.toggle()
                         }
+                        .opacity(store.expandedPage == nil ? 1 : 0)
+                        .allowsHitTesting(store.expandedPage == nil)
                     }
                     .withoutSystemGlass()
                 }
