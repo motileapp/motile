@@ -1,12 +1,13 @@
 import Foundation
 
 /// How far the questions of a tool call are answered: the one that shows, the options chosen for
-/// each, and what was written for each in the composer: in place of the one option a question
-/// takes, or beside those of one that takes several.
+/// each, what was written for each in the composer, and the questions taking one answer whose
+/// chosen answer is what was written. What was written stays when an option is chosen instead.
 struct QuestionAnswers: Equatable {
     var index = 0
     var chosen: [String: Set<String>] = [:]
     var typed: [String: String] = [:]
+    var writtenChosen: Set<String> = []
 }
 
 extension AppStore {
@@ -34,15 +35,30 @@ extension AppStore {
         questionAnswers[approval.id]?.typed[question(approval).id] ?? ""
     }
 
+    /// Writing chooses what is written as the answer.
     func writeAnswer(_ text: String, to approval: Approval) {
+        guard text != typedAnswer(approval) else { return }
         let id = question(approval).id
-        questionAnswers[approval.id, default: QuestionAnswers()].typed[id] = text.isEmpty ? nil : text
+        var answers = questionAnswers[approval.id] ?? QuestionAnswers()
+        answers.typed[id] = text.isEmpty ? nil : text
+        answers.writtenChosen.insert(id)
+        questionAnswers[approval.id] = answers
     }
 
-    /// What is written counts in place of the one option a question takes, so none shows as chosen beside it.
+    /// Whether what is written counts: beside the options of a question that takes several, or as
+    /// the one answer when it was written or chosen last.
+    func isWrittenChosen(_ approval: Approval) -> Bool {
+        guard !typedAnswer(approval).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        let question = question(approval)
+        return question.multiple || questionAnswers[approval.id]?.writtenChosen.contains(question.id) == true
+    }
+
+    func chooseWritten(in approval: Approval) {
+        questionAnswers[approval.id, default: QuestionAnswers()].writtenChosen.insert(question(approval).id)
+    }
+
     func isChosen(_ option: Question.Choice, in approval: Approval) -> Bool {
-        let written = !typedAnswer(approval).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        guard question(approval).multiple || !written else { return false }
+        guard question(approval).multiple || !isWrittenChosen(approval) else { return false }
         return questionAnswers[approval.id]?.chosen[question(approval).id]?.contains(option.label) == true
     }
 
@@ -52,7 +68,7 @@ extension AppStore {
         let question = question(approval)
         let index = questionIndex(approval)
         var answers = questionAnswers[approval.id] ?? QuestionAnswers()
-        if !question.multiple { answers.typed[question.id] = nil }
+        if !question.multiple { answers.writtenChosen.remove(question.id) }
         var picked = answers.chosen[question.id] ?? []
         if question.multiple {
             if !picked.insert(option.label).inserted { picked.remove(option.label) }
@@ -75,7 +91,8 @@ extension AppStore {
         let state = questionAnswers[approval.id] ?? QuestionAnswers()
         var answers: [String: String] = [:]
         for question in approval.questions {
-            let written = (state.typed[question.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let typed = (state.typed[question.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let written = question.multiple || state.writtenChosen.contains(question.id) ? typed : ""
             let picked = question.options.map(\.label).filter { state.chosen[question.id]?.contains($0) == true }
             let parts = question.multiple ? picked + [written] : [written.isEmpty ? picked.first ?? "" : written]
             let answer = parts.filter { !$0.isEmpty }.joined(separator: ", ")
