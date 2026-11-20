@@ -704,7 +704,6 @@ private final class CenteringClipView: NSClipView {
         return rect
     }
 }
-#endif
 
 private extension View {
     /// Words in a capsule over the picture, as the round buttons beside them are drawn.
@@ -716,3 +715,4 @@ private extension View {
             .overlay { Capsule().strokeBorder(Color.themeBorderOverlayButton, lineWidth: 1) }
     }
 }
+#endif
