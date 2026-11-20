@@ -145,6 +145,11 @@ extension TranscriptRepresentable: NSViewRepresentable {
         update(view)
     }
 
+    /// The transcript takes the room it is given; asking AppKit instead lays out every row it shows.
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: TranscriptView, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? 0, height: proposal.height ?? 0)
+    }
+
     static func dismantleNSView(_ view: TranscriptView, coordinator: Coordinator) {
         coordinator.model?.detach(owner: view)
     }

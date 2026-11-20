@@ -36,6 +36,11 @@ private struct TooltipCarrier: NSViewRepresentable {
         guard view.toolTip != text else { return }
         view.toolTip = text
     }
+
+    /// It lies behind its view at that view's size; asking AppKit instead builds a layout engine for it.
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: TooltipView, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? 0, height: proposal.height ?? 0)
+    }
 }
 
 private final class TooltipView: NSView {
