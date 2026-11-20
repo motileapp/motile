@@ -389,12 +389,11 @@ struct SearchField: View {
     /// Without a background or a height of its own, for a field that lies on a glass capsule and
     /// reaches its trailing end.
     var capsule = false
-    var clearable = true
     var focus: FocusState<Bool>.Binding?
 
     var body: some View {
         InputField(
-            prompt, text: $text, icon: .search, variant: capsule ? .capsule : .filled, size: Platform.scale > 1 ? .large : .regular, clearable: clearable,
+            prompt, text: $text, icon: .search, variant: capsule ? .capsule : .filled, size: Platform.scale > 1 ? .large : .regular, clearable: true,
             focus: focus
         )
     }
