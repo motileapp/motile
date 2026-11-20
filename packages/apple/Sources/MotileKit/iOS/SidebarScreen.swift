@@ -292,7 +292,7 @@ struct SidebarScreen: View {
                     AccountMenu()
                         .appearing(.scale.combined(with: .opacity))
                 }
-                SearchField(text: $store.threadSearch, capsule: true, clearable: false, focus: $searchFocused)
+                SearchField(text: $store.threadSearch, capsule: true, focus: $searchFocused)
                     .steersSearch(highlighted: highlighted, open: openSearchResult)
                     .onChange(of: store.searchFocusRequests) { FieldFocus.take { searchFocused = true } }
                     .padding(.leading, 6)
