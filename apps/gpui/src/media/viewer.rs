@@ -596,16 +596,18 @@ impl Render for MediaViewer {
             .h(px(24.))
             .px(px(10.))
             .rounded_full()
-            .bg(c.scrim)
+            .bg(c.overlay_button)
+            .border_1()
+            .border_color(c.border_overlay_button)
             .flex()
             .items_center()
             .gap(px(8.))
             .text_size(TextSize::Sm)
             .font_weight(FontWeight::MEDIUM)
-            .text_color(c.foreground_over_picture)
+            .text_color(c.foreground)
             .child(crate::ui::middle_truncated(item.name.clone()))
             .when(many, |title| {
-                title.child(div().flex_none().text_color(c.muted_foreground_over_picture).child(format!(
+                title.child(div().flex_none().text_color(c.muted_foreground).child(format!(
                     "{} of {}",
                     viewing.index + 1,
                     viewing.items.len()
@@ -886,9 +888,11 @@ impl MediaViewer {
                         .flex()
                         .items_center()
                         .rounded_full()
-                        .bg(c.scrim)
+                        .bg(c.overlay_button)
+                        .border_1()
+                        .border_color(c.border_overlay_button)
                         .text_size(TextSize::Sm)
-                        .text_color(c.foreground_over_picture)
+                        .text_color(c.foreground)
                         .child("This image couldn't be marked up."),
                 )
             })

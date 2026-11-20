@@ -20,6 +20,8 @@ class Palette(
     val popover: Color,
     val popoverAccent: Color,
     val popoverAccentStronger: Color,
+    val overlayButton: Color,
+    val overlayButtonAccent: Color,
     val foreground: Color,
     val emphasizedForeground: Color,
     val mutedForeground: Color,
@@ -48,6 +50,7 @@ class Palette(
     val borderCard: Color,
     val borderInput: Color,
     val borderPopover: Color,
+    val borderOverlayButton: Color,
     val input: Color,
     val segment: Color,
     val segmentAccent: Color,
@@ -124,6 +127,8 @@ class Palette(
             popover = Color(0xFFFFFFFF),
             popoverAccent = Color(0xFFEAECF0),
             popoverAccentStronger = Color(0xFFDFE2E8),
+            overlayButton = Color(0xFFF6F7F9),
+            overlayButtonAccent = Color(0xFFE4E6EB),
             foreground = Color(0xFF22242B),
             emphasizedForeground = Color(0xFF000000),
             mutedForeground = Color(0xFF606470),
@@ -152,6 +157,7 @@ class Palette(
             borderCard = Color(0xFFE9EBF0),
             borderInput = Color(0xFFEAECF0),
             borderPopover = Color(0xFFE6E8EB),
+            borderOverlayButton = Color(0xFFD9DCE5),
             input = Color(0xFFE8EAEE),
             segment = Color(0xFFEAECF0),
             segmentAccent = Color(0xFFDFE2E8),
@@ -228,6 +234,8 @@ class Palette(
             popover = Color(0xFF191A1F),
             popoverAccent = Color(0xFF212329),
             popoverAccentStronger = Color(0xFF2B2C32),
+            overlayButton = Color(0xFF191A1F),
+            overlayButtonAccent = Color(0xFF2B2C32),
             foreground = Color(0xFFD0D2D9),
             emphasizedForeground = Color(0xFFFFFFFF),
             mutedForeground = Color(0xFF9A9EAB),
@@ -256,6 +264,7 @@ class Palette(
             borderCard = Color(0xFF1E1F25),
             borderInput = Color(0xFF1A1B21),
             borderPopover = Color(0xFF222228),
+            borderOverlayButton = Color(0xFF2B2C32),
             input = Color(0xFF14151A),
             segment = Color(0xFF0A0B0F),
             segmentAccent = Color(0xFF14151A),
@@ -334,6 +343,8 @@ class Palette(
         "popover" -> popover
         "popover-accent" -> popoverAccent
         "popover-accent-stronger" -> popoverAccentStronger
+        "overlay-button" -> overlayButton
+        "overlay-button-accent" -> overlayButtonAccent
         "foreground" -> foreground
         "emphasized-foreground" -> emphasizedForeground
         "muted-foreground" -> mutedForeground
@@ -362,6 +373,7 @@ class Palette(
         "border-card" -> borderCard
         "border-input" -> borderInput
         "border-popover" -> borderPopover
+        "border-overlay-button" -> borderOverlayButton
         "input" -> input
         "segment" -> segment
         "segment-accent" -> segmentAccent

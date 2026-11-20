@@ -28,6 +28,8 @@
   --color-popover: var(--popover);
   --color-popover-accent: var(--popover-accent);
   --color-popover-accent-stronger: var(--popover-accent-stronger);
+  --color-overlay-button: var(--overlay-button);
+  --color-overlay-button-accent: var(--overlay-button-accent);
   --color-foreground: var(--foreground);
   --color-emphasized-foreground: var(--emphasized-foreground);
   --color-muted-foreground: var(--muted-foreground);
@@ -56,6 +58,7 @@
   --color-border-card: var(--border-card);
   --color-border-input: var(--border-input);
   --color-border-popover: var(--border-popover);
+  --color-border-overlay-button: var(--border-overlay-button);
   --color-input: var(--input);
   --color-segment: var(--segment);
   --color-segment-accent: var(--segment-accent);

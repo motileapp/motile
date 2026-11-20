@@ -257,10 +257,10 @@ final class OverlayButton: FlippedView {
 
     init(_ symbol: Symbol, size: ControlSize, tooltip: String, action: @escaping () -> Void) {
         self.size = size
-        self.symbol = SymbolView(symbol, size: size.symbol, tint: Theme.foregroundOverPicture)
+        self.symbol = SymbolView(symbol, size: size.symbol, tint: Theme.foreground)
         super.init(frame: .zero)
         fill.radius = size.height / 2
-        fill.stroke = Theme.controlBorderOverPicture
+        fill.stroke = Theme.borderOverlayButton
         addSubview(fill)
         addSubview(self.symbol)
         light(false)
@@ -279,7 +279,7 @@ final class OverlayButton: FlippedView {
     }
 
     private func light(_ lit: Bool) {
-        fill.fill = lit ? Theme.controlBorderOverPicture : Theme.controlOverPicture
+        fill.fill = lit ? Theme.overlayButtonAccent : Theme.overlayButton
     }
 }
 

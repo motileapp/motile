@@ -75,7 +75,6 @@ import app.motile.theme.LocalPalette
 import app.motile.theme.LocalRow
 import app.motile.theme.LocalSurface
 import app.motile.theme.Opacity
-import app.motile.theme.OverPicture
 import app.motile.theme.Palette
 import app.motile.theme.Surface
 import app.motile.theme.Theme
@@ -173,7 +172,7 @@ data class ControlLook(
                 else -> palette.mutedForeground
             }
             ButtonVariant.Link, ButtonVariant.Accent -> palette.primary
-            ButtonVariant.Overlay -> OverPicture.foreground
+            ButtonVariant.Overlay -> palette.foreground
         }
     }
 
@@ -198,7 +197,7 @@ data class ControlLook(
             }
             ButtonVariant.Link -> if (lit) palette.primary.at(Opacity.ColorTint, dark) else Color.Transparent
             ButtonVariant.Accent -> palette.primary.at(if (lit) Opacity.ColorTintStronger else Opacity.ColorTint, dark)
-            ButtonVariant.Overlay -> if (lit) OverPicture.controlBorder else OverPicture.control
+            ButtonVariant.Overlay -> if (lit) palette.overlayButtonAccent else palette.overlayButton
         }
     }
 
@@ -312,7 +311,7 @@ fun Modifier.controlBackground(look: ControlLook, under: Color? = null, revealed
     val border = when (look.variant) {
         ButtonVariant.Outline -> look.surface.border(palette)
         ButtonVariant.Secondary -> if (look.surface.edgesControls) look.surface.color(Surface.Layer.ControlLit, palette) else return filled
-        ButtonVariant.Overlay -> OverPicture.controlBorder
+        ButtonVariant.Overlay -> palette.borderOverlayButton
         else -> return filled
     }
     return filled.border(1.dp, border, shape)

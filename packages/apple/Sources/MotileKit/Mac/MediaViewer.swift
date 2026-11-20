@@ -72,14 +72,11 @@ struct MediaViewer: View {
                         .truncationMode(.middle)
                     if viewing.items.count > 1 {
                         Text("\(viewing.index + 1) of \(viewing.items.count)")
-                            .foregroundStyle(Color.themeMutedForegroundOverPicture)
+                            .foregroundStyle(Color.themeMutedForeground)
                     }
                 }
                 .font(.ui(.sm, weight: .medium))
-                .foregroundStyle(Color.themeForegroundOverPicture)
-                .padding(.horizontal, 10)
-                .frame(height: 24)
-                .background(Color.themeScrim, in: Capsule())
+                .pill()
                 .allowsHitTesting(false)
                 .padding(.horizontal, markup == nil ? Self.nameInset : Self.markupNameInset)
                 if let markup {
@@ -118,10 +115,7 @@ struct MediaViewer: View {
                     if markupFailed {
                         Text("This image couldn't be marked up.")
                             .font(.ui(.sm))
-                            .foregroundStyle(Color.themeForegroundOverPicture)
-                            .padding(.horizontal, 10)
-                            .frame(height: 24)
-                            .background(Color.themeScrim, in: Capsule())
+                            .pill()
                     }
                     MarkupBar(session: markup)
                 }
@@ -711,3 +705,14 @@ private final class CenteringClipView: NSClipView {
     }
 }
 #endif
+
+private extension View {
+    /// Words in a capsule over the picture, as the round buttons beside them are drawn.
+    func pill() -> some View {
+        foregroundStyle(Color.themeForeground)
+            .padding(.horizontal, 10)
+            .frame(height: 24)
+            .background(Color.themeOverlayButton, in: Capsule())
+            .overlay { Capsule().strokeBorder(Color.themeBorderOverlayButton, lineWidth: 1) }
+    }
+}

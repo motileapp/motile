@@ -61,12 +61,12 @@ pub struct Colors {
     /// The text colours as they are in the dark, for what lies over a picture.
     pub foreground_over_picture: Hsla,
     pub muted_foreground_over_picture: Hsla,
-    /// A control as it is in the dark, over a picture: the background's accent, its edge's colour
-    /// when lit, inside a line of the strongest accent. A video's sliders fill with the stronger one.
+    /// The video player's controls as they are in the dark: the background's accent, its edge's
+    /// colour when lit, inside a line of the strongest accent. Its sliders fill with the stronger one.
+    #[cfg_attr(not(target_os = "macos"), expect(dead_code, reason = "only the Mac's video player reads it"))]
     pub control_over_picture: Hsla,
     #[cfg_attr(not(target_os = "macos"), expect(dead_code, reason = "only the Mac's video player reads it"))]
     pub control_lit_over_picture: Hsla,
-    pub control_border_over_picture: Hsla,
     /// A colour's wash: the colour at color-tint. Chips, notices, diff lines.
     #[expect(dead_code, reason = "for the views still to be ported")]
     pub primary_tint: Hsla,
@@ -104,7 +104,6 @@ impl Colors {
             muted_foreground_over_picture: night.muted_foreground,
             control_over_picture: night.background_accent,
             control_lit_over_picture: night.background_accent_stronger,
-            control_border_over_picture: night.background_accent_strongest,
             primary_tint: thinned(t.primary, Opacity::ColorTint),
             primary_tint_stronger: thinned(t.primary, Opacity::ColorTintStronger),
             destructive_tint: thinned(t.destructive, Opacity::ColorTint),

@@ -22,7 +22,7 @@ enum ButtonVariant {
     case link
     /// A link's colour on a wash of it: a choice that is on.
     case accent
-    /// A secondary button as it is in the dark, over a picture or a video.
+    /// A round, solid button over a picture, a video or a map.
     case overlay
 }
 
@@ -64,7 +64,7 @@ struct ControlLook {
         case .waiting: return .themePendingForeground
         case .ghost: return selected || lit ? .themeForeground : .themeMutedForeground
         case .link, .accent: return .themePrimary
-        case .overlay: return .themeForegroundOverPicture
+        case .overlay: return .themeForeground
         }
     }
 
@@ -81,7 +81,7 @@ struct ControlLook {
         case .ghost: AnyShapeStyle(selected ? surface.color(.controlLit) : lit ? ghostLit : .clear)
         case .link: lit ? AnyShapeStyle(Color.themePrimary.wash()) : AnyShapeStyle(Color.clear)
         case .accent: AnyShapeStyle(Color.themePrimary.wash(lit: lit))
-        case .overlay: AnyShapeStyle(lit ? Color.themeControlBorderOverPicture : Color.themeControlOverPicture)
+        case .overlay: AnyShapeStyle(lit ? Color.themeOverlayButtonAccent : Color.themeOverlayButton)
         }
     }
 
@@ -132,7 +132,7 @@ struct ControlLook {
                     shape.strokeBorder(surface.color(.controlLit), lineWidth: 1)
                 }
                 if variant == .overlay {
-                    shape.strokeBorder(Color.themeControlBorderOverPicture, lineWidth: 1)
+                    shape.strokeBorder(Color.themeBorderOverlayButton, lineWidth: 1)
                 }
             }
     }
@@ -169,7 +169,7 @@ extension ControlLook {
         case .waiting: return Theme.pendingForeground
         case .ghost: return selected || lit ? Theme.foreground : Theme.mutedForeground
         case .link, .accent: return Theme.primary
-        case .overlay: return Theme.foregroundOverPicture
+        case .overlay: return Theme.foreground
         }
     }
 
@@ -186,7 +186,7 @@ extension ControlLook {
         case .ghost: return selected ? surface.platform(.controlLit) : lit ? platformGhostLit : .clear
         case .link: return lit ? Theme.primaryTint : .clear
         case .accent: return lit ? Theme.primaryTintStronger : Theme.primaryTint
-        case .overlay: return lit ? Theme.controlBorderOverPicture : Theme.controlOverPicture
+        case .overlay: return lit ? Theme.overlayButtonAccent : Theme.overlayButton
         }
     }
 
@@ -194,7 +194,7 @@ extension ControlLook {
         switch variant {
         case .outline: surface.platformBorder
         case .secondary where surface.edgesControls: surface.platform(.controlLit)
-        case .overlay: Theme.controlBorderOverPicture
+        case .overlay: Theme.borderOverlayButton
         default: nil
         }
     }
