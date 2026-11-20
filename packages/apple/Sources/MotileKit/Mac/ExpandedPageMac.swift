@@ -7,7 +7,6 @@ import SwiftUI
 /// window. Every click, drag, wheel and key in the page is the page's, but Esc, which puts it back.
 struct ExpandedPageOverlay: View {
     private static let escape: UInt16 = 53
-    private static let cornerInset: CGFloat = 12
 
     @Environment(AppStore.self) private var store
     let page: ExpandedPage
@@ -26,7 +25,7 @@ struct ExpandedPageOverlay: View {
                     "Exit full screen", icon: .minimize2, help: "Exit full screen (Esc)", variant: .outline, size: ProgramWeb.exitSize,
                     symbolSize: ProgramWeb.exitSymbol, round: true
                 ) { store.closeExpandedPage() }
-                .padding(.trailing, Self.cornerInset)
+                .padding(.trailing, (bar - ProgramWeb.exitSize.height) / 2)
                 .frame(height: bar)
                 .offset(y: -bar)
             }
