@@ -94,12 +94,15 @@ struct ThreadScreen: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
     }
 
+    private var hasLeading: Bool {
+        overSidebar || store.shownAgent != nil || store.parentThread != nil
+    }
+
     @ToolbarContentBuilder private var bar: some ToolbarContent {
-        if overSidebar || store.shownAgent != nil || store.parentThread != nil {
+        if hasLeading {
             GlassToolbarItem(placement: .topBarLeading) {
                 HStack(spacing: 0) { leading }
                     .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxX } action: { leadingEdge = $0 }
-                    .onDisappear { leadingEdge = nil }
             }
         }
         ToolbarItem(placement: .principal) { titleMenu }
@@ -210,6 +213,7 @@ struct ThreadScreen: View {
     /// the title reaches as far both ways from the screen's middle and starts after the buttons.
     private var titleRoom: (start: CGFloat, end: CGFloat)? {
         guard screenFrame != .zero else { return nil }
+        let leadingEdge = hasLeading ? leadingEdge : nil
         let start = leadingEdge.map { $0 + Self.titleGap } ?? screenFrame.minX + Theme.contentPadding
         let end = trailingEdge.map { $0 - Self.titleGap } ?? screenFrame.maxX - Theme.contentPadding
         return (start, max(start, end))
