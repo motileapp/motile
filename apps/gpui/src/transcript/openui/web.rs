@@ -222,7 +222,8 @@ mod live {
     pub const BRIDGE: Bridge = Bridge::Wry;
     /// The pill that puts a page open over the window back, at the end of the top bar.
     const EXIT: ControlSize = ControlSize::Large;
-    const EXIT_INSET: f32 = 12.;
+    /// As far from the window's edge as from the top bar's.
+    const EXIT_INSET: f32 = (theme::TOP_BAR - EXIT.height()) / 2.;
     /// How long after the window is resized the page is fitted to it again, once it is laid out.
     const REFIT_AFTER: Duration = Duration::from_millis(100);
 
