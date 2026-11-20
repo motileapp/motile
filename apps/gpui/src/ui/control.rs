@@ -112,7 +112,7 @@ impl Look {
                 }
             }
             Variant::Link | Variant::Accent => c.primary,
-            Variant::Overlay => c.foreground_over_picture,
+            Variant::Overlay => c.foreground,
             Variant::Glass => c.foreground,
         }
     }
@@ -154,9 +154,9 @@ impl Look {
             Variant::Accent => c.wash(c.primary, lit),
             Variant::Overlay => {
                 if lit {
-                    c.control_border_over_picture
+                    c.overlay_button_accent
                 } else {
-                    c.control_over_picture
+                    c.overlay_button
                 }
             }
             Variant::Glass => {
@@ -186,7 +186,7 @@ impl Look {
         match self.variant {
             Variant::Outline => Some(self.surface.border(c)),
             Variant::Secondary if self.surface.edges_controls() => Some(self.surface.layer(Layer::ControlLit, c)),
-            Variant::Overlay => Some(c.control_border_over_picture),
+            Variant::Overlay => Some(c.border_overlay_button),
             _ => None,
         }
     }

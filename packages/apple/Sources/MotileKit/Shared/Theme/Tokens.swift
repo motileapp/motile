@@ -16,6 +16,8 @@ extension Theme {
     static let popover = tone(0xffffff, 0x191a1f)
     static let popoverAccent = tone(0xeaecf0, 0x212329)
     static let popoverAccentStronger = tone(0xdfe2e8, 0x2b2c32)
+    static let overlayButton = tone(0xf6f7f9, 0x191a1f)
+    static let overlayButtonAccent = tone(0xe4e6eb, 0x2b2c32)
     static let foreground = tone(0x22242b, 0xd0d2d9)
     static let emphasizedForeground = tone(0x000000, 0xffffff)
     static let mutedForeground = tone(0x606470, 0x9a9eab)
@@ -44,6 +46,7 @@ extension Theme {
     static let borderCard = tone(0xe9ebf0, 0x1e1f25)
     static let borderInput = tone(0xeaecf0, 0x1a1b21)
     static let borderPopover = tone(0xe6e8eb, 0x222228)
+    static let borderOverlayButton = tone(0xd9dce5, 0x2b2c32)
     static let input = tone(0xe8eaee, 0x14151a)
     static let segment = tone(0xeaecf0, 0x0a0b0f)
     static let segmentAccent = tone(0xdfe2e8, 0x14151a)
@@ -123,6 +126,8 @@ extension Theme {
         case "popover": popover
         case "popover-accent": popoverAccent
         case "popover-accent-stronger": popoverAccentStronger
+        case "overlay-button": overlayButton
+        case "overlay-button-accent": overlayButtonAccent
         case "foreground": foreground
         case "emphasized-foreground": emphasizedForeground
         case "muted-foreground": mutedForeground
@@ -151,6 +156,7 @@ extension Theme {
         case "border-card": borderCard
         case "border-input": borderInput
         case "border-popover": borderPopover
+        case "border-overlay-button": borderOverlayButton
         case "input": input
         case "segment": segment
         case "segment-accent": segmentAccent
@@ -230,6 +236,8 @@ extension Color {
     static let themePopover = Color(platform: Theme.popover)
     static let themePopoverAccent = Color(platform: Theme.popoverAccent)
     static let themePopoverAccentStronger = Color(platform: Theme.popoverAccentStronger)
+    static let themeOverlayButton = Color(platform: Theme.overlayButton)
+    static let themeOverlayButtonAccent = Color(platform: Theme.overlayButtonAccent)
     static let themeForeground = Color(platform: Theme.foreground)
     static let themeEmphasizedForeground = Color(platform: Theme.emphasizedForeground)
     static let themeMutedForeground = Color(platform: Theme.mutedForeground)
@@ -258,6 +266,7 @@ extension Color {
     static let themeBorderCard = Color(platform: Theme.borderCard)
     static let themeBorderInput = Color(platform: Theme.borderInput)
     static let themeBorderPopover = Color(platform: Theme.borderPopover)
+    static let themeBorderOverlayButton = Color(platform: Theme.borderOverlayButton)
     static let themeInput = Color(platform: Theme.input)
     static let themeSegment = Color(platform: Theme.segment)
     static let themeSegmentAccent = Color(platform: Theme.segmentAccent)
