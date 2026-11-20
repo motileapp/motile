@@ -178,7 +178,7 @@ fun McpServerAddSheet(query: String = "") {
                 )
             }
             is McpServerAdder.Step.Key -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                ActionButton("Back", size = ControlSize.Large, margin = beside(end = 8.dp)) { adder.back() }
+                ActionButton("Back", variant = ButtonVariant.Ghost, size = ControlSize.Large, margin = beside(end = 8.dp)) { adder.back() }
                 ActionButton(
                     "Add", variant = ButtonVariant.Primary, size = ControlSize.Large, pending = adder.adding != null, disabled = key.isBlank(),
                 ) { addWithKey(step) }

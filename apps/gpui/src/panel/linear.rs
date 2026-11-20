@@ -1082,7 +1082,7 @@ impl Render for NewIssue {
         })
         .button(|button| button.variant(Variant::Secondary).small().symbol("circle-user").help("Assignee"));
 
-        let cancel = ActionButton::new("new-issue-cancel", "Cancel").on_click({
+        let cancel = ActionButton::new("new-issue-cancel", "Cancel").ghost().on_click({
             let this = this.clone();
             move |_, _, cx| {
                 let _ = this.update(cx, |this, cx| this.close(cx));

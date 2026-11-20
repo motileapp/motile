@@ -121,7 +121,7 @@ fun CustomSnoozeSheet(snooze: CustomSnooze) {
         }
         error?.let { Text(it, size = TextSize.Xs, color = Theme.colors.destructive) }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            ActionButton("Cancel", size = ControlSize.Large, margin = beside(end = 8.dp), onClick = close)
+            ActionButton("Cancel", variant = ButtonVariant.Ghost, size = ControlSize.Large, margin = beside(end = 8.dp), onClick = close)
             ActionButton("Snooze", variant = ButtonVariant.Primary, size = ControlSize.Large, onClick = ::submit)
         }
     }

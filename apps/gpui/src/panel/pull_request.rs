@@ -2423,6 +2423,7 @@ impl Render for DescriptionEditor {
                     .justify_end()
                     .child(
                         ActionButton::new("pr-description-cancel", "Cancel")
+                            .ghost()
                             .margin(beside(0., 4.))
                             .on_click(cx.listener(|this, _, _, cx| this.dismiss(cx))),
                     )

@@ -317,7 +317,7 @@ struct GatewayAddSheet: View {
             }
             HStack {
                 Spacer()
-                ActionButton("Cancel") { close() }
+                ActionButton("Cancel", variant: .ghost) { close() }
                     .keyboardShortcut(.cancelAction)
             }
         }
@@ -484,7 +484,7 @@ struct GatewaySignInSheet: View {
                 steps(signIn)
                 HStack(spacing: 0) {
                     Spacer()
-                    ActionButton("Cancel", margin: .beside(trailing: startsAgain(signIn) ? 4 : 0)) { close() }
+                    ActionButton("Cancel", variant: .ghost, margin: .beside(trailing: startsAgain(signIn) ? 4 : 0)) { close() }
                         .keyboardShortcut(.cancelAction)
                     if startsAgain(signIn) {
                         ActionButton("Start Again", variant: .primary, pending: store.gatewaySignInStarting != nil, margin: .beside(leading: 4)) {

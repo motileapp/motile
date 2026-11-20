@@ -600,6 +600,7 @@ impl Render for AccountSheet {
             div().flex().justify_end().child(done)
         } else {
             let cancel = ActionButton::new("account-cancel", "Cancel")
+                .ghost()
                 .margin(beside(0., 4.))
                 .on_click(cx.listener(|this, _, _, cx| this.close(cx)));
             let save = ActionButton::new("account-save", "Save")

@@ -206,7 +206,7 @@ struct ConfirmationView: View {
         let count = confirmation.answers.count + 1
         return HStack(spacing: 0) {
             ActionButton(
-                confirmation.dismissal, variant: confirmation.answers.isEmpty ? .primary : .secondary, margin: .sharing(8, at: 0, of: count)
+                confirmation.dismissal, variant: confirmation.answers.isEmpty ? .primary : .ghost, margin: .sharing(8, at: 0, of: count)
             ) { close() }
             .keyboardShortcut(confirmation.answers.isEmpty ? .defaultAction : .cancelAction)
             ForEach(Array(confirmation.answers.enumerated()), id: \.offset) { index, answer in

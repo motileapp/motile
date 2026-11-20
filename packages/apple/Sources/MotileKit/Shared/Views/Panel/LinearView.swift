@@ -434,7 +434,7 @@ private struct LinearNewIssue: View {
             }
             HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
+                ActionButton("Cancel", variant: .ghost, margin: .beside(trailing: 4)) { close() }
                     .keyboardShortcut(.cancelAction)
                 ActionButton("Create Issue", variant: .primary, pending: linear.working.contains("create"), margin: .beside(leading: 4)) {
                     guard let picked else { return }

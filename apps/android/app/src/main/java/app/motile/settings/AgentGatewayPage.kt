@@ -283,7 +283,7 @@ private fun RenameAccountDialog(account: GatewayAccount, onDismiss: () -> Unit) 
                 Text("Rename Account", size = TextSize.Lg, weight = FontWeight.SemiBold)
                 InputField("Name", name, { name = it }, Modifier.fillMaxWidth(), size = ControlSize.Large, focusRequester = field, onSubmit = ::rename)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    ActionButton("Cancel", size = ControlSize.Large, margin = beside(end = 8.dp), onClick = onDismiss)
+                    ActionButton("Cancel", variant = ButtonVariant.Ghost, size = ControlSize.Large, margin = beside(end = 8.dp), onClick = onDismiss)
                     ActionButton("Save", variant = ButtonVariant.Primary, size = ControlSize.Large, disabled = name.isBlank(), onClick = ::rename)
                 }
             }

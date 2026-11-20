@@ -283,7 +283,7 @@ fun DescriptionEditor(original: String, save: (String) -> Unit) {
         }
         Row {
             Spacer(Modifier.weight(1f))
-            ActionButton("Cancel", margin = beside(end = 8.dp)) { close() }
+            ActionButton("Cancel", variant = ButtonVariant.Ghost, margin = beside(end = 8.dp)) { close() }
             ActionButton("Save", variant = ButtonVariant.Primary, disabled = text == original) {
                 save(text)
                 close()

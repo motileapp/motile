@@ -182,7 +182,7 @@ private struct GatewayRenameSheet: View {
                 .onReturn(save)
             HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
+                ActionButton("Cancel", variant: .ghost, margin: .beside(trailing: 4)) { close() }
                     .keyboardShortcut(.cancelAction)
                 ActionButton("Save", variant: .primary, margin: .beside(leading: 4), action: save)
                     .keyboardShortcut(.defaultAction)

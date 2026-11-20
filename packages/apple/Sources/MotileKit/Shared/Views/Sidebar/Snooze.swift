@@ -97,7 +97,7 @@ struct CustomSnoozeSheet: View {
             }
             HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
+                ActionButton("Cancel", variant: .ghost, margin: .beside(trailing: 4)) { close() }
                 ActionButton("Snooze", variant: .primary, margin: .beside(leading: 4)) { submit() }
                     .keyboardShortcut(.defaultAction)
             }

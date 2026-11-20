@@ -1319,7 +1319,7 @@ impl Render for SetupSheet {
                     .flex()
                     .justify_end()
                     .child(
-                        ActionButton::new("setup-cancel", "Cancel")
+                        ActionButton::new("setup-cancel", "Cancel").ghost()
                             .margin(beside(0., 4.))
                             .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
                     )

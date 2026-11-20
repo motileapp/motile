@@ -33,7 +33,7 @@ struct BackupSheet: View {
             form
             HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
+                ActionButton("Cancel", variant: .ghost, margin: .beside(trailing: 4)) { close() }
                     .keyboardShortcut(.cancelAction)
                 ActionButton("Save", variant: .primary, pending: saving, margin: .beside(leading: 4)) { save() }
                     .keyboardShortcut(.defaultAction)

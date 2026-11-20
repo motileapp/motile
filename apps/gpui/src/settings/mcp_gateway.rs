@@ -1165,6 +1165,7 @@ impl Render for AddSheet {
             Step::Pick => {
                 let address = is_address(&text_of(&self.search, cx));
                 let cancel = ActionButton::new("mcp-server-add-cancel", "Cancel")
+                    .ghost()
                     .margin(beside(0., if address { 4. } else { 0. }))
                     .on_click(cx.listener(|this, _, _, cx| this.close(cx)));
                 let continues = address.then(|| {
@@ -1179,6 +1180,7 @@ impl Render for AddSheet {
             }
             Step::SigningIn { .. } => {
                 let cancel = ActionButton::new("mcp-server-sign-in-cancel", "Cancel")
+                    .ghost()
                     .disabled(self.waiting)
                     .on_click(cx.listener(|this, _, _, cx| this.back(cx)));
                 (self.signing_in(cx), vec![cancel.into_any_element()])
@@ -1187,6 +1189,7 @@ impl Render for AddSheet {
                 let name = name.clone();
                 let can_add = !text_of(&self.key, cx).is_empty();
                 let back = ActionButton::new("mcp-server-key-back", "Back")
+                    .ghost()
                     .margin(beside(0., 4.))
                     .on_click(cx.listener(|this, _, _, cx| this.back(cx)));
                 let add = ActionButton::new("mcp-server-key-add", "Add")
@@ -1293,6 +1296,7 @@ impl Render for RenameSheet {
                     .justify_end()
                     .child(
                         ActionButton::new("mcp-server-rename-cancel", "Cancel")
+                            .ghost()
                             .margin(beside(0., 4.))
                             .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
                     )
@@ -1407,6 +1411,7 @@ impl Render for KeySheet {
                     .justify_end()
                     .child(
                         ActionButton::new("mcp-server-key-cancel", "Cancel")
+                            .ghost()
                             .margin(beside(0., 4.))
                             .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
                     )
@@ -1782,9 +1787,13 @@ impl Render for TrySheet {
             .text_color(c.foreground)
             .child(sheet_title("Try a Tool"))
             .children(body)
-            .child(div().flex().justify_end().child(
-                ActionButton::new("mcp-server-try-done", "Done").on_click(cx.listener(|this, _, _, cx| this.close(cx))),
-            ));
+            .child(
+                div().flex().justify_end().child(
+                    ActionButton::new("mcp-server-try-done", "Done")
+                        .ghost()
+                        .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
+                ),
+            );
         let close = cx.weak_entity();
         modal("mcp-server-try", scrolling("mcp-server-try-scroll", content, window), move |_, cx| {
             close.update(cx, |this, cx| this.close(cx)).ok();

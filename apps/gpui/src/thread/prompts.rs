@@ -97,10 +97,12 @@ impl ThreadPrompts {
                         div()
                             .flex()
                             .justify_end()
-                            .child(ActionButton::new("rename-cancel", "Cancel").margin(beside(0., 4.)).on_click({
-                                let cancel = cancel.clone();
-                                move |_, window, cx| cancel(window, cx)
-                            }))
+                            .child(
+                                ActionButton::new("rename-cancel", "Cancel").ghost().margin(beside(0., 4.)).on_click({
+                                    let cancel = cancel.clone();
+                                    move |_, window, cx| cancel(window, cx)
+                                }),
+                            )
                             .child(
                                 ActionButton::new("rename", "Rename")
                                     .primary()

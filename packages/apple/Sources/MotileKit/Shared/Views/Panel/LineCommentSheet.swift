@@ -78,7 +78,7 @@ struct LineCommentSheet: View {
                 ActionButton("Ask the Agent", help: "Put this line and what you wrote in the composer", margin: .beside(trailing: 8), action: askAgent)
                     .disabled(written.isEmpty)
                 Spacer()
-                ActionButton("Cancel", margin: .beside(leading: 8, trailing: 4)) { close() }
+                ActionButton("Cancel", variant: .ghost, margin: .beside(leading: 8, trailing: 4)) { close() }
                     .keyboardShortcut(.cancelAction)
                 if let thread = threads.last {
                     ActionButton("Reply", margin: .beside(leading: 4, trailing: 4)) { replyTo(thread) }

@@ -117,6 +117,7 @@ impl Render for BackupSheet {
             None => (c.muted_stronger_foreground, CAPTION.to_string()),
         };
         let cancel = ActionButton::new("backup-cancel", "Cancel")
+            .ghost()
             .margin(beside(0., 4.))
             .on_click(cx.listener(|this, _, _, cx| this.close(cx)));
         let save = ActionButton::new("backup-save", "Save")

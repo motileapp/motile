@@ -462,6 +462,7 @@ impl Render for CommitSheet {
                     .child(div().flex_1())
                     .child(
                         button("commit-cancel", "Cancel")
+                            .ghost()
                             .margin(beside(0., 4.))
                             .on_click(cx.listener(|this, _, _, cx| this.dismiss(cx))),
                     )

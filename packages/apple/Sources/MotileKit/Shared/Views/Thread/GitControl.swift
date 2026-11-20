@@ -325,7 +325,7 @@ struct CommitSheet: View {
             #if os(macOS)
             HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel", margin: .sharing(8, at: 0, of: 3)) { close() }
+                ActionButton("Cancel", variant: .ghost, margin: .sharing(8, at: 0, of: 3)) { close() }
                     .keyboardShortcut(.cancelAction)
                 ActionButton("Commit on New Branch", margin: .sharing(8, at: 1, of: 3)) { commit(onNewBranch: true) }
                     .disabled(included.isEmpty)

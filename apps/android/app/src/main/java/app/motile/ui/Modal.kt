@@ -174,7 +174,7 @@ fun ConfirmationDialog(confirmation: Confirmation, onDismiss: () -> Unit) {
                 val gap = 8.dp
                 val margin = PaddingValues(start = gap, bottom = gap)
                 FlowRow(Modifier.fillMaxWidth().padding(top = 22.dp).reaching(start = gap, bottom = gap), horizontalArrangement = Arrangement.End) {
-                    val dismissal = if (confirmation.answers.isEmpty()) ButtonVariant.Primary else ButtonVariant.Secondary
+                    val dismissal = if (confirmation.answers.isEmpty()) ButtonVariant.Primary else ButtonVariant.Ghost
                     ActionButton(confirmation.dismissal, variant = dismissal, size = app.motile.theme.ControlSize.Large, margin = margin, onClick = onDismiss)
                     for (each in confirmation.answers) {
                         ActionButton(each.title, variant = each.variant, size = app.motile.theme.ControlSize.Large, margin = margin) { answer(each) }

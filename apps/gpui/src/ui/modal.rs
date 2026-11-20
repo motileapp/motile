@@ -358,7 +358,7 @@ pub fn confirmation(
     let dismiss = close.clone();
     let mut buttons = vec![
         ActionButton::new("dismissal", confirmation.dismissal)
-            .variant(if lone { Variant::Primary } else { Variant::Secondary })
+            .variant(if lone { Variant::Primary } else { Variant::Ghost })
             .margin(crate::ui::sharing(BUTTON_GAP, 0, count))
             .on_click(move |_, window, cx| dismiss(window, cx))
             .into_any_element(),
