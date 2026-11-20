@@ -255,7 +255,7 @@ struct GatewayAddSheet: View {
 
     /// How long the code still works while the gateway is awaited, or the way to a new one.
     private var status: some View {
-        TimelineView(.periodic(from: .now, by: 1)) { context in
+        TimelineView(.periodic(from: Time.nextSecond, by: 1)) { context in
             status(at: context.date)
         }
     }

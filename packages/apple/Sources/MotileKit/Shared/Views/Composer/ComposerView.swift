@@ -185,7 +185,7 @@ struct ComposerView: View {
                 .foregroundStyle(Color.themeForeground)
                 .padding(.leading, ComposerStrip.inset + Self.agentsButtonLead)
                 .padding(.trailing, Self.symbolGap)
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.periodic(from: Time.nextSecond, by: 1)) { context in
                 Text(monitoringLabel(now: context.date.timeIntervalSince1970))
                     .font(ControlSize.regular.font)
                     .monospacedDigit()

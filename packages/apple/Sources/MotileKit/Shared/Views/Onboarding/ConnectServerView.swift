@@ -41,7 +41,7 @@ struct ConnectServerView: View {
                 .frame(maxWidth: 560)
                 .padding(.top, 26)
 
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.periodic(from: Time.nextSecond, by: 1)) { context in
                 status(at: context.date)
             }
             .padding(.top, 22)

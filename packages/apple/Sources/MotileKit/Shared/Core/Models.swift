@@ -1613,6 +1613,17 @@ extension Int {
 }
 
 enum Time {
+    /// The next whole second, on which every clock that counts seconds ticks, so that they are all
+    /// redrawn at once instead of each on its own.
+    static var nextSecond: Date { Date(timeIntervalSinceReferenceDate: Date().timeIntervalSinceReferenceDate.rounded(.down) + 1) }
+
+    /// A timer on the main run loop that fires on every whole second.
+    static func everySecond(_ tick: @escaping (Timer) -> Void) -> Timer {
+        let timer = Timer(fire: nextSecond, interval: 1, repeats: true, block: tick)
+        RunLoop.main.add(timer, forMode: .common)
+        return timer
+    }
+
     /// "now", "5m", "3h", "2d": how long ago, as short as a sidebar needs.
     static func ago(_ timestamp: Double, now: Double = Date().timeIntervalSince1970) -> String {
         let seconds = max(0, now - timestamp)

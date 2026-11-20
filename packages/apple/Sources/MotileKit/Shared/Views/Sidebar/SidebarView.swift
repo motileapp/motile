@@ -1119,7 +1119,7 @@ struct ThreadStatus: View {
                 label("\(agents)", Color.themePending) {
                     symbol(.bot)
                 }
-                TimelineView(.periodic(from: .now, by: 1)) { context in
+                TimelineView(.periodic(from: Time.nextSecond, by: 1)) { context in
                     label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeProcess) {
                         symbol(.circleDotDashed)
                     }
@@ -1135,7 +1135,7 @@ struct ThreadStatus: View {
                     }
                     .tooltip(agents == 1 ? "1 agent is working" : "\(agents) agents are working")
                 }
-                TimelineView(.periodic(from: .now, by: 1)) { context in
+                TimelineView(.periodic(from: Time.nextSecond, by: 1)) { context in
                     label(Time.elapsed(since: thread.updatedAt, now: context.date.timeIntervalSince1970), Color.themeProcess) {
                         symbol(.circleDashed)
                     }
@@ -1146,7 +1146,7 @@ struct ThreadStatus: View {
                 Spinner(size: .sm)
             }
         } else if thread.monitoring {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.periodic(from: Time.nextSecond, by: 1)) { context in
                 label(Time.elapsed(since: thread.monitoringSince, now: context.date.timeIntervalSince1970), Color.themeForeground) {
                     symbol(.eye)
                 }

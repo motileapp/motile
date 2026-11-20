@@ -267,7 +267,7 @@ struct AgentTime: View {
 
     var body: some View {
         if agent.working && agent.state != .limited {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.periodic(from: Time.nextSecond, by: 1)) { context in
                 time(Time.elapsed(since: agent.startedAt, now: context.date.timeIntervalSince1970), Color.themeProcess)
             }
         } else if let milliseconds = agent.durationMs {

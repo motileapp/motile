@@ -945,13 +945,11 @@ final class ToolRowView: RowView {
         elapsed.isHidden = startedAt == nil
         guard let startedAt else { return }
         elapsed.string = Time.elapsed(since: startedAt)
-        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] timer in
+        timer = Time.everySecond { [weak self] timer in
             guard let self, self.superview != nil else { return timer.invalidate() }
             self.elapsed.string = Time.elapsed(since: startedAt)
             self.fitHeader()
         }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
     }
 
     /// A running call's title is all muted, so the band shows on every part of it.
@@ -1458,13 +1456,11 @@ final class AgentRowView: RowView {
             return
         }
         time.string = Time.elapsed(since: content.startedAt)
-        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] timer in
+        timer = Time.everySecond { [weak self] timer in
             guard let self, self.superview != nil else { return timer.invalidate() }
             self.time.string = Time.elapsed(since: content.startedAt)
             self.layoutNow()
         }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
     }
 
     override func layoutNow() {
@@ -1548,27 +1544,35 @@ final class AgentsRowView: RowView {
         guard case .agents(let content) = row.kind else { return }
         self.content = content
         highlight.fill = .clear
-        avatars.forEach { $0.removeFromSuperview() }
-        // The first lies over the second, so it is added last.
-        avatars = content.avatars.enumerated().map { index, avatar in
-            let view = AgentAvatarView()
-            view.agent = avatar.agent
-            // Side by side they leave how they are doing to the summary.
-            view.state = content.avatars.count > 1 ? nil : avatar.state
-            view.cut = index > 0
-            return view
-        }
-        if content.more > 0 {
-            let view = AgentAvatarView()
-            view.more = true
-            view.cut = !content.avatars.isEmpty
-            avatars.append(view)
-        }
-        avatars.reversed().forEach { addSubview($0) }
+        showAvatars(content)
         title.string = content.title
         summary.attributed = Self.summary(content.summary)
         chevron.show(content.open ? .chevronDown : .chevronRight, size: .xs)
         keepTime()
+    }
+
+    /// Keeps the avatars it has, which redraw only what changed, while there are as many.
+    private func showAvatars(_ content: AgentsContent) {
+        let count = content.avatars.count + (content.more > 0 ? 1 : 0)
+        if avatars.count != count {
+            avatars.forEach { $0.removeFromSuperview() }
+            avatars = (0..<count).map { _ in AgentAvatarView() }
+            // The first lies over the second, so it is added last.
+            avatars.reversed().forEach { addSubview($0) }
+        }
+        for (index, avatar) in content.avatars.enumerated() {
+            let view = avatars[index]
+            view.agent = avatar.agent
+            // Side by side they leave how they are doing to the summary.
+            view.state = content.avatars.count > 1 ? nil : avatar.state
+            view.cut = index > 0
+            view.more = false
+        }
+        guard content.more > 0, let view = avatars.last else { return }
+        view.agent = nil
+        view.state = nil
+        view.more = true
+        view.cut = !content.avatars.isEmpty
     }
 
     /// Each count in its state's colour, between muted dots.
@@ -1592,13 +1596,11 @@ final class AgentsRowView: RowView {
             return
         }
         time.string = Time.elapsed(since: startedAt)
-        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] timer in
+        timer = Time.everySecond { [weak self] timer in
             guard let self, self.superview != nil else { return timer.invalidate() }
             self.time.string = Time.elapsed(since: startedAt)
             self.layoutNow()
         }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
     }
 
     override func layoutNow() {
@@ -1974,9 +1976,7 @@ final class WorkingView: FlippedView {
             return
         }
         refresh()
-        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.refresh() }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
+        timer = Time.everySecond { [weak self] _ in self?.refresh() }
     }
 
     private func refresh() {

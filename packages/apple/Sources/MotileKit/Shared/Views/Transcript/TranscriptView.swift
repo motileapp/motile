@@ -715,6 +715,19 @@ final class TranscriptView: FlippedView, RowOwner {
 
     private var pendingHighlight: [String] = []
 
+    /// Gives the views of the rows that left the screen back first, so that the rows that came
+    /// into it take those instead of new ones.
+    private func recycleViews(outside first: Int, from top: CGFloat, to bottom: CGFloat) {
+        var shown = Set<String>()
+        var (index, y) = (first, top)
+        while index < rows.count, y < bottom {
+            shown.insert(rows[index].id)
+            y += heights[index]
+            index += 1
+        }
+        for id in Array(views.keys) where !shown.contains(id) { recycle(id) }
+    }
+
     private func recycle(_ id: String) {
         guard let view = views.removeValue(forKey: id) else { return }
         stale.remove(id)
@@ -826,6 +839,7 @@ final class TranscriptView: FlippedView, RowOwner {
 
             var index = self.index(at: top)
             var y = rows.isEmpty ? 0 : offsets[index]
+            recycleViews(outside: index, from: y, to: bottom)
             var firstChanged: Int?
             var onScreen = Set<String>()
             while index < rows.count, y < bottom {
