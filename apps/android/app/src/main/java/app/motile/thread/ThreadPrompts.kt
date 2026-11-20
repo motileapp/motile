@@ -96,7 +96,7 @@ private fun RenameDialog(thread: ThreadInfo, onDismiss: () -> Unit) {
                     onSubmit = ::rename,
                 )
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    ActionButton("Cancel", size = ControlSize.Large, margin = beside(end = 8.dp), onClick = onDismiss)
+                    ActionButton("Cancel", variant = ButtonVariant.Ghost, size = ControlSize.Large, margin = beside(end = 8.dp), onClick = onDismiss)
                     ActionButton("Rename", variant = ButtonVariant.Primary, size = ControlSize.Large, disabled = title.isBlank(), onClick = ::rename)
                 }
             }

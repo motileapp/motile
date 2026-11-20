@@ -434,7 +434,7 @@ private fun LinearNewIssue(target: PanelTarget, workspace: String, team: String?
         linear.error?.let { Text(it, size = TextSize.Xs, color = palette.destructive) }
         Row {
             Spacer(Modifier.weight(1f))
-            ActionButton("Cancel", margin = beside(end = 8.dp)) { close() }
+            ActionButton("Cancel", variant = ButtonVariant.Ghost, margin = beside(end = 8.dp)) { close() }
             ActionButton(
                 "Create Issue", variant = ButtonVariant.Primary, pending = "create" in linear.working,
                 disabled = picked == null || title.isBlank(),

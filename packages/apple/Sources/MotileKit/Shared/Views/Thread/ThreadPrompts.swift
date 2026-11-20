@@ -88,7 +88,7 @@ private struct RenameThread: View {
             InputField("Title", text: $title)
             HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
+                ActionButton("Cancel", variant: .ghost, margin: .beside(trailing: 4)) { close() }
                 ActionButton("Rename", variant: .primary, margin: .beside(leading: 4)) {
                     store.rename(thread, to: title)
                     close()

@@ -905,6 +905,7 @@ impl Render for ConditionEditor {
                     .child(div().flex_1())
                     .child(
                         ActionButton::new("condition-cancel", "Cancel")
+                            .ghost()
                             .surface(Surface::Popover)
                             .margin(beside(0., 4.))
                             .on_click(cx.listener(|this, _, _, cx| this.cancel(cx))),

@@ -70,6 +70,7 @@ impl Render for RelaySheet {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let cancel = ActionButton::new("relay-cancel", "Cancel")
+            .ghost()
             .margin(beside(0., 4.))
             .on_click(cx.listener(|this, _, _, cx| this.close(cx)));
         let save = ActionButton::new("relay-save", "Save")

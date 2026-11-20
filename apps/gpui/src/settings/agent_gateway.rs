@@ -763,7 +763,7 @@ fn add_sheet(store: &Entity<Store>, enroll: Loaded<Enroll>, replaces: bool, cx: 
         }
         Loaded::Ready(enroll) => enroll_steps(store, &enroll, replaces, cx),
     };
-    let done = ActionButton::new("add-gateway-close", "Cancel").on_click({
+    let done = ActionButton::new("add-gateway-close", "Cancel").ghost().on_click({
         let close = close.clone();
         move |_, window, cx| close(window, cx)
     });
@@ -993,6 +993,7 @@ impl Render for SignInSheet {
             .justify_end()
             .child(
                 ActionButton::new("gateway-sign-in-cancel", "Cancel")
+                    .ghost()
                     .margin(beside(0., if start_again { 4. } else { 0. }))
                     .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
             )
@@ -1104,6 +1105,7 @@ impl Render for RenameSheet {
                     .justify_end()
                     .child(
                         ActionButton::new("rename-cancel", "Cancel")
+                            .ghost()
                             .margin(beside(0., 4.))
                             .on_click(cx.listener(|this, _, _, cx| this.close(cx))),
                     )

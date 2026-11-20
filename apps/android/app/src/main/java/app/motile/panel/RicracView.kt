@@ -434,7 +434,7 @@ private fun RicracNewIssue(target: PanelTarget, workspace: String, team: String?
         ricrac.error?.let { Text(it, size = TextSize.Xs, color = palette.destructive) }
         Row {
             Spacer(Modifier.weight(1f))
-            ActionButton("Cancel", margin = beside(end = 8.dp)) { close() }
+            ActionButton("Cancel", variant = ButtonVariant.Ghost, margin = beside(end = 8.dp)) { close() }
             ActionButton(
                 "Create Issue", variant = ButtonVariant.Primary, pending = "create" in ricrac.working,
                 disabled = picked == null || title.isBlank(),

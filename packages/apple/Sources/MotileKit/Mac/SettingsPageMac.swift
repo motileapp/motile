@@ -546,7 +546,7 @@ private struct SetupSheet: View {
             TextArea("cp \"$MOTILE_PROJECT/.env\" . && pnpm install", text: $script, monospaced: true, lines: 5, maxLines: 14)
             HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
+                ActionButton("Cancel", variant: .ghost, margin: .beside(trailing: 4)) { close() }
                     .keyboardShortcut(.cancelAction)
                 ActionButton("Save", variant: .primary, margin: .beside(leading: 4)) {
                     store.setSetup(of: project, to: script)

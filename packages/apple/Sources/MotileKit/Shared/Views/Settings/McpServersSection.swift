@@ -444,7 +444,7 @@ struct McpServerAddSheet: View {
     @ViewBuilder private var buttons: some View {
         switch adder.step {
         case .pick:
-            ActionButton("Cancel", margin: .beside(trailing: address == nil ? 0 : 4)) { close() }
+            ActionButton("Cancel", variant: .ghost, margin: .beside(trailing: address == nil ? 0 : 4)) { close() }
                 .keyboardShortcut(.cancelAction)
             if let address {
                 ActionButton("Continue", variant: .primary, pending: adder.adding == address, margin: .beside(leading: 4)) {
@@ -453,10 +453,10 @@ struct McpServerAddSheet: View {
                 .keyboardShortcut(.defaultAction)
             }
         case .signingIn:
-            ActionButton("Back") { adder.back() }
+            ActionButton("Back", variant: .ghost) { adder.back() }
                 .keyboardShortcut(.cancelAction)
         case .key(_, let url, let given):
-            ActionButton("Back", margin: .beside(trailing: 4)) { adder.back() }
+            ActionButton("Back", variant: .ghost, margin: .beside(trailing: 4)) { adder.back() }
                 .keyboardShortcut(.cancelAction)
             ActionButton("Add", variant: .primary, pending: adder.adding != nil, margin: .beside(leading: 4)) {
                 addWithKey(url: url, given: given)
@@ -562,7 +562,7 @@ struct McpServerRenameSheet: View {
             fields
             HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
+                ActionButton("Cancel", variant: .ghost, margin: .beside(trailing: 4)) { close() }
                     .keyboardShortcut(.cancelAction)
                 ActionButton("Save", variant: .primary, margin: .beside(leading: 4), action: save)
                     .keyboardShortcut(.defaultAction)
@@ -654,7 +654,7 @@ struct McpServerKeySheet: View {
             fields
             HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Cancel", margin: .beside(trailing: 4)) { close() }
+                ActionButton("Cancel", variant: .ghost, margin: .beside(trailing: 4)) { close() }
                     .keyboardShortcut(.cancelAction)
                 ActionButton("Save", variant: .primary, pending: pending, margin: .beside(leading: 4), action: save)
                     .keyboardShortcut(.defaultAction)
@@ -848,7 +848,7 @@ struct McpServerTrySheet: View {
             .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 0) {
                 Spacer()
-                ActionButton("Done", margin: .beside(trailing: 4)) { close() }
+                ActionButton("Done", variant: .ghost, margin: .beside(trailing: 4)) { close() }
                     .keyboardShortcut(.cancelAction)
                 ActionButton("Run", icon: .play, variant: .primary, pending: running, margin: .beside(leading: 4), action: run)
                     .keyboardShortcut(.defaultAction)

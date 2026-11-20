@@ -99,7 +99,7 @@ impl Render for CustomSnoozeSheet {
                 div()
                     .flex()
                     .justify_end()
-                    .child(ActionButton::new("snooze-cancel", "Cancel").margin(beside(0., 4.)).on_click(
+                    .child(ActionButton::new("snooze-cancel", "Cancel").ghost().margin(beside(0., 4.)).on_click(
                         move |_, _, cx| {
                             let _ = cancel.update(cx, |this, cx| this.close(cx));
                         },

@@ -319,7 +319,7 @@ private struct ConditionEditor: View {
                     }
                 }
                 Spacer()
-                ActionButton("Cancel", margin: .beside(leading: 8, trailing: 4), action: cancel)
+                ActionButton("Cancel", variant: .ghost, margin: .beside(leading: 8, trailing: 4), action: cancel)
                     .keyboardShortcut(.cancelAction)
                 ActionButton("Save", variant: .primary, margin: .beside(leading: 4)) { save(when.trimmingCharacters(in: .whitespaces)) }
                     .keyboardShortcut(.defaultAction)
