@@ -61,9 +61,10 @@ pub struct Colors {
     /// The text colours as they are in the dark, for what lies over a picture.
     pub foreground_over_picture: Hsla,
     pub muted_foreground_over_picture: Hsla,
-    /// A control as it is in the dark, over a picture: the background's accent, stronger when lit,
-    /// inside a line of the strongest accent.
+    /// A control as it is in the dark, over a picture: the background's accent, its edge's colour
+    /// when lit, inside a line of the strongest accent. A video's sliders fill with the stronger one.
     pub control_over_picture: Hsla,
+    #[cfg_attr(not(target_os = "macos"), expect(dead_code, reason = "only the Mac's video player reads it"))]
     pub control_lit_over_picture: Hsla,
     pub control_border_over_picture: Hsla,
     /// A colour's wash: the colour at color-tint. Chips, notices, diff lines.
