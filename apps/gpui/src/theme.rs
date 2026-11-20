@@ -63,6 +63,7 @@ pub struct Colors {
     pub muted_foreground_over_picture: Hsla,
     /// The video player's controls as they are in the dark: the background's accent, its edge's
     /// colour when lit, inside a line of the strongest accent. Its sliders fill with the stronger one.
+    #[cfg_attr(not(target_os = "macos"), expect(dead_code, reason = "only the Mac's video player reads it"))]
     pub control_over_picture: Hsla,
     #[cfg_attr(not(target_os = "macos"), expect(dead_code, reason = "only the Mac's video player reads it"))]
     pub control_lit_over_picture: Hsla,
