@@ -23,6 +23,13 @@ final class CoreBridge {
     private var readers: [UInt64: ([String: Any]) -> Any] = [:]
     private var readReplies: [UInt64: (Result<Any, CoreError>) -> Void] = [:]
     private let readersLock = NSLock()
+    /// The decoded events' work the main thread hasn't done yet, in order. It takes it at most once
+    /// a frame, so that a burst of events is shown once rather than once for each.
+    private var decoded: [() -> Void] = []
+    private var takesDecoded = false
+    private var tookDecoded: TimeInterval = 0
+    private let decodedLock = NSLock()
+    private static let frame: TimeInterval = 1.0 / 60
 
     func start(config: [String: Any]) -> Bool {
         guard let json = Self.json(config) else { return false }
@@ -71,12 +78,34 @@ final class CoreBridge {
                 let value = event["value"] as? [String: Any] ?? [:]
                 let reader = self.readersLock.withLock { self.readers.removeValue(forKey: id) }
                 let read = event["ok"] as? Bool == true ? reader?(value) : nil
-                DispatchQueue.main.async { self.answer(id: id, ok: event["ok"] as? Bool == true, value: value, read: read) }
+                self.hand { self.answer(id: id, ok: event["ok"] as? Bool == true, value: value, read: read) }
                 return
             }
             guard let apply = self.decode?(event) else { return }
-            DispatchQueue.main.async(execute: apply)
+            self.hand(apply)
         }
+    }
+
+    private func hand(_ work: @escaping () -> Void) {
+        let delay: TimeInterval? = decodedLock.withLock {
+            decoded.append(work)
+            guard !takesDecoded else { return nil }
+            takesDecoded = true
+            return max(0, tookDecoded + Self.frame - ProcessInfo.processInfo.systemUptime)
+        }
+        guard let delay else { return }
+        guard delay > 0 else { return DispatchQueue.main.async { [weak self] in self?.takeDecoded() } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.takeDecoded() }
+    }
+
+    private func takeDecoded() {
+        let work = decodedLock.withLock {
+            takesDecoded = false
+            tookDecoded = ProcessInfo.processInfo.systemUptime
+            defer { decoded = [] }
+            return decoded
+        }
+        work.forEach { $0() }
     }
 
     private func answer(id: UInt64, ok: Bool, value: [String: Any], read: Any?) {
