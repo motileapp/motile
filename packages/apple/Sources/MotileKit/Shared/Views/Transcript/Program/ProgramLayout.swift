@@ -886,7 +886,7 @@ enum ProgramFlashcard {
 /// Chips: a Badge is Motile's `Chip`.
 enum ProgramBadge {
     static let padding: CGFloat = 7
-    static let iconSize = IconSize.sm
+    static let iconSize = IconSize.xs
     static let gap: CGFloat = 5
     static let font = PlatformFont.ui(.xs, weight: .medium)
 
