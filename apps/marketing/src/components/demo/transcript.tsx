@@ -382,7 +382,7 @@ function AgentGroup({
             {counted.map((state, index) => (
               <Fragment key={state}>
                 {index > 0 && (
-                  <span className="text-muted-stronger-foreground"> · </span>
+                  <span className="text-muted-strongest-foreground"> · </span>
                 )}
                 <span className={STATE_TEXT[state]}>
                   {count(state)} {state}

@@ -234,6 +234,8 @@ struct ControlLabel: View {
     var padding: CGFloat?
     /// A symbol after a dot behind the words, as the reasoning effort after the model.
     var detail: Symbol?
+    /// A picture right after `detail`, as how full the context is after the effort.
+    var detailMark: AnyView?
     /// Words after another dot, as the server after the effort.
     var place: String?
     /// Words after the title in a colour of their own, as "working" after "2 agents", which
@@ -245,6 +247,8 @@ struct ControlLabel: View {
     var pinned = false
     /// Its symbol stands as far from its side as its words do, which a pill's round ends want.
     var centered = false
+
+    private static let detailMarkGap: CGFloat = 3
 
     private var wordless: Bool { title == nil && !chevron }
     private var markSize: IconSize {
@@ -305,19 +309,19 @@ struct ControlLabel: View {
                 HStack(spacing: 0) {
                     text(title, tinted: tinted)
                         .lineLimit(1)
-                    Group {
-                        if let detail {
-                            Text(verbatim: " · ")
-                            Image(detail, size: size.smallSymbol)
-                        }
-                        if let place {
-                            Text(verbatim: " · ")
-                            Text(verbatim: place)
-                                .lineLimit(1)
-                                .fixedSize()
-                        }
+                    if let detail {
+                        Text(verbatim: " · ").foregroundStyle(Color.themeMutedStrongestForeground)
+                        Image(detail, size: size.smallSymbol)
+                            .foregroundStyle(Color.themeMutedStrongerForeground)
+                        if let detailMark { detailMark.padding(.leading, scaled(Self.detailMarkGap)) }
                     }
-                    .foregroundStyle(Color.themeMutedStrongerForeground)
+                    if let place {
+                        Text(verbatim: " · ").foregroundStyle(Color.themeMutedStrongestForeground)
+                        Text(verbatim: place)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .foregroundStyle(Color.themeMutedStrongerForeground)
+                    }
                 }
                 .font(size.font)
                 .opacity(pending && !spins ? 0 : 1)
@@ -564,6 +568,7 @@ struct ActionButton: View {
     private var gap: CGFloat?
     private var padding: CGFloat?
     private let detail: Symbol?
+    private var detailMark: AnyView?
     private var place: String?
     private var tinted: String?
     private var proxied = false
@@ -578,7 +583,7 @@ struct ActionButton: View {
 
     init(
         _ title: String, tinted: String? = nil, icon: Symbol? = nil, picture: AnyView? = nil, pictures: AnyView? = nil, detail: Symbol? = nil,
-        place: String? = nil, proxied: Bool = false, pinned: Bool = false, help: String? = nil,
+        detailMark: AnyView? = nil, place: String? = nil, proxied: Bool = false, pinned: Bool = false, help: String? = nil,
         variant: ButtonVariant = .secondary, size: ControlSize = .regular, symbolSize: IconSize? = nil, gap: CGFloat? = nil,
         padding: CGFloat? = nil, pending: Bool = false, pendingTitle: String? = nil,
         selected: Bool = false, round: Bool = false,
@@ -593,6 +598,7 @@ struct ActionButton: View {
         self.title = title
         self.icon = icon.map(ControlIcon.symbol) ?? picture.map(ControlIcon.picture) ?? pictures.map(ControlIcon.pictures)
         self.detail = detail
+        self.detailMark = detailMark
         self.place = place
         self.tinted = tinted
         self.proxied = proxied
@@ -656,7 +662,7 @@ struct ActionButton: View {
                 title: words, icon: icon, size: look.size, chevron: chevron, chevronTurned: open,
                 chevronColor: look.foreground == .themeForeground ? .themeMutedForeground : .themeMutedStrongerForeground, pending: pending,
                 pendingTitle: pendingTitle, fills: fills,
-                alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding, detail: detail, place: place,
+                alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding, detail: detail, detailMark: detailMark, place: place,
                 tinted: look.tint.flatMap { tint in tinted.map { (words: $0, color: tint) } }, proxied: proxied,
                 pinned: pinned, centered: look.round
             )
@@ -903,7 +909,7 @@ extension Text {
 
     init(dotted parts: [Text]) {
         self = parts.dropFirst().reduce(parts.first ?? Text(verbatim: "")) { line, part in
-            Text("\(line)\(Text(verbatim: " · ").foregroundStyle(Color.themeMutedStrongerForeground))\(part)")
+            Text("\(line)\(Text(verbatim: " · ").foregroundStyle(Color.themeMutedStrongestForeground))\(part)")
         }
     }
 }

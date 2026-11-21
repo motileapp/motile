@@ -349,7 +349,7 @@ private fun ClientRow(client: ActivityReport.Client, beside: Boolean) {
                 }
                 if (beside) {
                     Text(
-                        dotted(listOf(client.client, client.detail).filter { it.isNotEmpty() }.joinToString(" · "), palette.mutedStrongerForeground),
+                        dotted(listOf(client.client, client.detail).filter { it.isNotEmpty() }.joinToString(" · "), palette.mutedStrongestForeground),
                         size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1,
                     )
                 } else {
@@ -645,7 +645,7 @@ private fun Heatmap(heatmap: ActivityReport.Heatmap, measure: HourMeasure, loadi
             chosen?.let { heatmap.cells.getOrNull(it) }?.let { shown ->
                 val text = listOf(shown.label, shown.time, messages(shown.messages), turns(shown.turns)).filter { it.isNotEmpty() }.joinToString(" · ")
                 Text(
-                    dotted(text, palette.mutedStrongerForeground),
+                    dotted(text, palette.mutedStrongestForeground),
                     Modifier.padding(end = 8.dp).align(Alignment.CenterVertically),
                     style = Theme.uiDigits(TextSize.Xxs),
                     color = palette.mutedForeground,

@@ -2,8 +2,8 @@
 import CMotileCore
 import SwiftUI
 
-/// The model with its account, the effort with the context window, and the access: one button
-/// that opens the picker which chooses all of them.
+/// The model with its account, the effort with the context window, how full the context is, and
+/// the access: one button that opens the picker which chooses all of them.
 struct ComposerSettings: View {
     @Environment(AppStore.self) private var store
     let labeled: Bool
@@ -42,12 +42,15 @@ struct ComposerSettings: View {
     /// which stands closer to its edge than words do. Both look 9 points wide.
     private static let roomAfter: CGFloat = 8
     private static let roomBeforeSymbol: CGFloat = 13
+    /// Between the effort's words and the context's ring, as between a symbol and its words.
+    private static let ringGap: CGFloat = 5
 
     private var parts: some View {
         let model = store.composerModel
         let effort = store.composerEffort
         let context = store.composerContext?.label
         let access = store.composerAccess
+        let fill = store.composerContextFill
         let modelTitle = modelLabeled || model == nil ? store.composerModelLabel : nil
         // "Medium · 1M": the effort, and the context window where the model offers more than one.
         let effortTitle = labeled ? [effort.map(ComposerView.effortLabel), context].compactMap { $0 }.joined(separator: " · ") : context
@@ -56,7 +59,12 @@ struct ComposerSettings: View {
                  proxied: store.composerProxied, pinned: store.composerPinned)
             if effort != nil || context != nil {
                 divider
-                part(effortTitle, icon: effort.map { .symbol(ComposerView.effortSymbol($0)) })
+                HStack(spacing: Self.ringGap) {
+                    part(effortTitle, icon: effort.map { .symbol(ComposerView.effortSymbol($0)) })
+                    if let percent = fill.usedPercent {
+                        ContextRing(usedPercent: percent, color: fill.tone.color, size: ControlSize.regular.symbol)
+                    }
+                }
             }
             divider
             part(labeled ? access.label : nil, icon: .symbol(access.symbol))

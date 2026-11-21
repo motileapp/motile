@@ -27,6 +27,7 @@ class Palette(
     val mutedForeground: Color,
     val mutedStrongerForeground: Color,
     val mutedStrongestForeground: Color,
+    val mutedStrongestPlusForeground: Color,
     val primary: Color,
     val primaryForeground: Color,
     val destructive: Color,
@@ -134,6 +135,7 @@ class Palette(
             mutedForeground = Color(0xFF606470),
             mutedStrongerForeground = Color(0xFF8E919D),
             mutedStrongestForeground = Color(0xFFADB1BC),
+            mutedStrongestPlusForeground = Color(0xFFC4C7D0),
             primary = Color(0xFF2A5BD7),
             primaryForeground = Color(0xFFFFFFFF),
             destructive = Color(0xFFC62828),
@@ -241,6 +243,7 @@ class Palette(
             mutedForeground = Color(0xFF9A9EAB),
             mutedStrongerForeground = Color(0xFF646875),
             mutedStrongestForeground = Color(0xFF4A4E5A),
+            mutedStrongestPlusForeground = Color(0xFF3B3E49),
             primary = Color(0xFF4F7CFF),
             primaryForeground = Color(0xFFFFFFFF),
             destructive = Color(0xFFDF6C6A),
@@ -350,6 +353,7 @@ class Palette(
         "muted-foreground" -> mutedForeground
         "muted-stronger-foreground" -> mutedStrongerForeground
         "muted-strongest-foreground" -> mutedStrongestForeground
+        "muted-strongest-plus-foreground" -> mutedStrongestPlusForeground
         "primary" -> primary
         "primary-foreground" -> primaryForeground
         "destructive" -> destructive

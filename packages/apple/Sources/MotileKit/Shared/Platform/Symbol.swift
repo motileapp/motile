@@ -56,8 +56,8 @@ enum Symbol: String {
     case cornerLeftUp = "\u{e0a4}"
     case diff = "\u{e30c}"
     case download = "\u{e0b2}"
-    /// The reasoning efforts up to high: a ring round a pie a quarter, half or three quarters
-    /// full, which Lucide doesn't have.
+    /// The reasoning efforts up to high: a rounded frame filled from the bottom a third, two thirds or
+    /// all the way, which Lucide doesn't have.
     case effortLow = "effortLow"
     case effortMedium = "effortMedium"
     case effortHigh = "effortHigh"
@@ -254,18 +254,14 @@ extension PlatformImage {
         return path.copy(using: &placed) ?? path
     }
 
-    /// A ring as Lucide draws a circle, round a pie that fills `share` of it clockwise from the
-    /// top, in a square of 24.
-    private static func gauge(_ share: CGFloat, side: CGFloat) -> CGPath {
-        let center = CGPoint(x: 12, y: 12)
-        let ring = CGPath(ellipseIn: CGRect(x: 2, y: 2, width: 20, height: 20), transform: nil)
+    /// A rounded frame with Lucide's stroke, filled `height` from its bottom, in a square of 24.
+    private static func level(_ height: CGFloat, side: CGFloat) -> CGPath {
+        let frame = CGPath(roundedRect: CGRect(x: 5, y: 2, width: 14, height: 20), cornerWidth: 5, cornerHeight: 5, transform: nil)
         let path = CGMutablePath()
-        path.addPath(ring.copy(strokingWithWidth: 2, lineCap: .butt, lineJoin: .miter, miterLimit: 10))
-        path.move(to: center)
-        path.addArc(center: center, radius: 6, startAngle: .pi / 2, endAngle: .pi / 2 - share * 2 * .pi, clockwise: true)
-        path.closeSubpath()
-        var scaled = CGAffineTransform(scaleX: side / 24, y: side / 24)
-        return path.copy(using: &scaled) ?? path
+        path.addPath(frame.copy(strokingWithWidth: 2, lineCap: .butt, lineJoin: .miter, miterLimit: 10))
+        path.addPath(CGPath(roundedRect: CGRect(x: 8, y: 19 - height, width: 8, height: height), cornerWidth: 2, cornerHeight: 2, transform: nil))
+        var placed = CGAffineTransform(translationX: 0, y: side).scaledBy(x: side / 24, y: -side / 24)
+        return path.copy(using: &placed) ?? path
     }
 
     private static func outline(_ symbol: Symbol, side: CGFloat) -> CGPath? {
@@ -275,9 +271,9 @@ extension PlatformImage {
         case .github: logo(githubLogo, side: side, share: 20 / 24)
         case .linear: logo(linearLogo, side: side, share: 0.88)
         case .ricrac: logo(ricracLogo, side: side, share: 20 / 24)
-        case .effortLow: gauge(0.25, side: side)
-        case .effortMedium: gauge(0.5, side: side)
-        case .effortHigh: gauge(0.75, side: side)
+        case .effortLow: level(5, side: side)
+        case .effortMedium: level(9, side: side)
+        case .effortHigh: level(14, side: side)
         default: glyph(symbol, side: side)
         }
     }

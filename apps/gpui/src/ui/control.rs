@@ -222,14 +222,14 @@ impl Look {
 /// The text with the dots between its parts muted, as "Opus 5.5 · Work".
 pub fn dotted(text: impl Into<SharedString>, c: &Colors) -> StyledText {
     let text: SharedString = text.into();
-    let muted = HighlightStyle { color: Some(c.muted_stronger_foreground), ..Default::default() };
+    let muted = HighlightStyle { color: Some(c.muted_strongest_foreground), ..Default::default() };
     let dots: Vec<_> = text.match_indices(" · ").map(|(start, dot)| (start..start + dot.len(), muted)).collect();
     StyledText::new(text).with_highlights(dots)
 }
 
 /// The title in the foreground, with its dots muted, and `tinted` after it in `tint`.
 fn tinted_dotted(title: &str, tinted: &str, tint: Hsla, c: &Colors) -> StyledText {
-    let muted = HighlightStyle { color: Some(c.muted_stronger_foreground), ..Default::default() };
+    let muted = HighlightStyle { color: Some(c.muted_strongest_foreground), ..Default::default() };
     let mut highlights: Vec<_> =
         title.match_indices(" · ").map(|(start, dot)| (start..start + dot.len(), muted)).collect();
     highlights.push((

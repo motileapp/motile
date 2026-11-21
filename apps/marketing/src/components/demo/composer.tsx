@@ -12,7 +12,13 @@ import {
   SquareTerminalIcon,
 } from "lucide-react"
 import { Fragment, useRef, useState, type ReactNode } from "react"
-import { AgentIcon, EffortHighIcon, MenuChevron, ProjectIcon } from "./icons"
+import {
+  AgentIcon,
+  ContextRing,
+  EffortHighIcon,
+  MenuChevron,
+  ProjectIcon,
+} from "./icons"
 import type { Thread } from "./threads"
 import { cn } from "@/lib/utils"
 
@@ -139,6 +145,9 @@ export function Composer({
             </Setting>
             <SettingDivider />
             <Setting icon={<EffortHighIcon />}>High</Setting>
+            <span className="ml-[5px] flex">
+              <ContextRing usedPercent={CONTEXT_USED} />
+            </span>
             <SettingDivider />
             <Setting
               icon={
@@ -227,6 +236,9 @@ function Control({
   )
 }
 
+/** How much of its context window the demo's threads take, which the ring after the effort shows. */
+const CONTEXT_USED = 18
+
 /** A part of the button that picks the model, its effort and the access: one button, as on the Mac. */
 function Setting({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
@@ -286,7 +298,7 @@ function Command({ text }: { text: string }) {
 export function Dotted({ text }: { text: string }) {
   return text.split(" · ").map((part, index) => (
     <Fragment key={index}>
-      {index > 0 && <span className="text-muted-stronger-foreground"> · </span>}
+      {index > 0 && <span className="text-muted-strongest-foreground"> · </span>}
       {part}
     </Fragment>
   ))

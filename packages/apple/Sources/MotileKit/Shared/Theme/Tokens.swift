@@ -23,6 +23,7 @@ extension Theme {
     static let mutedForeground = tone(0x606470, 0x9a9eab)
     static let mutedStrongerForeground = tone(0x8e919d, 0x646875)
     static let mutedStrongestForeground = tone(0xadb1bc, 0x4a4e5a)
+    static let mutedStrongestPlusForeground = tone(0xc4c7d0, 0x3b3e49)
     static let primary = tone(0x2a5bd7, 0x4f7cff)
     static let primaryForeground = tone(0xffffff, 0xffffff)
     static let destructive = tone(0xc62828, 0xdf6c6a)
@@ -133,6 +134,7 @@ extension Theme {
         case "muted-foreground": mutedForeground
         case "muted-stronger-foreground": mutedStrongerForeground
         case "muted-strongest-foreground": mutedStrongestForeground
+        case "muted-strongest-plus-foreground": mutedStrongestPlusForeground
         case "primary": primary
         case "primary-foreground": primaryForeground
         case "destructive": destructive
@@ -243,6 +245,7 @@ extension Color {
     static let themeMutedForeground = Color(platform: Theme.mutedForeground)
     static let themeMutedStrongerForeground = Color(platform: Theme.mutedStrongerForeground)
     static let themeMutedStrongestForeground = Color(platform: Theme.mutedStrongestForeground)
+    static let themeMutedStrongestPlusForeground = Color(platform: Theme.mutedStrongestPlusForeground)
     static let themePrimary = Color(platform: Theme.primary)
     static let themePrimaryForeground = Color(platform: Theme.primaryForeground)
     static let themeDestructive = Color(platform: Theme.destructive)

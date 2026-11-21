@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.offset
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.platform.scaled
 import app.motile.theme.ControlSize
 import app.motile.theme.IconSize
 import app.motile.theme.LocalDark
@@ -342,6 +343,8 @@ fun ControlLabel(
     padding: Dp? = null,
     /** A symbol after a dot behind the words, as the reasoning effort after the model. */
     detail: Symbol? = null,
+    /** A picture right after `detail`, as how full the context is after the effort. */
+    detailMark: (@Composable () -> Unit)? = null,
     /** Words after another dot, as the server after the effort. */
     place: String? = null,
     /** Words after the title in a colour of their own, as "working" after "2 agents", which leave the title in the foreground. */
@@ -376,8 +379,8 @@ fun ControlLabel(
         ) {
             if (icon != null || title != null) {
                 Box(Modifier.weight(1f, fill = false).offset(y = wordsShift), contentAlignment = Alignment.Center) {
-                    ControlWords(title, tinted, proxied, pinned, icon, size, font, markSize, pictureSide, gap, detail, place, pending, spins = pending && icon != null, Modifier.alpha(if (waitingTitle == null) 1f else 0f))
-                    if (waitingTitle != null) ControlWords(waitingTitle, null, false, false, icon, size, font, markSize, pictureSide, gap, null, null, pending, spins = true)
+                    ControlWords(title, tinted, proxied, pinned, icon, size, font, markSize, pictureSide, gap, detail, detailMark, place, pending, spins = pending && icon != null, Modifier.alpha(if (waitingTitle == null) 1f else 0f))
+                    if (waitingTitle != null) ControlWords(waitingTitle, null, false, false, icon, size, font, markSize, pictureSide, gap, null, null, null, pending, spins = true)
                 }
             }
             if (chevron) Icon(
@@ -413,6 +416,8 @@ private fun proseShifts(height: Dp): Pair<Dp, Dp> {
     }
 }
 
+private const val DETAIL_MARK_GAP = 3f
+
 @Composable
 private fun ControlWords(
     title: String?,
@@ -426,6 +431,7 @@ private fun ControlWords(
     pictureSide: Dp,
     gap: Dp?,
     detail: Symbol?,
+    detailMark: (@Composable () -> Unit)?,
     place: String?,
     pending: Boolean,
     spins: Boolean,
@@ -443,21 +449,23 @@ private fun ControlWords(
         }
         if (title != null) {
             val muted = LocalPalette.current.mutedStrongerForeground
+            val dot = LocalPalette.current.mutedStrongestForeground
             Row(
                 Modifier.weight(1f, fill = false).alpha(if (pending && !spins) 0f else 1f),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val markColor = if (tinted == null) LocalForeground.current else LocalPalette.current.foreground
                 Text(
-                    words(title, tinted, proxied, pinned, muted), style = font, maxLines = 1, modifier = Modifier.weight(1f, fill = false),
+                    words(title, tinted, proxied, pinned, dot), style = font, maxLines = 1, modifier = Modifier.weight(1f, fill = false),
                     inlineContent = if (proxied) GatewayMark.content(markColor, size.textSize, markSize) else emptyMap(),
                 )
                 if (detail != null) {
-                    Text(" · ", style = font, color = muted, maxLines = 1)
+                    Text(" · ", style = font, color = dot, maxLines = 1)
                     Icon(detail, size.smallSymbol, color = muted)
+                    if (detailMark != null) Box(Modifier.padding(start = scaled(DETAIL_MARK_GAP).dp)) { detailMark() }
                 }
                 if (place != null) {
-                    Text(" · ", style = font, color = muted, maxLines = 1)
+                    Text(" · ", style = font, color = dot, maxLines = 1)
                     Text(place, style = font, color = muted, maxLines = 1)
                 }
             }
@@ -466,8 +474,8 @@ private fun ControlWords(
 }
 
 @Composable
-private fun words(title: String, tinted: Pair<String, Color>?, proxied: Boolean, pinned: Boolean, muted: Color): AnnotatedString {
-    val named = dotted(title, muted).proxied(proxied, pinned)
+private fun words(title: String, tinted: Pair<String, Color>?, proxied: Boolean, pinned: Boolean, dot: Color): AnnotatedString {
+    val named = dotted(title, dot).proxied(proxied, pinned)
     if (tinted == null) return named
     val foreground = LocalPalette.current.foreground
     return buildAnnotatedString {
@@ -625,6 +633,7 @@ fun ActionButton(
     picture: (@Composable () -> Unit)? = null,
     pictures: (@Composable () -> Unit)? = null,
     detail: Symbol? = null,
+    detailMark: (@Composable () -> Unit)? = null,
     place: String? = null,
     /** Words after its title in its tint, which leave the title in the foreground. */
     tinted: String? = null,
@@ -666,7 +675,7 @@ fun ActionButton(
     val label = @Composable {
         ControlLabel(
             words, ControlIcon.of(icon, picture, pictures), size, chevron = opens || expanded != null, pending = pending, pendingTitle = pendingTitle, fills = fills,
-            alignment = alignment, symbolSize = symbolSize, gap = gap, padding = padding, detail = detail, place = place,
+            alignment = alignment, symbolSize = symbolSize, gap = gap, padding = padding, detail = detail, detailMark = detailMark, place = place,
             tinted = tinted?.let { tail -> tint?.let { tail to it } }, proxied = proxied, pinned = pinned, chevronUp = expanded == true, prose = prose,
             centered = round,
         )

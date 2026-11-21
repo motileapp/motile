@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -93,9 +95,9 @@ fun DrawScope.drawSymbol(symbol: Symbol, side: Float, color: Color, trimmed: Boo
         Symbol.GitHub -> drawPath(logo(githubLogo, side, share = 20f / 24), drawn)
         Symbol.Linear -> drawPath(logo(linearLogo, side, share = 0.88f), drawn)
         Symbol.Ricrac -> drawPath(logo(ricracLogo, side, share = 20f / 24), drawn)
-        Symbol.EffortLow -> gauge(0.25f, side, drawn)
-        Symbol.EffortMedium -> gauge(0.5f, side, drawn)
-        Symbol.EffortHigh -> gauge(0.75f, side, drawn)
+        Symbol.EffortLow -> level(5f, side, drawn)
+        Symbol.EffortMedium -> level(9f, side, drawn)
+        Symbol.EffortHigh -> level(14f, side, drawn)
         else -> {
             val character = symbol.character ?: return
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -142,10 +144,10 @@ private fun logo(mark: Path, side: Float, share: Float): Path {
 }
 
 /** A ring as Lucide draws a circle, round a pie that fills `share` of it clockwise from the top, in a square of 24. */
-private fun DrawScope.gauge(share: Float, side: Float, color: Color) {
+private fun DrawScope.level(height: Float, side: Float, color: Color) {
     scale(side / 24, side / 24, pivot = Offset.Zero) {
-        drawCircle(color, radius = 10f, center = Offset(12f, 12f), style = Stroke(width = 2f))
-        drawArc(color, startAngle = -90f, sweepAngle = 360f * share, useCenter = true, topLeft = Offset(6f, 6f), size = androidx.compose.ui.geometry.Size(12f, 12f))
+        drawRoundRect(color, topLeft = Offset(5f, 2f), size = Size(14f, 20f), cornerRadius = CornerRadius(5f), style = Stroke(width = 2f))
+        drawRoundRect(color, topLeft = Offset(8f, 19f - height), size = Size(8f, height), cornerRadius = CornerRadius(2f))
     }
 }
 

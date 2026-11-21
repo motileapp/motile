@@ -23,6 +23,7 @@
   --muted-foreground: #606470;
   --muted-stronger-foreground: #8e919d;
   --muted-strongest-foreground: #adb1bc;
+  --muted-strongest-plus-foreground: #c4c7d0;
   --primary: #2a5bd7;
   --primary-foreground: #ffffff;
   --destructive: #c62828;
@@ -152,6 +153,7 @@
   --muted-foreground: #9a9eab;
   --muted-stronger-foreground: #646875;
   --muted-strongest-foreground: #4a4e5a;
+  --muted-strongest-plus-foreground: #3b3e49;
   --primary: #4f7cff;
   --primary-foreground: #ffffff;
   --destructive: #df6c6a;

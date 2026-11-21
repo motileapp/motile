@@ -12,6 +12,7 @@ mod strips;
 mod unlinked;
 
 use std::cell::Cell;
+use std::f32::consts::PI;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -19,7 +20,9 @@ use gpui_kit::component::Sizable;
 use gpui_kit::component::input::{Enter, InputEvent, Textarea, TextareaState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+use lyon::tessellation::LineCap;
 use motile_core::api::Section;
+use motile_core::limits::Tone;
 use motile_core::link::State;
 use motile_protocol::wire::{Access, Interruption};
 
@@ -503,8 +506,8 @@ impl Composer {
             )
     }
 
-    /// The model with its account, the effort with the context window, and the access: one
-    /// button that opens the picker which chooses all of them.
+    /// The model with its account, the effort with the context window, how full the context is,
+    /// and the access: one button that opens the picker which chooses all of them.
     fn settings_button(&self, labels: Labels, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let id = ElementId::from("composer-settings");
         let hovered = crate::ui::hover_state(&id, window, cx);
@@ -515,6 +518,7 @@ impl Composer {
         let effort = store.composer_effort();
         let context = store.composer_context().map(|context| context.label);
         let access = store.composer_access();
+        let fill = store.composer_context_fill();
         let open = store.composer_picker.is_some();
         let disabled = store.composer_models().is_empty() || crate::ui::inert(cx);
         let help = store.shortcuts.help("Model, effort and access", "modelPicker.toggle");
@@ -571,7 +575,16 @@ impl Composer {
                         let mark = effort
                             .as_deref()
                             .map(|effort| icons::symbol(effort_symbol(effort), symbol).into_any_element());
-                        face.child(divider()).child(settings_part(mark, effort_title, GatewayMark::Hidden, c))
+                        face.child(divider())
+                            .child(settings_part(mark, effort_title, GatewayMark::Hidden, c))
+                            .when_some(fill.used_percent, |face, percent| {
+                                face.child(
+                                    div()
+                                        .flex_shrink_0()
+                                        .ml(px(RING_GAP))
+                                        .child(context_ring(percent, fill.tone, symbol, c)),
+                                )
+                            })
                     })
                     .child(divider())
                     .child(settings_part(
@@ -815,6 +828,58 @@ fn settings_part(mark: Option<AnyElement>, title: Option<String>, gateway_mark: 
             .whitespace_nowrap()
             .child(crate::ui::proxied_dotted(title, gateway_mark, size.text_size(), size.symbol(), c)),
     )
+}
+
+/// Between the effort's words and the context's ring, as between a symbol and its words.
+const RING_GAP: f32 = 5.;
+
+/// How full the context window is: a ring drawn as a Lucide circle, 22 wide with its stroke in a
+/// square of 24, in the dividers' colour, with an arc in the tone's colour over it from the top
+/// round clockwise.
+fn context_ring(used_percent: f64, tone: Tone, size: IconSize, c: &theme::Colors) -> Div {
+    let (track, arc) = (
+        c.border_composer_stronger,
+        match tone {
+            Tone::Success => c.success,
+            Tone::Pending => c.pending,
+            Tone::Warning => c.warning,
+        },
+    );
+    let used = (used_percent / 100.).clamp(0., 1.) as f32;
+    let side = size.side();
+    let line = side / 12.;
+    let radius = side / 2. - side / 24. - line / 2.;
+    let ring = canvas(
+        |_, _, _| {},
+        move |bounds, _, window, _| {
+            let center = bounds.center();
+            let at = |angle: f32| point(center.x + px(radius * angle.cos()), center.y + px(radius * angle.sin()));
+            let radii = point(px(radius), px(radius));
+            let mut circle = PathBuilder::stroke(px(line));
+            circle.move_to(at(-PI / 2.));
+            circle.arc_to(radii, px(0.), false, true, at(PI / 2.));
+            circle.arc_to(radii, px(0.), false, true, at(-PI / 2.));
+            if let Ok(path) = circle.build() {
+                window.paint_path(path, track);
+            }
+            if used <= 0. {
+                return;
+            }
+            let round = StrokeOptions::default().with_line_width(line).with_line_cap(LineCap::Round);
+            let mut filled = PathBuilder::stroke(px(line)).with_style(PathStyle::Stroke(round));
+            filled.move_to(at(-PI / 2.));
+            if used >= 1. {
+                filled.arc_to(radii, px(0.), false, true, at(PI / 2.));
+                filled.arc_to(radii, px(0.), false, true, at(-PI / 2.));
+            } else {
+                filled.arc_to(radii, px(0.), used > 0.5, true, at(-PI / 2. + 2. * PI * used));
+            }
+            if let Ok(path) = filled.build() {
+                window.paint_path(path, arc);
+            }
+        },
+    );
+    div().size(px(side)).flex_shrink_0().child(ring.size_full())
 }
 
 /// "Medium · 1M": the effort, and the context window where the model offers more than one.

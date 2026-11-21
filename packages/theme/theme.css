@@ -35,6 +35,7 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-muted-stronger-foreground: var(--muted-stronger-foreground);
   --color-muted-strongest-foreground: var(--muted-strongest-foreground);
+  --color-muted-strongest-plus-foreground: var(--muted-strongest-plus-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-destructive: var(--destructive);
