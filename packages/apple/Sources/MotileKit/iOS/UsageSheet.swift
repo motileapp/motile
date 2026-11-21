@@ -39,7 +39,7 @@ struct UsageSheet: View {
                 if tab == .limits {
                     LimitsListIOS(model: model)
                 } else {
-                    UsageContent(model: model, shown: tab, margin: Self.margin, top: 4)
+                    UsageContent(model: model, shown: tab, margin: Self.margin, top: 12)
                 }
             }
             .dropdowns()
