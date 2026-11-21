@@ -143,10 +143,12 @@ struct CanvasHit {
     }
 }
 
-/// A tooltip centred on `x` with its top at `y`, in the scene's points.
+/// A tooltip beside what it tells of, its top at `y` and its near edge at `x` (its right edge when
+/// it lies `left` of it), in the scene's points.
 struct CanvasTip {
     let x: CGFloat
     let y: CGFloat
+    let left: Bool
     let title: String
     let rows: [Row]
 
@@ -436,6 +438,7 @@ private struct RawHit: Decodable {
 private struct RawTip: Decodable {
     let x: CGFloat
     let y: CGFloat
+    let left: Bool?
     let title: String
     let rows: [Row]?
 
@@ -446,7 +449,7 @@ private struct RawTip: Decodable {
     }
 
     var tip: CanvasTip {
-        CanvasTip(x: x, y: y, title: title, rows: (rows ?? []).map { CanvasTip.Row(color: $0.color, name: $0.name ?? "", value: $0.value) })
+        CanvasTip(x: x, y: y, left: left ?? false, title: title, rows: (rows ?? []).map { CanvasTip.Row(color: $0.color, name: $0.name ?? "", value: $0.value) })
     }
 }
 

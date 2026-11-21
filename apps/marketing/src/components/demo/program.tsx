@@ -340,7 +340,7 @@ const HEIGHT = 240
 const TOP = 10
 const BOTTOM = 26
 const RIGHT = 4
-const TIP_INSET = 70
+const TIP_GAP = 10
 
 /** A step of 1, 2, 2.5, 5 or 10 times a power of ten, at least `span`. */
 function niceStep(span: number) {
@@ -515,10 +515,7 @@ function AreaChart({ rows, width }: { rows: Year[]; width: number }) {
           )}
         </svg>
         {lit !== null && (
-          <ChartTip
-            x={Math.min(Math.max(xAt(lit), TIP_INSET), width - TIP_INSET)}
-            row={rows[lit]}
-          />
+          <ChartTip x={xAt(lit)} left={xAt(lit) > width / 2} row={rows[lit]} />
         )}
       </div>
       <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
@@ -538,11 +535,12 @@ function AreaChart({ rows, width }: { rows: Year[]; width: number }) {
   )
 }
 
-function ChartTip({ x, row }: { x: number; row: Year }) {
+/** Beside the guide at `x`, on its `left` or its right. */
+function ChartTip({ x, left, row }: { x: number; left: boolean; row: Year }) {
   return (
     <div
-      className="pointer-events-none absolute flex min-w-[110px] -translate-x-1/2 flex-col gap-[3px] rounded-lg border border-border-popover bg-popover px-3 py-2.5 text-(length:--type-xs) leading-[18px] shadow-md shadow-shadow/(--opacity-shadow)"
-      style={{ left: x, top: TOP }}
+      className={`pointer-events-none absolute flex min-w-[110px] ${left ? "-translate-x-full" : ""} flex-col gap-[3px] rounded-lg border border-border-popover bg-popover px-3 py-2.5 text-(length:--type-xs) leading-[18px] shadow-md shadow-shadow/(--opacity-shadow)`}
+      style={{ left: left ? x - TIP_GAP : x + TIP_GAP, top: TOP }}
     >
       <span className="font-semibold">{row.year}</span>
       {SERIES.map((series, si) => (

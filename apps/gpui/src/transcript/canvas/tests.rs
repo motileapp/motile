@@ -256,7 +256,7 @@ fn the_pointer_lights_a_band_and_shows_its_tooltip() {
         rgb(color).iter().zip(got).all(|(want, got)| (want - got as i32).abs() <= 2)
     };
     let c = &*theme::LIGHT;
-    let (band, card) = ((380, 150), (440, 14));
+    let (band, card) = ((380, 150), (320, 14));
     assert!(near(&plain, band, c.background) && near(&plain, card, c.background));
     assert!(near(&hovered, band, c.background_accent_larger), "the band is lit");
     assert!(near(&hovered, card, c.popover), "the tooltip shows");
@@ -264,7 +264,12 @@ fn the_pointer_lights_a_band_and_shows_its_tooltip() {
 }
 
 fn region_hit(region: Region) -> Hit {
-    Hit { region, at: 0, lit: Vec::new(), tip: Tip { x: 0., y: 0., title: String::new(), rows: Vec::new() } }
+    Hit {
+        region,
+        at: 0,
+        lit: Vec::new(),
+        tip: Tip { x: 0., y: 0., left: false, title: String::new(), rows: Vec::new() },
+    }
 }
 
 #[test]

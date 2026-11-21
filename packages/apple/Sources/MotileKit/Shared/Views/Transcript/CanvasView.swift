@@ -53,6 +53,7 @@ final class CanvasView: FlippedView {
         lit = index
         redraw()
         showTip()
+        watchTapsElsewhere()
     }
 
     func hit(at point: CGPoint) -> Int? {

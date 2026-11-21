@@ -173,7 +173,7 @@ struct CanvasContent {
             y += lineHeight
         }
         let height = y + TipMetrics.vertical
-        let frame = CGRect(x: (tip.x - width / 2).rounded(), y: tip.y.rounded(), width: ceil(width), height: ceil(height))
+        let frame = CGRect(x: (tip.left ? tip.x - ceil(width) : tip.x).rounded(), y: tip.y.rounded(), width: ceil(width), height: ceil(height))
         return Tip(frame: frame, texts: texts, dots: dots)
     }
 }

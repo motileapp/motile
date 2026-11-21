@@ -147,6 +147,21 @@ fn charts_paint_as_their_golden_pictures() {
 }
 
 #[test]
+fn a_tooltip_lies_beside_the_column_on_the_side_with_more_room() {
+    let scene = canvas::layout("Chart", &chart("line"), 560.0, 14.0);
+    let guide_x = |i: usize| match scene.hits[i].region {
+        canvas::Region::Rect { x, width, .. } => x + width / 2.0,
+        _ => unreachable!(),
+    };
+    let first = &scene.hits[0].tip;
+    assert!(!first.left);
+    assert!((first.x - (guide_x(0) + 10.0)).abs() <= 1.0);
+    let last = &scene.hits[scene.hits.len() - 1].tip;
+    assert!(last.left);
+    assert!((last.x - (guide_x(scene.hits.len() - 1) - 10.0)).abs() <= 1.0);
+}
+
+#[test]
 fn charts_follow_the_references_rules() {
     let scene = canvas::layout("Chart", &chart("bar-stacked"), 720.0, 14.0);
     let ticks: Vec<&str> = scene

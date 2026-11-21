@@ -331,11 +331,14 @@ pub enum Region {
     },
 }
 
-/// A tooltip, centred on `x` with its top at `y`: its title, then a row for each value.
+/// A tooltip beside what it tells of, its top at `y` and its near edge at `x`: its right edge when
+/// it lies `left` of it, else its left edge. Its title, then a row for each value.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Tip {
     pub x: f32,
     pub y: f32,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub left: bool,
     pub title: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub rows: Vec<TipRow>,

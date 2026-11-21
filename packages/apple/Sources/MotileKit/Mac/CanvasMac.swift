@@ -10,6 +10,9 @@ extension CanvasView {
         }
     }
 
+    /// Leaving with the pointer lets go already.
+    func watchTapsElsewhere() {}
+
     /// The Mac redraws a view when its appearance changes.
     func watchAppearance() {}
 }

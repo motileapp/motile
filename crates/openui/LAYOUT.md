@@ -472,10 +472,11 @@ control, the pair a column.
   centring it.
 - Hover (pointer): the band under the pointer is lit and its tooltip shows; leaving hides it. Touch:
   a tap shows the tapped band's, a horizontal drag moves it, a vertical drag scrolls the transcript,
-  a tap elsewhere hides it.
+  a tap on the same band or anywhere else in the window hides it.
 - Tooltip: Motile's popover look (`popover`, 1 `border-popover`, `Radius.lg`, `ShadowSize.md`),
-  padding 10 vertical, 12 horizontal, at least 110 wide, rows 3 apart; centred on core's x (kept 70
-  from the plot's ends), its top at core's y. The heading `caption` semibold `foreground`; each row
+  padding 10 vertical, 12 horizontal, at least 110 wide, rows 3 apart; beside what it tells of, never
+  over it: 10 right of the guide (a bar's band, a point's ring), or left of it past the scene's middle.
+  Core's x is its near edge (its right edge when `left`), its top at core's y. The heading `caption` semibold `foreground`; each row
   an 8 dot in its series' colour, 6, the series name in `caption` `muted-foreground`, and the value
   in `readout` `foreground` at the end, at least 8 after the name.
 - Legend (two series or more, not pie): 10 under the plot, wrapping, items 16 apart and lines 6

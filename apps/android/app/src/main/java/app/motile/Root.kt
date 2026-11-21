@@ -59,6 +59,7 @@ import app.motile.sidebar.CustomSnoozeSheet
 import app.motile.thread.CommitSheet
 import app.motile.thread.ThreadSettingsSheet
 import app.motile.transcript.canvas.ConfettiLayer
+import app.motile.transcript.canvas.watchingSceneTaps
 import app.motile.transcript.openui.ExpandedPageCover
 import app.motile.ui.Answer
 import app.motile.ui.Asking
@@ -149,6 +150,7 @@ fun Root(store: AppStore) {
             Modifier
                 .fillMaxSize()
                 .background(palette.background)
+                .watchingSceneTaps()
                 .onPreviewKeyEvent { store.handleShortcut(it) }
                 .focusRequester(keys)
                 .focusTarget(),
