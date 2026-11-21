@@ -16,7 +16,7 @@ use motile_protocol::gateway_wire::{McpAuth, McpChange, ToolKind, ToolPermission
 use serde_json::{Map, Value};
 
 use super::agent_gateway::{GatewayHeader, MCP_CAPTION, large};
-use super::layout::{Cut, INSET, group, half_gap, label, more, row, spaced_row};
+use super::layout::{Cut, INSET, ROW_HEIGHT, group, half_gap, label, more, row, row_outset, row_with, spaced_row};
 use crate::panel::code_view::{CodeActions, CodeSnapshot, CodeView};
 use crate::panel::state::{CodeDocument, CodeMarks, Loaded};
 use crate::sign_in::Session;
@@ -36,7 +36,6 @@ const TILE: f32 = 28.;
 const SMALL_TILE: f32 = 16.;
 /// How tall the activity grows before it scrolls.
 const ACTIVITY_HEIGHT: f32 = 420.;
-const GROUP_HEIGHT: f32 = 44.;
 /// What agents may do with a tool, as its dropdown and its row name it.
 const PERMISSIONS: [(ToolPermission, &str, &str); 3] = [
     (ToolPermission::Allow, "Always allow", "circle-check"),
@@ -251,8 +250,9 @@ fn group_row(
         .id(ElementId::Name(name.clone()))
         .group(name.clone())
         .relative()
-        .px(px(INSET))
-        .h(px(GROUP_HEIGHT))
+        .pl(px(INSET))
+        .pr(px(INSET - row_outset(ControlSize::Regular.height())))
+        .h(px(ROW_HEIGHT))
         .flex()
         .items_center()
         .gap(px(8.))
@@ -300,7 +300,13 @@ fn tool_row(store: &Entity<Store>, mcp_server: &str, tool: &ToolRow, cx: &App) -
                 let Some((permission, _, _)) = PERMISSIONS.get(index) else { return };
                 update(&store, &id, McpChange::ToolPermission { name: name.clone(), permission: *permission }, cx)
             });
-    row(vec![tool_label(tool, cx)], vec![picker.into_any_element()]).pl(px(INSET + TOOL_INDENT)).into_any_element()
+    row_with(
+        vec![tool_label(tool, cx)],
+        vec![picker.into_any_element()],
+        row_outset(Segmented::height(ControlSize::Small)),
+    )
+    .pl(px(INSET + TOOL_INDENT))
+    .into_any_element()
 }
 
 /// What the page takes away once the user says so.

@@ -37,28 +37,47 @@ final class LineFieldCell: NSTextFieldCell {
 }
 
 /// A borderless line to type in with a `LineFieldCell`, which scrolls sideways when its text is
-/// longer than it. A secure one shows dots for what is typed.
+/// longer than it.
 final class LineTextField: NSTextField {
-    init(secure: Bool) {
+    init() {
         super.init(frame: .zero)
-        let cell = secure ? LineSecureFieldCell(textCell: "") : LineFieldCell(textCell: "")
-        cell.isEditable = true
-        cell.isSelectable = true
-        cell.isScrollable = true
-        cell.usesSingleLineMode = true
-        cell.lineBreakMode = .byClipping
-        self.cell = cell
-        isBordered = false
-        isBezeled = false
-        drawsBackground = false
-        focusRingType = .none
-        textColor = Theme.foreground
+        setUpLine(self, cell: LineFieldCell(textCell: ""))
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
     /// How far it stands out past the frame its text lies in, on either side: its cell's inset.
     static let outset = LineFieldCell.inset
+
+    /// A line that shows dots for what is typed, or one that shows the text.
+    static func make(secure: Bool) -> NSTextField {
+        secure ? LineSecureTextField() : LineTextField()
+    }
+}
+
+/// `LineTextField` showing dots for what is typed. AppKit only gives a secure cell's editor to an
+/// `NSSecureTextField`; in a plain field it throws, and what is typed never reaches the delegate.
+final class LineSecureTextField: NSSecureTextField {
+    init() {
+        super.init(frame: .zero)
+        setUpLine(self, cell: LineSecureFieldCell(textCell: ""))
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+}
+
+private func setUpLine(_ field: NSTextField, cell: NSTextFieldCell) {
+    cell.isEditable = true
+    cell.isSelectable = true
+    cell.isScrollable = true
+    cell.usesSingleLineMode = true
+    cell.lineBreakMode = .byClipping
+    field.cell = cell
+    field.isBordered = false
+    field.isBezeled = false
+    field.drawsBackground = false
+    field.focusRingType = .none
+    field.textColor = Theme.foreground
 }
 
 /// `LineFieldCell` for a secure field, whose editor shows dots.
@@ -100,15 +119,15 @@ private struct LineFieldRepresentable: NSViewRepresentable {
     let font: NSFont
     let secure: Bool
 
-    func makeNSView(context: Context) -> LineTextField {
-        let field = LineTextField(secure: secure)
+    func makeNSView(context: Context) -> NSTextField {
+        let field = LineTextField.make(secure: secure)
         field.delegate = context.coordinator
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         return field
     }
 
-    func updateNSView(_ field: LineTextField, context: Context) {
+    func updateNSView(_ field: NSTextField, context: Context) {
         context.coordinator.parent = self
         if field.font != font { field.font = font }
         if field.stringValue != text {
@@ -127,7 +146,7 @@ private struct LineFieldRepresentable: NSViewRepresentable {
         context.coordinator.onKey = context.environment.lineKey
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView field: LineTextField, context: Context) -> CGSize? {
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView field: NSTextField, context: Context) -> CGSize? {
         CGSize(width: proposal.width ?? field.intrinsicContentSize.width, height: field.intrinsicContentSize.height)
     }
 

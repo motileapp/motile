@@ -1688,6 +1688,10 @@ impl Segmented {
     /// How far a choice's light stands from the track's border, and from the next one's.
     pub const INSET: f32 = 2.;
     pub const BORDER: f32 = 1.;
+    /// How tall its track is around choices of this size.
+    pub const fn height(size: ControlSize) -> f32 {
+        size.height() + 2. * (Self::INSET + Self::BORDER)
+    }
     /// The track of a compact one, whose choices' lights round to follow it.
     const COMPACT_RADIUS: f32 = Radius::MD;
 

@@ -125,7 +125,7 @@ struct McpGatewaySettings: View {
         let open = unfolded.contains(key)
         McpToolGroupRow(
             mcpServer: mcpServer, group: group, open: open,
-            inset: EdgeInsets(top: 8, leading: settingsInset, bottom: 8, trailing: settingsInset)
+            inset: EdgeInsets(top: Self.groupEdge, leading: settingsInset, bottom: Self.groupEdge, trailing: Self.groupEdge)
         ) {
             withAnimation(.snappy(duration: 0.2)) {
                 if open { unfolded.remove(key) } else { unfolded.insert(key) }
@@ -136,9 +136,7 @@ struct McpGatewaySettings: View {
             ForEach(group.tools) { tool in
                 ThemeDivider()
                 McpServerToolRow(mcpServer: mcpServer, tool: tool)
-                    .padding(.leading, settingsInset + Self.toolIndent)
-                    .padding(.trailing, settingsInset)
-                    .padding(.vertical, 8)
+                    .padding(.leading, Self.toolIndent)
                     .opacity(.disabled, when: !mcpServer.enabled)
             }
         }
@@ -146,6 +144,8 @@ struct McpGatewaySettings: View {
 
     /// How far a group's tools stand in from its title, under it past its chevron.
     private static let toolIndent: CGFloat = 20
+    /// How far a group's permission stands from its row's top, bottom and right, in a row as tall as the others.
+    private static let groupEdge = (settingsRowHeight - ControlSize.regular.height) / 2
 
     /// The calls agents made, newest first, all of them or only those that failed.
     private var activity: some View {
