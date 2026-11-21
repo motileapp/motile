@@ -30,6 +30,8 @@ reply made up on the spot instead:
 - "plan the hello": a turn that presents a plan and, once that is approved, carries it out.
 - "show the screenshot": a turn that writes `screenshot.png` in its folder, reads it, and shows it in the reply.
 - "send the report": a turn that writes `signups.csv` in its folder and sends it in the reply.
+- "use the calculator": a turn that works out 12 × 7 in Calculator through the computer use
+  driver's tools, the second of which shows a screenshot.
 - "show the recording": a turn that writes `recording.mp4`, which isn't really a video, and its
   preview `recording.png` in its folder and shows the video with the preview in the reply.
 - "greet by name": a turn that really changes its folder: it rewrites `greet.py` and adds
@@ -1292,6 +1294,20 @@ def show_screenshot():
     turn.done()
 
 
+def use_the_calculator():
+    turn = Turn("00000000-0000-4000-8000-0000000ca1c0")
+    driver = "mcp__cua-driver__"
+    opened = '{"bundle_id":"com.apple.calculator","name":"Calculator","pid":4242}'
+    turn.tool(driver + "launch_app", {"bundle_id": "com.apple.calculator"}, opened, seconds=0.1)
+    steps = [{"click": {"role": "button", "name": name}} for name in ["1", "2", "×", "7", "="]]
+    shot = {"type": "base64", "media_type": "image/png", "data": base64.b64encode(png(1600, 1000)).decode()}
+    result = [{"type": "text", "text": '{"executed":5,"failed_step":null,"ok":true}'}, {"type": "image", "source": shot}]
+    turn.tool(driver + "run_steps", {"pid": 4242, "window_id": 7, "steps": steps, "observe": {}}, result, seconds=0.1)
+    turn.tool(driver + "hotkey", {"pid": 4242, "keys": ["cmd", "q"]}, '{"executed":1,"ok":true}', seconds=0.1)
+    turn.text("12 × 7 is 84: Calculator showed it after the clicks. I quit it afterwards.")
+    turn.done()
+
+
 SIGNUPS = "week,signups\n2026-09-14,184\n2026-09-21,203\n2026-09-28,251\n2026-10-05,262\n"
 
 
@@ -1800,6 +1816,7 @@ SCRIPTED = {
     "change the settings": change_the_settings,
     "show the screenshot": show_screenshot,
     "send the report": send_the_report,
+    "use the calculator": use_the_calculator,
     "show the recording": show_the_recording,
     "greet by name": greet_by_name,
     "ask two agents": ask_two_agents,

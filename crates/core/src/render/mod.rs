@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod computer_use;
 pub mod diff;
 pub mod highlight;
 pub mod markdown;

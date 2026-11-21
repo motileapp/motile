@@ -1745,6 +1745,12 @@ final class AppStore {
         }
     }
 
+    func setComputerUse(_ enabled: Bool, on server: Server) {
+        core.send("set_computer_use", ["server_id": server.id, "enabled": enabled]) { [weak self] result in
+            if case .failure(let error) = result { self?.alert(error) }
+        }
+    }
+
     func removeServer(_ server: Server) {
         core.send("remove_server", ["server_id": server.id]) { [weak self] result in
             if case .failure(let error) = result { self?.alert(error) }

@@ -39,12 +39,13 @@ use crate::agents::environment::Environment;
 use crate::agents::{
     self, AgentEvent, Background, Parser, Settings, ToolImage, Turn, claude, executable_name, models, skills,
 };
+use crate::computer_use::ComputerUse;
 use crate::files::FileBytes;
 use crate::generate::{self, Writer};
 use crate::handoff::{self, Range};
 use crate::linear::Linear;
 use crate::mcp::{self, McpAccess};
-use crate::media::MediaStore;
+use crate::media::{self, MediaStore};
 use crate::pricing::{self, Prices};
 use crate::ricrac::Ricrac;
 use crate::sign_in::SignIns;
@@ -88,6 +89,7 @@ const MODELS: &str = "models";
 const BRANCH_INSTRUCTIONS: &str = "branch_instructions";
 const CONTINUE_AFTER_LIMITS: &str = "continue_after_limits";
 const CONTINUE_AFTER_RESTARTS: &str = "continue_after_restarts";
+const COMPUTER_USE: &str = "computer_use";
 /// Set while the server restarts after its agents were stopped for it, whatever the settings say.
 const CONTINUE_AFTER_THIS_RESTART: &str = "continue_after_this_restart";
 /// How long a stopped agent has to save its session before it is killed.
@@ -177,6 +179,7 @@ pub struct Hub {
     closing: AtomicBool,
     update: std::sync::Mutex<Option<ServerUpdate>>,
     backup: std::sync::Mutex<Option<BackupState>>,
+    computer_use: Arc<ComputerUse>,
     /// What the models cost at the API's prices, as last fetched.
     prices: std::sync::Mutex<Prices>,
     /// What the agents' accounts had used of their plans, and when that was read.
@@ -386,14 +389,15 @@ pub struct ThreadSubscription {
 impl Hub {
     /// `media_folder` is where the images and videos that threads show are kept,
     /// `attachments_folder` where the files that clients upload are, `worktrees_folder` where
-    /// the worktrees of threads are made, and `no_project_folder` where the threads started
-    /// without a project work.
+    /// the worktrees of threads are made, `no_project_folder` where the threads started
+    /// without a project work, and `computer_use_folder` where the computer use driver is kept.
     pub fn new(
         store: Store,
         media_folder: PathBuf,
         attachments_folder: PathBuf,
         worktrees_folder: PathBuf,
         no_project_folder: PathBuf,
+        computer_use_folder: PathBuf,
         environment: Environment,
     ) -> anyhow::Result<Arc<Self>> {
         let environment = stop_git_above(environment, &no_project_folder);
@@ -468,6 +472,11 @@ impl Hub {
             closing: AtomicBool::new(false),
             update: std::sync::Mutex::default(),
             backup: std::sync::Mutex::default(),
+            computer_use: ComputerUse::new(
+                computer_use_folder,
+                &environment.variables,
+                store.setting(COMPUTER_USE).is_some_and(|value| value == "true"),
+            ),
             prices: std::sync::Mutex::new(
                 store.setting(PRICES).and_then(|prices| serde_json::from_str(&prices).ok()).unwrap_or_default(),
             ),
@@ -521,7 +530,12 @@ impl Hub {
             }
             None => vec![],
         };
-        Some(McpAccess { url: format!("http://127.0.0.1:{port}/mcp"), token: self.thread_token(live), mcp_servers })
+        Some(McpAccess {
+            url: format!("http://127.0.0.1:{port}/mcp"),
+            token: self.thread_token(live),
+            mcp_servers,
+            computer_use: self.computer_use.access(),
+        })
     }
 
     /// What the thread's agent reads threads and reaches the gateway with.
@@ -733,6 +747,7 @@ impl Hub {
             continue_settings: self.continue_settings(),
             update: *self.update.lock().unwrap_or_else(|poisoned| poisoned.into_inner()),
             backup: self.backup.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone(),
+            computer_use: Some(self.computer_use.info()),
         }
     }
 
@@ -1106,6 +1121,27 @@ impl Hub {
             settings.after_restarts = on;
         }
         *self.continue_settings.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = settings;
+        Ok(())
+    }
+
+    /// Runs the computer use driver while it is on, and tells every client how it stands.
+    pub fn keep_computer_use_running(self: &Arc<Self>) {
+        self.computer_use.keep_running();
+        let mut changes = self.computer_use.changes();
+        let hub = Arc::downgrade(self);
+        tokio::spawn(async move {
+            while changes.changed().await.is_ok() {
+                let Some(hub) = hub.upgrade() else { return };
+                hub.announce_server();
+            }
+        });
+    }
+
+    /// Lets the agents started from now on see and use the apps on the server's screen.
+    pub fn set_computer_use(&self, enabled: bool) -> anyhow::Result<()> {
+        self.store.set_setting(COMPUTER_USE, Some(if enabled { "true" } else { "false" }))?;
+        self.computer_use.set_enabled(enabled);
+        self.announce_server();
         Ok(())
     }
 
@@ -3960,6 +3996,9 @@ impl Hub {
         if let Some(mcp) = turn.mcp {
             command.env(mcp::AUTHORIZATION_VARIABLE, format!("Bearer {}", mcp.token));
             command.env("MCP_TOOL_TIMEOUT", (mcp::TOOL_TIMEOUT_SECS * 1000).to_string());
+            if let Some(computer_use) = &mcp.computer_use {
+                command.envs(computer_use.screen.iter().cloned());
+            }
         }
         if account.gateway {
             command.env(gateway::token_variable(account.agent), token);
@@ -4010,7 +4049,7 @@ impl Hub {
                     mcp_sender.send_replace(ready);
                     continue;
                 }
-                let events = parser.parse(&line);
+                let events = compact_images(parser.parse(&line)).await;
                 if !events.is_empty() {
                     self.apply(&thread_id, events).await;
                 }
@@ -5734,6 +5773,44 @@ fn gateway_refilled(account: &AgentAccount, pool: &[GatewayAccount]) -> bool {
     match &account.pin {
         Some(pin) => on.find(|pooled| &pooled.id == pin).as_ref().is_some_and(ready),
         None => on.any(|pooled| ready(&pooled)),
+    }
+}
+
+/// The events with their tools' images made as small as the thread keeps them, off the threads
+/// that serve.
+async fn compact_images(events: Vec<AgentEvent>) -> Vec<AgentEvent> {
+    fn shows_image(event: &AgentEvent) -> bool {
+        match event {
+            AgentEvent::ToolImages { images, .. } => images.iter().any(|image| matches!(image, ToolImage::Data(_))),
+            AgentEvent::Sub { event, .. } => shows_image(event),
+            _ => false,
+        }
+    }
+    fn compact(event: AgentEvent) -> AgentEvent {
+        match event {
+            AgentEvent::ToolImages { id, images } => {
+                let images = images
+                    .into_iter()
+                    .map(|image| match image {
+                        ToolImage::Data(bytes) => ToolImage::Data(media::compact_shown(bytes)),
+                        file => file,
+                    })
+                    .collect();
+                AgentEvent::ToolImages { id, images }
+            }
+            AgentEvent::Sub { parent, event } => AgentEvent::Sub { parent, event: Box::new(compact(*event)) },
+            other => other,
+        }
+    }
+    if !events.iter().any(shows_image) {
+        return events;
+    }
+    match tokio::task::spawn_blocking(move || events.into_iter().map(compact).collect()).await {
+        Ok(events) => events,
+        Err(error) => {
+            tracing::error!("couldn't make a tool's images smaller: {error}");
+            Vec::new()
+        }
     }
 }
 

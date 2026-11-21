@@ -15,6 +15,36 @@ use pulldown_cmark::{Event, Options, Parser, Tag};
 
 /// The image a client made to stand for a video it attached, in the video's folder.
 pub const POSTER: &str = ".poster.jpg";
+/// The longest side a tool's image is kept at, which the transcript shows it within.
+const SHOWN_SIDE: u32 = 1280;
+const SHOWN_QUALITY: u8 = 70;
+
+/// A tool's image as the thread keeps it: the agent saw it whole, the transcript only shows it. No
+/// longer on a side than `SHOWN_SIDE`, and a JPEG unless it can be seen through. As it was when that
+/// isn't smaller, when it is a GIF, which may move, or when it isn't an image.
+pub fn compact_shown(bytes: Vec<u8>) -> Vec<u8> {
+    if matches!(imagesize::image_type(&bytes), Ok(imagesize::ImageType::Gif)) {
+        return bytes;
+    }
+    let Ok(image) = image::load_from_memory(&bytes) else { return bytes };
+    let image = if image.width().max(image.height()) > SHOWN_SIDE {
+        image.resize(SHOWN_SIDE, SHOWN_SIDE, image::imageops::FilterType::Triangle)
+    } else {
+        image
+    };
+    let see_through = image.color().has_alpha() && image.to_rgba8().pixels().any(|pixel| pixel[3] < u8::MAX);
+    let mut compacted = Vec::new();
+    let written = if see_through {
+        image.write_to(&mut std::io::Cursor::new(&mut compacted), image::ImageFormat::Png)
+    } else {
+        let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut compacted, SHOWN_QUALITY);
+        image.to_rgb8().write_with_encoder(encoder)
+    };
+    if written.is_err() || compacted.len() >= bytes.len() {
+        return bytes;
+    }
+    compacted
+}
 
 #[derive(Clone)]
 pub struct MediaStore {
@@ -295,6 +325,41 @@ pub(crate) fn percent_decode(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn rgba_png(width: u32, height: u32, alpha: u8) -> Vec<u8> {
+        let noise = |x: u32, y: u32| (x.wrapping_mul(2_654_435_761) ^ y.wrapping_mul(40_503)).rotate_left(x % 13) as u8;
+        let pixels =
+            image::RgbaImage::from_fn(width, height, |x, y| image::Rgba([noise(x, y), noise(y, x), 90, alpha]));
+        let mut bytes = Vec::new();
+        pixels.write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageFormat::Png).unwrap();
+        bytes
+    }
+
+    #[test]
+    fn a_tools_screenshot_is_kept_as_a_small_jpeg() {
+        let screenshot = rgba_png(2560, 1440, u8::MAX);
+        let kept = compact_shown(screenshot.clone());
+        assert!(matches!(imagesize::image_type(&kept), Ok(imagesize::ImageType::Jpeg)));
+        let size = imagesize::blob_size(&kept).unwrap();
+        assert_eq!((size.width, size.height), (1280, 720));
+        assert!(kept.len() * 4 < screenshot.len(), "{} of {}", kept.len(), screenshot.len());
+    }
+
+    #[test]
+    fn a_tools_image_that_can_be_seen_through_stays_a_png() {
+        let kept = compact_shown(rgba_png(1600, 400, 128));
+        assert!(matches!(imagesize::image_type(&kept), Ok(imagesize::ImageType::Png)));
+        assert_eq!(imagesize::blob_size(&kept).unwrap().width, 1280);
+    }
+
+    #[test]
+    fn what_isnt_made_smaller_is_kept_as_it_was() {
+        let tiny = rgba_png(4, 4, u8::MAX);
+        assert_eq!(compact_shown(tiny.clone()), tiny);
+        assert_eq!(compact_shown(b"not an image".to_vec()), b"not an image");
+        let gif = b"GIF89a\x01\x00\x01\x00\x00\x00\x00;".to_vec();
+        assert_eq!(compact_shown(gif.clone()), gif);
+    }
 
     /// The first bytes of a PNG that is `width` by `height`; enough to read its size from.
     fn png(width: u32, height: u32) -> Vec<u8> {

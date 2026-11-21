@@ -487,6 +487,11 @@ pub enum Command {
         server_id: String,
         settings: ContinueSettings,
     },
+    /// Lets the server's agents see and use the apps on its screen, from each agent's next start.
+    SetComputerUse {
+        server_id: String,
+        enabled: bool,
+    },
     /// Says how the server's writer names the branches it makes. Without `instructions` the
     /// server goes back to its own.
     SetBranchInstructions {
@@ -984,6 +989,8 @@ pub struct ServerView {
     pub accounts_by_room: Vec<String>,
     /// How its copies of the account's other servers' threads stand. None for a removed server.
     pub sync: Option<SyncView>,
+    /// None for a server that can't give its agents its screen.
+    pub computer_use: Option<crate::computer_use::ComputerUseView>,
 }
 
 /// The account's S3 bucket, which every server backs up to and syncs through.

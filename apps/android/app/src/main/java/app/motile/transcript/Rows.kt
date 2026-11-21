@@ -384,6 +384,7 @@ class ToolContent(json: JSON) {
             "web" -> Symbol.Globe
             "agent" -> Symbol.Bot
             "watch" -> Symbol.Eye
+            "screen" -> Symbol.Monitor
             "question" -> Symbol.MessageCircleQuestionMark
             "todo" -> Symbol.ListChecks
             else -> Symbol.Wrench

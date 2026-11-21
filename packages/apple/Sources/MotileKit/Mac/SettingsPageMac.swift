@@ -164,6 +164,7 @@ struct SettingsPage: View {
         backup
         relay
         continuing
+        computerUse
         removedServers
     }
 
@@ -275,6 +276,24 @@ struct SettingsPage: View {
                         Switch(isOn: Binding { server.continueAfterRestarts } set: {
                             store.setContinueSettings(afterLimits: server.continueAfterLimits, afterRestarts: $0, on: server)
                         })
+                    }
+                    if server.id != servers.last?.id { ThemeDivider() }
+                }
+            }
+        }
+    }
+
+    /// Whether each server's agents can see and use the apps on its screen, and how that stands.
+    @ViewBuilder private var computerUse: some View {
+        let servers = store.servers.filter { $0.state == .connected && $0.computerUse != nil }
+        if !servers.isEmpty {
+            SettingsGroup("computer-use", "Computer use", caption: "Agents can see and use the apps on the server's screen.") {
+                ForEach(servers) { server in
+                    let computerUse = server.computerUse
+                    SettingsRow(control: Switch.height) {
+                        SettingsLabel(server.name, description: computerUse?.problem, icon: .server)
+                    } trailing: {
+                        Switch(isOn: Binding { computerUse?.enabled ?? false } set: { store.setComputerUse($0, on: server) })
                     }
                     if server.id != servers.last?.id { ThemeDivider() }
                 }

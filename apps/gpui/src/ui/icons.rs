@@ -208,6 +208,7 @@ pub fn tool_symbol(icon: &str) -> &'static str {
         "web" => "globe",
         "agent" => "bot",
         "watch" => "eye",
+        "screen" => "monitor",
         "question" => "questionmark.bubble",
         "todo" => "list-checks",
         _ => "wrench.and.screwdriver",

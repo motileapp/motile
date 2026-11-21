@@ -53,6 +53,11 @@ impl DataDir {
         self.0.join("media")
     }
 
+    /// The computer use driver, and what it keeps.
+    pub fn computer_use(&self) -> PathBuf {
+        self.0.join("computer-use")
+    }
+
     /// The account's clients and its gateway, as the auth server last listed them.
     pub fn account_keys(&self) -> PathBuf {
         self.0.join("account-keys.json")

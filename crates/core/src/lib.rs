@@ -7,6 +7,7 @@ pub mod away;
 pub mod backup;
 pub mod browse;
 pub mod cache;
+pub mod computer_use;
 pub mod connection;
 pub mod core;
 pub mod engaged;

@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use motile_core::api::{Children, ProjectView, Section, ServerView, SyncState, SyncView, ThreadView};
+use motile_core::computer_use::ComputerUseView;
 use motile_core::connection::PathKind;
 use motile_core::git::Control;
 use motile_core::link::State;
@@ -75,6 +76,8 @@ pub struct Server {
     pub update: Option<ServerUpdate>,
     /// How its copies of the account's other servers' threads stand.
     pub sync: Option<SyncView>,
+    /// None for a server that can't give its agents its screen.
+    pub computer_use: Option<ComputerUseView>,
 }
 
 impl From<ServerView> for Server {
@@ -109,6 +112,7 @@ impl From<ServerView> for Server {
             next_accounts: view.next_accounts,
             accounts_by_room: view.accounts_by_room,
             sync: view.sync,
+            computer_use: view.computer_use,
             text_model: info.as_ref().and_then(|info| info.text_model.clone()),
             branch_instructions: info.as_ref().map(|info| info.branch_instructions.text.clone()).unwrap_or_default(),
             default_branch_instructions: info
@@ -1272,6 +1276,7 @@ mod tests {
             next_accounts: HashMap::new(),
             accounts_by_room: Vec::new(),
             sync: None,
+            computer_use: None,
         })
     }
 
@@ -1349,6 +1354,7 @@ mod tests {
             next_accounts: HashMap::new(),
             accounts_by_room: Vec::new(),
             sync: None,
+            computer_use: None,
         };
         let server = Server::from(view);
         assert!(server.removed);

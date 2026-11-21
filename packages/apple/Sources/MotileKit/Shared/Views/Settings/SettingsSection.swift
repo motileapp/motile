@@ -77,6 +77,7 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "relay", title: "Relay", section: .servers, keywords: "iroh relay network connection nat direct"),
         SettingsEntry(id: "continue-limits", title: "Continue after usage limits", section: .servers, keywords: "rate limit reset resume quota wait"),
         SettingsEntry(id: "continue-restarts", title: "Continue after restarts", section: .servers, keywords: "restart update crash resume interrupted"),
+        SettingsEntry(id: "computer-use", title: "Computer use", section: .servers, keywords: "screen apps desktop click type screenshot accessibility cua"),
         SettingsEntry(id: "gateway", title: "Gateway", section: .agentGateway, keywords: "add remove replace enroll docker unbind image volume code connected"),
         SettingsEntry(id: "gateway-accounts", title: "Accounts", section: .agentGateway, keywords: "claude codex sign in priority accounts pool limits next"),
         SettingsEntry(id: "gateway-log", title: "Log", section: .agentGateway, keywords: "requests errors capture captured headers body"),

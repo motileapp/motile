@@ -17,6 +17,7 @@ use motile_protocol::wire::{
 use serde_json::{Value, json};
 
 use super::{AgentEvent, Background, ModelUsage, Turn, content_images};
+use crate::computer_use::{self, DriverAccess};
 
 /// Background tasks that watch a command: the Monitor tool's and shells left running.
 const WATCH_TASKS: [&str; 4] = ["local_bash", "shell", "monitor", "monitor_mcp"];
@@ -66,13 +67,22 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
         servers.insert(crate::mcp::SERVER_NAME.to_string(), server(&mcp.url));
         // The gateway's MCP servers ask for approval themselves, as their tools' permissions say.
         let gateway_tools = mcp.mcp_servers.iter().map(|(slug, _)| format!("mcp__{slug}"));
-        let allowed: Vec<String> = crate::mcp::TOOLS.iter().map(|tool| tool.to_string()).chain(gateway_tools).collect();
+        let mut allowed: Vec<String> =
+            crate::mcp::TOOLS.iter().map(|tool| tool.to_string()).chain(gateway_tools).collect();
+        if let Some(driver) = &mcp.computer_use {
+            servers.insert(computer_use::SERVER_NAME.to_string(), computer_use_server(driver));
+            allowed.extend(computer_use::LOOKING_TOOLS.iter().map(|tool| computer_use_tool(tool)));
+        }
         arguments.extend([
             "--mcp-config".to_string(),
             json!({"mcpServers": servers}).to_string(),
             "--allowedTools".to_string(),
             allowed.join(","),
         ]);
+        if mcp.computer_use.is_some() {
+            let hidden: Vec<String> = computer_use::HIDDEN_TOOLS.iter().map(|tool| computer_use_tool(tool)).collect();
+            arguments.extend(["--disallowedTools".to_string(), hidden.join(",")]);
+        }
     }
     arguments.extend(
         [
@@ -94,6 +104,18 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
     }
     arguments.extend(["--append-system-prompt".to_string(), super::instructions(turn)]);
     arguments
+}
+
+/// The computer use driver as a server Claude Code starts, which every tool its access allows
+/// reaches: the ones that act ask for approval as the thread's access says.
+fn computer_use_server(driver: &DriverAccess) -> Value {
+    let variables: serde_json::Map<String, Value> =
+        driver.variables.iter().map(|(name, value)| (name.clone(), json!(value))).collect();
+    json!({"type": "stdio", "command": driver.command, "args": driver.arguments, "env": variables})
+}
+
+fn computer_use_tool(tool: &str) -> String {
+    format!("mcp__{}__{tool}", computer_use::SERVER_NAME)
 }
 
 /// The line that gives Claude Code `prompt`, where it runs the last of `skills` the prompt names.
@@ -1107,7 +1129,12 @@ mod tests {
     #[test]
     fn the_thread_is_read_through_motiles_tool_with_a_token_from_the_environment() {
         let mcp_servers = vec![("linear".to_string(), "http://127.0.0.1:8/mcp/linear".to_string())];
-        let mcp = crate::mcp::McpAccess { url: "http://127.0.0.1:9/mcp".into(), token: "secret".into(), mcp_servers };
+        let mcp = crate::mcp::McpAccess {
+            url: "http://127.0.0.1:9/mcp".into(),
+            token: "secret".into(),
+            mcp_servers,
+            computer_use: None,
+        };
         let turn = Turn {
             agent: motile_protocol::wire::Agent::Claude,
             model: None,
@@ -1136,9 +1163,55 @@ mod tests {
     }
 
     #[test]
+    fn the_computer_use_driver_is_started_with_its_looking_tools_allowed_and_its_own_tools_hidden() {
+        let driver = DriverAccess {
+            command: "/data/computer-use/cua-driver-0.55.0/cua-driver".into(),
+            arguments: vec!["mcp".into(), "--embedded".into()],
+            variables: vec![("CUA_DRIVER_RS_TELEMETRY_ENABLED".into(), "false".into())],
+            screen: vec![("DISPLAY".into(), ":90".into())],
+            own_display: Some(":90".into()),
+        };
+        let mcp_servers = vec![(computer_use::SERVER_NAME.to_string(), "http://127.0.0.1:8/mcp/cua".to_string())];
+        let mcp = crate::mcp::McpAccess {
+            url: "http://127.0.0.1:9/mcp".into(),
+            token: "secret".into(),
+            mcp_servers,
+            computer_use: Some(driver),
+        };
+        let turn = Turn {
+            agent: motile_protocol::wire::Agent::Claude,
+            model: None,
+            effort: None,
+            access: Access::Supervised,
+            session_id: None,
+            handoff: None,
+            mcp: Some(&mcp),
+            gateway_token: None,
+        };
+        let arguments = arguments(&turn);
+        let after = |flag: &str| &arguments[arguments.iter().position(|argument| argument == flag).unwrap() + 1];
+        let config: Value = serde_json::from_str(after("--mcp-config")).unwrap();
+        let server = &config["mcpServers"]["cua-driver"];
+        assert_eq!(server["type"], "stdio", "the driver wins over a gateway server of its name");
+        assert_eq!(server["command"], "/data/computer-use/cua-driver-0.55.0/cua-driver");
+        assert_eq!(server["args"], json!(["mcp", "--embedded"]));
+        assert_eq!(server["env"]["CUA_DRIVER_RS_TELEMETRY_ENABLED"], "false");
+        let allowed: Vec<&str> = after("--allowedTools").split(',').collect();
+        assert!(allowed.contains(&"mcp__cua-driver__get_window_state"), "{allowed:?}");
+        assert!(!allowed.contains(&"mcp__cua-driver__click"), "acting asks as the access says");
+        let hidden: Vec<&str> = after("--disallowedTools").split(',').collect();
+        assert!(hidden.contains(&"mcp__cua-driver__set_config"), "{hidden:?}");
+        assert!(super::super::instructions(&turn).contains("The cua-driver tools see and use the apps"));
+    }
+
+    #[test]
     fn the_instructions_point_to_the_guide_and_teach_programs_without_it() {
-        let mcp =
-            crate::mcp::McpAccess { url: "http://127.0.0.1:9/mcp".into(), token: "secret".into(), mcp_servers: vec![] };
+        let mcp = crate::mcp::McpAccess {
+            url: "http://127.0.0.1:9/mcp".into(),
+            token: "secret".into(),
+            mcp_servers: vec![],
+            computer_use: None,
+        };
         let turn = |mcp| Turn {
             agent: motile_protocol::wire::Agent::Claude,
             model: None,

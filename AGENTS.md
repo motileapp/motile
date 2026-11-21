@@ -128,6 +128,8 @@ colours from `packages/theme/theme.css`; an opacity is one of the tokens
 - `files.rs`, `media.rs`, `icons.rs`: files, media and project icons.
 - `title.rs`, `drafts.rs`, `generate.rs`: titles, commit messages, pull request texts, branch names.
 - `access.rs`, `backup.rs`, `gateway.rs`: the account, the S3 backup, the gateway.
+- `computer_use.rs`, `computer_use/`: Cua Driver, which lets the agents see and use the apps on the
+  server's screen: its pinned release, the screen it uses on Linux, the macOS permissions it needs.
 - `pacing.rs`, `setup.rs`, `service.rs`, `update.rs`.
 - `tests/e2e.rs`: the server against `scripts/fake-agent` over real iroh connections.
 
@@ -361,6 +363,7 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "show the screenshot" | Makes an image, reads it (the Read row shows it when opened) and shows it |
 | "show the recording" | Shows a video with its preview image |
 | "send the report" | Sends a file to download |
+| "use the calculator" | Works out 12 × 7 in Calculator through the computer use driver's tools, one of which shows a screenshot (Claude Code) |
 | "greet by name" | Really changes files in its folder |
 | "ask two agents" (Claude Code), "ask an agent" (Codex) | Starts agents that say what they do and report |
 | "ask another account" | Starts Codex through `start_agent` to look over greet.py and waits for it (Claude Code) |
@@ -395,6 +398,7 @@ Other stand-ins in the dev apps: `scripts/fake-gh` for `gh` (its pull requests i
 `build/dev/github.json`, which you can edit), `scripts/fake-s3` for S3 (endpoint
 `http://127.0.0.1:<S3_PORT>`), `scripts/fake-linear` and `scripts/fake-ricrac` for Linear and
 Ricrac (`MOTILE_DEV_LINEAR=real` or `MOTILE_DEV_RICRAC=real` after a `--stop` uses the real ones),
+`scripts/fake-cua-driver` for Cua Driver, the computer use driver (`MOTILE_DEV_CUA=real` the real one),
 and `scripts/fake-upstream` for Anthropic, OpenAI and two MCP servers behind the dev gateway. Each
 refuses a code or key with "wrong" in it.
 

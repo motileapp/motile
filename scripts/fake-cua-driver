@@ -1,0 +1,10 @@
+#!/bin/sh
+# Stands in for Cua Driver, the computer use driver, in the tests and the dev apps. `serve` makes
+# its socket and runs until its input ends, as the driver does; the fake agent never calls `mcp`.
+command=$1
+while [ $# -gt 0 ]; do
+    [ "$1" = --socket ] && socket=$2
+    shift
+done
+[ "$command" = serve ] && : > "$socket"
+exec cat > /dev/null

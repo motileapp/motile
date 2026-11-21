@@ -19,6 +19,7 @@ chrono = { version = "0.4", default-features = false, features = ["std"] }
 clap.workspace = true
 futures-lite.workspace = true
 hex.workspace = true
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 imagesize = "0.15"
 iroh.workspace = true
 libc.workspace = true

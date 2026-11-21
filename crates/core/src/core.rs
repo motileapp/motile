@@ -18,9 +18,9 @@ use motile_protocol::gateway_wire::{GatewayReply, GatewaySignIn, GatewayState, M
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Access, AccountSkills, Activity, Actor, Agent, AgentLimits, Bucket, ContinueSettings, FileKind, Item, ItemKind,
-    Media, Message, Project, PullRequestSettings, Request, ServerInfo, Skill, Thread, ThreadMatch, ToolStatus,
-    Worktree,
+    Access, AccountSkills, Activity, Actor, Agent, AgentLimits, Bucket, ComputerUse, ComputerUseState,
+    ContinueSettings, FileKind, Item, ItemKind, Media, Message, Project, PullRequestSettings, Request, ServerInfo,
+    Skill, Thread, ThreadMatch, ToolStatus, Worktree,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -183,6 +183,11 @@ enum Input {
     ContinueSettingsSet {
         server_id: String,
         settings: ContinueSettings,
+    },
+    /// The server turned computer use on or off; it says how that goes as it does.
+    ComputerUseSet {
+        server_id: String,
+        enabled: bool,
     },
     /// The server took the instructions for naming its branches, or went back to its own.
     BranchInstructionsSet {
@@ -772,6 +777,15 @@ impl Core {
                 info.continue_settings = settings;
                 let info = info.clone();
                 self.cache.set_server_info(&server_id, &info);
+                self.emit_servers();
+            }
+            Input::ComputerUseSet { server_id, enabled } => {
+                let Some(server) = self.server_mut(&server_id) else { return };
+                let Some(computer_use) = server.info.as_mut().and_then(|info| info.computer_use.as_mut()) else {
+                    return;
+                };
+                let state = if enabled { ComputerUseState::Starting } else { ComputerUseState::Off };
+                *computer_use = ComputerUse { enabled, state };
                 self.emit_servers();
             }
             Input::BranchInstructionsSet { server_id, instructions } => {
@@ -1690,6 +1704,10 @@ impl Core {
                 .map(|info| accounts(server, info, &working(server, info)).by_room(now()))
                 .unwrap_or_default(),
             sync: self.sync_view(server),
+            computer_use: crate::computer_use::view(
+                server.info.as_ref().and_then(|info| info.computer_use.as_ref()),
+                &server.device.name,
+            ),
         };
         self.emit(Event::Servers { servers: self.servers.iter().map(view).collect() });
         let infos = self.servers.iter().filter(|server| !server.removed).filter_map(|server| server.info.as_ref());
@@ -3655,6 +3673,20 @@ impl Core {
                     let set = link.request(&request).await;
                     if set.is_ok() {
                         let _ = inputs.send(Input::ContinueSettingsSet { server_id, settings });
+                    }
+                    reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
+                });
+            }
+            Command::SetComputerUse { server_id, enabled } => {
+                let link = match self.link(&server_id) {
+                    Ok(link) => link,
+                    Err(error) => return self.reply(id, Err(error)),
+                };
+                let (sink, inputs) = (self.sink.clone(), self.inputs.clone());
+                tokio::spawn(async move {
+                    let set = link.request(&Request::SetComputerUse { enabled }).await;
+                    if set.is_ok() {
+                        let _ = inputs.send(Input::ComputerUseSet { server_id, enabled });
                     }
                     reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
                 });

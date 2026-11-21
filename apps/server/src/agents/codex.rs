@@ -14,6 +14,7 @@ use motile_protocol::wire::{
 use serde_json::{Value, json};
 
 use super::{AgentEvent, ModelUsage, PLAN_TOOL, Settings, ToolImage, Turn, content_images};
+use crate::computer_use::{self, DriverAccess};
 
 const INITIALIZE: u64 = 1;
 const THREAD: u64 = 2;
@@ -87,6 +88,37 @@ fn collaboration_mode(model: &str, effort: Option<&str>) -> Value {
     json!({"mode": "default", "settings": settings})
 }
 
+/// What marks an MCP elicitation as Codex asking before one of the server's tools runs.
+const APPROVAL_KIND: &str = "codex_approval_kind";
+const MCP_TOOL_CALL: &str = "mcp_tool_call";
+
+/// How long a computer use call may take: a script of many steps, or one waiting on a slow app.
+const COMPUTER_USE_TIMEOUT_SECS: u64 = 10 * 60;
+
+/// The computer use driver as a server Codex starts. The tools that only look never ask; those
+/// that act ask as the thread's access says, and full access lets them through, since Codex
+/// would otherwise refuse what it can't ask about.
+fn computer_use_server(driver: &DriverAccess, access: Access) -> Value {
+    let variables: serde_json::Map<String, Value> =
+        driver.variables.iter().map(|(name, value)| (name.clone(), json!(value))).collect();
+    let looking: serde_json::Map<String, Value> = computer_use::LOOKING_TOOLS
+        .iter()
+        .map(|tool| (tool.to_string(), json!({"approval_mode": "approve"})))
+        .collect();
+    let mut server = json!({
+        "command": driver.command,
+        "args": driver.arguments,
+        "env": variables,
+        "tool_timeout_sec": COMPUTER_USE_TIMEOUT_SECS,
+        "disabled_tools": computer_use::HIDDEN_TOOLS,
+        "tools": looking,
+    });
+    if access == Access::Full {
+        server["default_tools_approval_mode"] = json!("approve");
+    }
+    server
+}
+
 /// What Codex asks about, how its sandbox is set, and who answers what it asks.
 fn permissions(access: Access) -> (&'static str, &'static str, &'static str) {
     match access {
@@ -104,6 +136,8 @@ pub fn answer(approval: &Approval, allow: bool, answers: &HashMap<String, String
     let input: Value = serde_json::from_str(&approval.input).unwrap_or_default();
     let result = match kind {
         "command" | "file" => json!({"decision": if allow { "accept" } else { "decline" }}),
+        "mcp" if allow => json!({"action": "accept", "content": {}}),
+        "mcp" => json!({"action": "decline", "content": null}),
         "permissions" => json!({"permissions": if allow { input["permissions"].clone() } else { json!({}) }}),
         "questions" => {
             let questions = input["questions"].as_array().map(Vec::as_slice).unwrap_or_default();
@@ -236,6 +270,9 @@ impl Parser {
                 servers.insert(slug.clone(), gateway_server);
             }
             servers.insert(crate::mcp::SERVER_NAME.to_string(), server(&mcp.url));
+            if let Some(driver) = &mcp.computer_use {
+                servers.insert(computer_use::SERVER_NAME.to_string(), computer_use_server(driver, turn.access));
+            }
             thread["config"] = json!({"mcp_servers": servers});
         }
         if let Some(token) = turn.gateway_token {
@@ -652,15 +689,15 @@ impl Parser {
         let (kind, tool_name, input) = match method {
             "item/commandExecution/requestApproval" => {
                 let command = shell_command(params["command"].as_str().unwrap_or_default());
-                ("command", "Bash", json!({ "command": command }))
+                ("command", "Bash".to_string(), json!({ "command": command }))
             }
             "item/fileChange/requestApproval" => {
                 let edit = params["itemId"].as_str().and_then(|item| self.edits.get(item));
-                ("file", "Edit", edit.cloned().unwrap_or_else(|| json!({})))
+                ("file", "Edit".to_string(), edit.cloned().unwrap_or_else(|| json!({})))
             }
             "item/permissions/requestApproval" => {
                 let input = json!({"description": params["reason"], "permissions": params["permissions"]});
-                ("permissions", "Permissions", input)
+                ("permissions", "Permissions".to_string(), input)
             }
             "item/tool/requestUserInput" => {
                 let asked = params["questions"].as_array().map(Vec::as_slice).unwrap_or_default();
@@ -674,11 +711,18 @@ impl Parser {
                     })
                 };
                 let questions: Vec<Value> = asked.iter().map(question).collect();
-                ("questions", QUESTION_TOOL, json!({ "questions": questions }))
+                ("questions", QUESTION_TOOL.to_string(), json!({ "questions": questions }))
             }
             // Reading the thread through Motile's own tool needs nobody to allow it.
             "mcpServer/elicitation/request" if params["serverName"] == crate::mcp::SERVER_NAME => {
                 return vec![AgentEvent::Write(line(json!({"id": id, "result": {"action": "accept", "content": {}}})))];
+            }
+            // An MCP tool the thread's access doesn't let through, as the row of its call is named.
+            "mcpServer/elicitation/request" if params["_meta"][APPROVAL_KIND] == MCP_TOOL_CALL => {
+                let server = params["serverName"].as_str().unwrap_or_default();
+                let tool = params["_meta"]["tool_name"].as_str().unwrap_or_default();
+                let input = params["_meta"]["tool_params"].clone();
+                ("mcp", format!("mcp__{server}__{tool}"), if input.is_null() { json!({}) } else { input })
             }
             "mcpServer/elicitation/request" => {
                 return vec![AgentEvent::Write(line(json!({"id": id, "result": {"action": "decline"}})))];
@@ -688,8 +732,7 @@ impl Parser {
                 return vec![AgentEvent::Write(line(json!({"id": id, "error": error})))];
             }
         };
-        let approval =
-            Approval { id: format!("{kind}:{id}"), tool_name: tool_name.to_string(), input: input.to_string() };
+        let approval = Approval { id: format!("{kind}:{id}"), tool_name, input: input.to_string() };
         self.asked.insert(id.to_string(), approval.id.clone());
         vec![AgentEvent::Approval(approval)]
     }
@@ -965,6 +1008,7 @@ mod tests {
             url: "http://127.0.0.1:9/mcp".into(),
             token: "thread-token".into(),
             mcp_servers: vec![],
+            computer_use: None,
         };
         for session_id in [None, Some("existing-session")] {
             for gateway_token in [None, Some("thread-token")] {
@@ -1026,10 +1070,44 @@ mod tests {
     }
 
     #[test]
+    fn the_computer_use_driver_looks_freely_and_acts_as_the_access_says() {
+        let driver = DriverAccess {
+            command: "/data/computer-use/cua-driver-0.55.0/cua-driver".into(),
+            arguments: vec!["mcp".into(), "--embedded".into()],
+            variables: vec![("CUA_DRIVER_RS_HOME".into(), "/data/computer-use/state".into())],
+            screen: vec![],
+            own_display: None,
+        };
+        let mcp = crate::mcp::McpAccess {
+            url: "http://127.0.0.1:9/mcp".into(),
+            token: "secret".into(),
+            mcp_servers: vec![],
+            computer_use: Some(driver),
+        };
+        let server = |access| {
+            let asked = written(&parser(Turn { mcp: Some(&mcp), ..turn(access) }).parse(r#"{"id":1,"result":{}}"#));
+            asked[1]["params"]["config"]["mcp_servers"]["cua-driver"].clone()
+        };
+        let supervised = server(Access::Supervised);
+        assert_eq!(supervised["command"], "/data/computer-use/cua-driver-0.55.0/cua-driver");
+        assert_eq!(supervised["env"]["CUA_DRIVER_RS_HOME"], "/data/computer-use/state");
+        assert_eq!(supervised["tools"]["get_window_state"]["approval_mode"], "approve");
+        assert!(supervised["tools"].get("click").is_none());
+        assert!(supervised["disabled_tools"].as_array().unwrap().contains(&json!("set_config")));
+        assert!(supervised.get("default_tools_approval_mode").is_none());
+        assert_eq!(server(Access::Full)["default_tools_approval_mode"], "approve");
+    }
+
+    #[test]
     fn what_the_thread_said_before_is_injected_before_the_first_turn() {
         let handoff = handoff();
         let mcp_servers = vec![("linear".to_string(), "http://127.0.0.1:8/mcp/linear".to_string())];
-        let mcp = crate::mcp::McpAccess { url: "http://127.0.0.1:9/mcp".into(), token: "secret".into(), mcp_servers };
+        let mcp = crate::mcp::McpAccess {
+            url: "http://127.0.0.1:9/mcp".into(),
+            token: "secret".into(),
+            mcp_servers,
+            computer_use: None,
+        };
         let mut parser = parser(Turn { handoff: Some(&handoff), mcp: Some(&mcp), ..turn(Access::Full) });
         let asked = written(&parser.parse(r#"{"id":1,"result":{}}"#));
         let server = &asked[1]["params"]["config"]["mcp_servers"]["motile"];
@@ -1165,6 +1243,32 @@ mod tests {
         let other = r#"{"method":"turn/completed","params":{"threadId":"t1","turn":{"status":"failed",
             "error":{"message":"Bad request","codexErrorInfo":{"badRequest":{}}}}}}"#;
         assert!(matches!(parser.parse(other)[..], [AgentEvent::Completed { .. }]));
+    }
+
+    #[test]
+    fn an_mcp_tool_codex_asks_about_is_asked_of_the_user_as_its_call() {
+        let mut parser = parser(turn(Access::Supervised));
+        let asked = parser.parse(
+            r#"{"id":7,"method":"mcpServer/elicitation/request","params":{"threadId":"t1","turnId":"u1",
+            "serverName":"cua-driver","mode":"form","message":"Allow cua-driver to run tool \"click\"?",
+            "requestedSchema":{"type":"object","properties":{}},
+            "_meta":{"codex_approval_kind":"mcp_tool_call","tool_name":"click","tool_params":{"pid":4,"element_token":"s1:3"}}}}"#,
+        );
+        let [AgentEvent::Approval(click)] = &asked[..] else { panic!("expected an approval, got {asked:?}") };
+        assert_eq!(click.tool_name, "mcp__cua-driver__click");
+        assert_eq!(serde_json::from_str::<Value>(&click.input).unwrap(), json!({"pid": 4, "element_token": "s1:3"}));
+        let nothing = HashMap::new();
+        let allowed: Value = serde_json::from_str(&answer(click, true, &nothing).unwrap()).unwrap();
+        assert_eq!(allowed, json!({"id": 7, "result": {"action": "accept", "content": {}}}));
+        let refused: Value = serde_json::from_str(&answer(click, false, &nothing).unwrap()).unwrap();
+        assert_eq!(refused["result"]["action"], "decline");
+
+        let form = parser.parse(
+            r#"{"id":8,"method":"mcpServer/elicitation/request","params":{"serverName":"forms","mode":"form",
+            "message":"Your name?","requestedSchema":{"type":"object","properties":{"name":{"type":"string"}}}}}"#,
+        );
+        let [AgentEvent::Write(declined)] = &form[..] else { panic!("expected a refusal, got {form:?}") };
+        assert!(declined.contains("decline"), "a form Motile can't show is refused");
     }
 
     #[test]

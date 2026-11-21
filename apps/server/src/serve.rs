@@ -355,6 +355,7 @@ impl Server {
             Request::SetContinueSettings { after_limits, after_restarts } => {
                 hub.set_continue_settings(after_limits, after_restarts).map(|_| Message::Ok)
             }
+            Request::SetComputerUse { enabled } => hub.set_computer_use(enabled).map(|_| Message::Ok),
             Request::SetBranchInstructions { instructions } => {
                 hub.set_branch_instructions(instructions).map(|_| Message::Ok)
             }

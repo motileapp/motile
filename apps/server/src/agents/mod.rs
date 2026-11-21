@@ -44,7 +44,10 @@ pub fn instructions(turn: &Turn) -> String {
     );
     text += SHOWING_MEDIA;
     match turn.mcp {
-        Some(_) => {
+        Some(mcp) => {
+            if let Some(driver) = &mcp.computer_use {
+                text += &crate::computer_use::instructions(driver);
+            }
             text += STARTING_AGENTS;
             text += "\n\n";
             text += motile_openui::motile::PREAMBLE;

@@ -87,7 +87,7 @@ pub struct SettingsEntry {
 
 const WORKING_SHELF: &str = "sidebar.workingShelf";
 
-const ENTRIES: [(&str, &str, SettingsSection, &str); 28] = [
+const ENTRIES: [(&str, &str, SettingsSection, &str); 29] = [
     ("account", "Account", SettingsSection::General, "signed in email sign out"),
     ("updates", "Updates", SettingsSection::General, "version check for updates release"),
     ("appearance", "Theme", SettingsSection::General, "appearance light dark system mode"),
@@ -126,6 +126,12 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 28] = [
         "Continue after restarts",
         SettingsSection::Servers,
         "restart update crash resume interrupted",
+    ),
+    (
+        "computer-use",
+        "Computer use",
+        SettingsSection::Servers,
+        "screen apps desktop click type screenshot accessibility cua",
     ),
     (
         "gateway",
@@ -260,6 +266,16 @@ impl Store {
     /// What the server does with pull requests by itself.
     pub fn set_pull_request_settings(&mut self, settings: PullRequestSettings, server: &Server) {
         let command = Command::SetPullRequestSettings { server_id: server.id.clone(), settings };
+        self.ask(command, |store, result, _| {
+            if let Err(error) = result {
+                store.fail(error);
+            }
+        });
+    }
+
+    /// Lets the server's agents see and use the apps on its screen, from each agent's next start.
+    pub fn set_computer_use(&mut self, enabled: bool, server: &Server) {
+        let command = Command::SetComputerUse { server_id: server.id.clone(), enabled };
         self.ask(command, |store, result, _| {
             if let Err(error) = result {
                 store.fail(error);

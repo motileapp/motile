@@ -73,6 +73,8 @@ pub struct McpAccess {
     pub token: String,
     /// Each MCP server's slug, which the agent knows it by, and its address.
     pub mcp_servers: Vec<(String, String)>,
+    /// The computer use driver, while it runs.
+    pub computer_use: Option<crate::computer_use::DriverAccess>,
 }
 
 /// The threads' tokens, kept only as their hashes, by the thread each is for.

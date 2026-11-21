@@ -351,6 +351,7 @@ struct ToolContent {
         case "web": .globe
         case "agent": .bot
         case "watch": .eye
+        case "screen": .monitor
         case "question": .messageCircleQuestionMark
         case "todo": .listChecks
         default: .wrench

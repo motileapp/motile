@@ -2,9 +2,10 @@
 # server with the dev login, and a server whose agent is scripts/fake-agent, whose GitHub is
 # scripts/fake-gh, whose Linear is scripts/fake-linear and whose Ricrac is scripts/fake-ricrac, with
 # a project and a few threads, and the account's gateway, whose Anthropic and OpenAI are
-# scripts/fake-upstream, and a bucket to back up to on scripts/fake-s3. MOTILE_DEV_LINEAR=real leaves Linear the real one, and
-# MOTILE_DEV_RICRAC=real Ricrac, to connect a workspace of yours; it takes hold when the server
-# starts, so stop the stack first. It lives in apps/macos/build/dev and is left
+# scripts/fake-upstream, and a bucket to back up to on scripts/fake-s3. Its computer use driver is
+# scripts/fake-cua-driver. MOTILE_DEV_LINEAR=real leaves Linear the real one, MOTILE_DEV_RICRAC=real
+# Ricrac, to connect a workspace of yours, and MOTILE_DEV_CUA=real downloads the real driver; it
+# takes hold when the server starts, so stop the stack first. It lives in apps/macos/build/dev and is left
 # running, so the Mac's and the iOS dev app in one tree share it. Sourced by their dev-app.sh;
 # `start_stack` brings it up.
 
@@ -177,6 +178,9 @@ start_stack() {
         fi
     fi
 
+    local cua_driver="$ROOT/scripts/fake-cua-driver"
+    [ "${MOTILE_DEV_CUA:-}" = real ] && cua_driver=""
+
     local ricrac_url=""
     if [ "${MOTILE_DEV_RICRAC:-}" != real ]; then
         ricrac_url="http://127.0.0.1:$RICRAC_PORT"
@@ -203,7 +207,7 @@ start_stack() {
         echo "▸ Starting the server…"
         stop server
         MOTILE_LINEAR_URL="$linear_url" MOTILE_RICRAC_URL="$ricrac_url" MOTILE_DATA_DIR="$DEV/server" MOTILE_CLAUDE_PATH="$ROOT/scripts/fake-agent" MOTILE_CODEX_PATH="$ROOT/scripts/fake-agent" \
-            MOTILE_GH_PATH="$ROOT/scripts/fake-gh" FAKE_GH_STATE="$DEV/github.json" FAKE_AGENT_DELAY=0.03 FAKE_AGENT_WATCH="${FAKE_AGENT_WATCH:-6}" \
+            MOTILE_GH_PATH="$ROOT/scripts/fake-gh" MOTILE_CUA_DRIVER="$cua_driver" FAKE_GH_STATE="$DEV/github.json" FAKE_AGENT_DELAY=0.03 FAKE_AGENT_WATCH="${FAKE_AGENT_WATCH:-6}" \
             MOTILE_ANTHROPIC_URL="http://127.0.0.1:$UPSTREAM_PORT" CLAUDE_CONFIG_DIR="$DEV/claude" FAKE_AGENT_RESETS_FILE="$DEV/codex-reset" FAKE_AGENT_LIMIT_FILE="$DEV/limited" \
             nohup "$BIN/motile" run --local --port "$SERVER_PORT" > "$DEV/server.log" 2>&1 &
         started server $! "$BIN/motile"
