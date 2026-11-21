@@ -5305,6 +5305,108 @@ async fn the_agents_started_while_computer_use_runs_get_the_driver() {
     assert!(!harness.recorded_turns().pop().unwrap().contains("cua-driver"), "agents started after go without");
 }
 
+/// The MCP servers Claude Code was last given while it ran, once `wanted` holds of them.
+async fn mcp_given_until(harness: &Harness, wanted: impl Fn(&serde_json::Value) -> bool) -> serde_json::Value {
+    for _ in 0..100 {
+        let given = harness.recorded_changes().into_iter().rfind(|change| change["subtype"] == "mcp_set_servers");
+        if let Some(given) = given.filter(|given| wanted(given)) {
+            return given;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("Claude Code wasn't given those MCP servers: {:?}", harness.recorded_changes());
+}
+
+#[tokio::test]
+async fn a_running_claude_code_gets_the_driver_once_it_is_ready_and_loses_it_once_it_is_off() {
+    let harness = Harness::start_with(fixture(Agent::Claude), "0", &[("FAKE_AGENT_PROMPTS_FILE", "prompts.txt")]).await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Say hello").await;
+    finished_transcript(&connection, &thread_id).await;
+
+    assert_eq!(connection.request(&Request::SetComputerUse { enabled: true }).await.unwrap(), Message::Ok);
+    let given = mcp_given_until(&harness, |given| given["servers"]["cua-driver"].is_object()).await;
+    assert!(given["servers"]["motile"].is_object(), "the servers it had stay: {given}");
+    assert!(given["denied_tools"].as_array().unwrap().contains(&json!("mcp__cua-driver__set_config")), "{given}");
+    let changes = harness.recorded_changes();
+    let allowed = changes.iter().rev().find_map(|change| change["settings"]["permissions"]["allow"].as_array());
+    assert!(allowed.unwrap().contains(&json!("mcp__cua-driver__get_window_state")), "{allowed:?}");
+
+    send(&connection, Some(thread_id.clone()), None, "Say hello again").await;
+    finished_transcript(&connection, &thread_id).await;
+    assert_eq!(harness.recorded_turns().len(), 1, "the process that ran took the driver");
+    let told = harness.recorded_prompts().pop().unwrap();
+    assert!(told.starts_with("Computer use is on now. The cua-driver tools see and use the apps"), "{told}");
+    assert!(told.ends_with("\n\nSay hello again"), "{told}");
+
+    assert_eq!(connection.request(&Request::SetComputerUse { enabled: false }).await.unwrap(), Message::Ok);
+    mcp_given_until(&harness, |given| given["servers"]["cua-driver"].is_null()).await;
+}
+
+#[tokio::test]
+async fn a_turn_a_restart_cut_off_gets_the_driver_once_it_is_ready() {
+    let mut harness = Harness::start(fixture(Agent::Claude), "0").await;
+    let connection = harness.connect().await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    assert_eq!(connection.request(&Request::SetComputerUse { enabled: true }).await.unwrap(), Message::Ok);
+    computer_use_until(&mut list, |computer_use| matches!(computer_use.state, ComputerUseState::Ready { .. })).await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Run greet.py").await;
+    first_approval(&mut Transcript::default(), &mut open(&connection, &thread_id, 0).await).await;
+
+    let state = harness.dir.path().join("computer-use/state");
+    std::fs::create_dir_all(&state).unwrap();
+    std::fs::write(state.join("starts-after"), "1").unwrap();
+    harness.restart().await;
+    let connection = harness.connect().await;
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+    while !transcript.user_texts().contains(&CONTINUE_PROMPT) {
+        transcript.apply(next(&mut follow).await);
+    }
+    transcript.follow_until_idle(&mut follow).await;
+    let turns = harness.recorded_turns();
+    assert_eq!(turns.len(), 2);
+    assert!(!turns[1].contains("cua-driver"), "it continued before the driver was up");
+    mcp_given_until(&harness, |given| given["servers"]["cua-driver"].is_object()).await;
+}
+
+#[tokio::test]
+async fn a_claude_code_that_refuses_the_driver_is_left_for_a_new_one_that_starts_with_it() {
+    let harness = Harness::start_with(fixture(Agent::Claude), "0", &[("FAKE_AGENT_REFUSES_MCP", "1")]).await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Say hello").await;
+    finished_transcript(&connection, &thread_id).await;
+
+    assert_eq!(connection.request(&Request::SetComputerUse { enabled: true }).await.unwrap(), Message::Ok);
+    mcp_given_until(&harness, |given| given["servers"]["cua-driver"].is_object()).await;
+    // Its refusal follows the request at once.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    send(&connection, Some(thread_id.clone()), None, "Say hello again").await;
+    finished_transcript(&connection, &thread_id).await;
+    let turns = harness.recorded_turns();
+    assert_eq!(turns.len(), 2, "the next turn started a new process");
+    assert!(turns[1].contains("cua-driver"), "which has the driver");
+}
+
+#[tokio::test]
+async fn a_running_claude_code_gets_the_mcp_servers_of_a_gateway_that_comes_later() {
+    let (gateway, _asked) = fake_gateway(Arc::new(tokio::sync::Notify::new())).await;
+    let harness = Harness::start(fixture(Agent::Claude), "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Say hello").await;
+    finished_transcript(&connection, &thread_id).await;
+
+    reach(harness.endpoint.as_ref().unwrap(), &gateway);
+    harness.access.set_gateway(Some(gateway.id().to_string()));
+    harness.serve_gateway().await;
+    let given = mcp_given_until(&harness, |given| given["servers"]["tracker"].is_object()).await;
+    assert!(given["servers"]["motile"].is_object(), "{given}");
+}
+
 async fn all_servers_kept(list: &mut Follow) -> AllServers {
     loop {
         if let Message::Server { server } | Message::Welcome { server, .. } = next(list).await {

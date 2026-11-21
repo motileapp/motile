@@ -1,10 +1,13 @@
 #!/bin/sh
 # Stands in for Cua Driver, the computer use driver, in the tests and the dev apps. `serve` makes
 # its socket and runs until its input ends, as the driver does; the fake agent never calls `mcp`.
+# A number of seconds in `starts-after`, in the driver's state folder, has it make its socket that late.
 command=$1
 while [ $# -gt 0 ]; do
     [ "$1" = --socket ] && socket=$2
     shift
 done
+late="$CUA_DRIVER_RS_HOME/starts-after"
+[ "$command" = serve ] && [ -f "$late" ] && sleep "$(cat "$late")"
 [ "$command" = serve ] && : > "$socket"
 exec cat > /dev/null
