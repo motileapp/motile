@@ -342,6 +342,8 @@ final class AppStore {
     private(set) var removedServers: [Server] = []
     /// The account's S3 bucket, which every server backs up to and syncs through.
     private(set) var backup = Backup()
+    /// The settings every server has on, those linked later too.
+    private(set) var allServers = AllServers()
     private var serverUpdates: [String: ServerUpdate] = [:]
     /// Every server's projects as the core sent them, the removed servers' too.
     @ObservationIgnored private var everyProject: [Project] = []
@@ -646,6 +648,12 @@ final class AppStore {
             return { [weak self] in
                 guard let self, self.backup != backup else { return }
                 self.backup = backup
+            }
+        case "all_servers":
+            let allServers = AllServers(json: event.object("all_servers") ?? [:])
+            return { [weak self] in
+                guard let self, self.allServers != allServers else { return }
+                self.allServers = allServers
             }
         case "threads":
             let serverID = event.string("server_id")
@@ -1749,6 +1757,17 @@ final class AppStore {
 
     func setComputerUse(_ enabled: Bool, on server: Server) {
         core.send("set_computer_use", ["server_id": server.id, "enabled": enabled]) { [weak self] result in
+            if case .failure(let error) = result { self?.alert(error) }
+        }
+    }
+
+    func setAllServers(_ settings: AllServers) {
+        let json: JSON = [
+            "continue_after_limits": settings.continueAfterLimits,
+            "continue_after_restarts": settings.continueAfterRestarts,
+            "computer_use": settings.computerUse,
+        ]
+        core.send("set_all_servers", json) { [weak self] result in
             if case .failure(let error) = result { self?.alert(error) }
         }
     }

@@ -18,7 +18,7 @@ use motile_protocol::gateway_wire::{GatewayReply, GatewaySignIn, GatewayState, M
 use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
 use motile_protocol::wire::{
-    Access, AccountSkills, Activity, Actor, Agent, AgentLimits, Bucket, ComputerUse, ComputerUseState,
+    Access, AccountSkills, Activity, Actor, Agent, AgentLimits, AllServers, Bucket, ComputerUse, ComputerUseState,
     ContinueSettings, FileKind, Item, ItemKind, Media, Message, Project, PullRequestSettings, Request, ServerInfo,
     Skill, Thread, ThreadMatch, ToolStatus, Worktree,
 };
@@ -26,6 +26,7 @@ use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
 
+use crate::all_servers;
 use crate::api::{
     AccountView, Children, Command, Config, Event, FindFrom, ProjectView, ScrollAt, Section, ServerView, SyncState,
     SyncView, ThreadView, WaitingChild,
@@ -1711,7 +1712,42 @@ impl Core {
         };
         self.emit(Event::Servers { servers: self.servers.iter().map(view).collect() });
         let infos = self.servers.iter().filter(|server| !server.removed).filter_map(|server| server.info.as_ref());
-        self.emit(Event::Backup { backup: backup::view(self.backup.saved.bucket.as_ref(), infos) });
+        self.emit(Event::Backup { backup: backup::view(self.backup.saved.bucket.as_ref(), infos.clone()) });
+        self.emit(Event::AllServers { all_servers: all_servers::view(infos) });
+    }
+
+    /// Turns the settings every server has on wherever a connected server has them off, and gives
+    /// it the newest copy.
+    fn keep_all_servers(&mut self) {
+        let infos = self.servers.iter().filter(|server| !server.removed).filter_map(|server| server.info.as_ref());
+        let Some(all) = all_servers::newest(infos) else { return };
+        let mut caught_up = Vec::new();
+        for server in &mut self.servers {
+            let Some(link) = server.link.clone().filter(|_| !server.removed && server.status.state == State::Connected)
+            else {
+                continue;
+            };
+            let Some(info) = server.info.as_mut() else { continue };
+            let requests = all_servers::catch_up(info, &all);
+            if requests.is_empty() {
+                continue;
+            }
+            caught_up.push((server.device.public_key.clone(), info.clone()));
+            tokio::spawn(async move {
+                for request in requests {
+                    if let Err(error) = link.request(&request).await {
+                        tracing::warn!("couldn't turn on what every server has on: {error:#}");
+                    }
+                }
+            });
+        }
+        if caught_up.is_empty() {
+            return;
+        }
+        for (server_id, info) in &caught_up {
+            self.cache.set_server_info(server_id, info);
+        }
+        self.emit_servers();
     }
 
     /// Forgets the update of a server that has been away too long for it to still be under way.
@@ -2370,6 +2406,7 @@ impl Core {
                 self.schedule_relay(RELAY_SOON);
                 self.backup.failed.remove(server_id);
                 self.give_backup(server_id);
+                self.keep_all_servers();
             }
             Message::Server { server: info } => {
                 self.cache.set_server_info(server_id, &info);
@@ -2382,6 +2419,7 @@ impl Core {
                 if backup_changed {
                     self.schedule_relay(RELAY_SOON);
                 }
+                self.keep_all_servers();
             }
             Message::Projects { projects } => {
                 self.cache.set_projects(server_id, &projects);
@@ -3676,6 +3714,36 @@ impl Core {
                     }
                     reply(&sink, id, set.map(|_| json!({})).map_err(error_text));
                 });
+            }
+            Command::SetAllServers { continue_after_limits, continue_after_restarts, computer_use } => {
+                let settings =
+                    AllServers { continue_after_limits, continue_after_restarts, computer_use, changed_at: now() };
+                let keeps = |server: &Server| {
+                    let connected = !server.removed && server.status.state == State::Connected;
+                    let link = server.link.clone().filter(|_| connected);
+                    link.filter(|_| server.info.as_ref().is_some_and(|info| info.all_servers.is_some()))
+                };
+                let links: Vec<Arc<Link>> = self.servers.iter().filter_map(keeps).collect();
+                if links.is_empty() {
+                    return self.reply(id, Err(NOT_CONNECTED.to_string()));
+                }
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let request = Request::SetAllServers { settings };
+                    let mut kept = Err(NOT_CONNECTED.to_string());
+                    for link in links {
+                        let set = link.request(&request).await.map(|_| json!({})).map_err(error_text);
+                        kept = kept.or(set);
+                    }
+                    reply(&sink, id, kept);
+                });
+                for server in self.servers.iter_mut().filter(|server| server.status.state == State::Connected) {
+                    if let Some(kept) = server.info.as_mut().and_then(|info| info.all_servers.as_mut()) {
+                        *kept = settings;
+                    }
+                }
+                self.keep_all_servers();
+                self.emit_servers();
             }
             Command::SetComputerUse { server_id, enabled } => {
                 let link = match self.link(&server_id) {

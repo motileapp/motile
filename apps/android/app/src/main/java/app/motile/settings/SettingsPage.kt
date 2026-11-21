@@ -29,6 +29,7 @@ import app.motile.LocalCloseSheet
 import app.motile.LocalStore
 import app.motile.core.Agent
 import app.motile.core.AgentAccount
+import app.motile.core.AllServers
 import app.motile.core.AppStore
 import app.motile.core.Appearance
 import app.motile.core.Integration
@@ -185,13 +186,25 @@ private fun SettingsGroups.continuing(store: AppStore) {
     toggles(
         "continue-limits", "Continue after usage limits", continuing,
         caption = "A thread whose agent reached its usage limit goes on once the limit resets.",
+        all = allServers(store, AllServers::continueAfterLimits) { copy(continueAfterLimits = it) },
         isOn = { it.continueAfterLimits },
     ) { server, on -> store.setContinueSettings(afterLimits = on, afterRestarts = server.continueAfterRestarts, server = server) }
     toggles(
         "continue-restarts", "Continue after restarts", continuing,
         caption = "When your server comes back from a restart, agents that were working carry on.",
+        all = allServers(store, AllServers::continueAfterRestarts) { copy(continueAfterRestarts = it) },
         isOn = { it.continueAfterRestarts },
     ) { server, on -> store.setContinueSettings(afterLimits = server.continueAfterLimits, afterRestarts = on, server = server) }
+}
+
+/** A setting turned on for every server, those linked later too, and how to change it. */
+private class AllServersSetting(val on: Boolean, val set: (Boolean) -> Unit)
+
+/** Null while no server can keep the settings every server has on. */
+private fun allServers(store: AppStore, on: (AllServers) -> Boolean, with: AllServers.(Boolean) -> AllServers): AllServersSetting? {
+    val all = store.allServers
+    if (!all.available) return null
+    return AllServersSetting(on(all)) { store.saveAllServers(all.with(it)) }
 }
 
 /** Whether each server's agents can see and use the apps on its screen, and how that stands. */
@@ -199,17 +212,21 @@ private fun SettingsGroups.computerUse(store: AppStore) {
     val servers = store.servers.filter { it.state == Server.State.Connected && it.computerUse != null }
     if (servers.isEmpty()) return
     val caption = "Agents can see and use the apps on the server's screen."
+    val all = allServers(store, AllServers::computerUse) { copy(computerUse = it) }
+    val locked = all?.on == true
     group("computer-use", header = "Computer use", footer = caption) {
+        if (all != null) row { SettingsToggle("All Servers", all.on) { all.set(it) } }
         for (server in servers) {
             val computerUse = server.computerUse ?: continue
             val problem = computerUse.problem
+            val on = locked || computerUse.enabled
             row {
                 if (problem == null) {
-                    SettingsToggle(server.name, computerUse.enabled) { store.setComputerUse(it, server) }
+                    SettingsToggle(server.name, on, enabled = !locked) { store.setComputerUse(it, server) }
                 } else {
                     SettingsRow {
                         SettingsItem(server.name, problem, lines = Int.MAX_VALUE)
-                        Switch(computerUse.enabled, { store.setComputerUse(it, server) })
+                        Switch(on, { store.setComputerUse(it, server) }, enabled = !locked)
                     }
                 }
             }
@@ -412,10 +429,16 @@ private fun SettingsGroups.toggles(
     title: String,
     servers: List<Server>,
     caption: String? = null,
+    all: AllServersSetting? = null,
     isOn: (Server) -> Boolean,
     set: (Server, Boolean) -> Unit,
 ) {
-    group(id, header = if (servers.size > 1) title else null, footer = caption) {
+    group(id, header = if (servers.size > 1 || all != null) title else null, footer = caption) {
+        if (all != null) {
+            row { SettingsToggle("All Servers", all.on) { all.set(it) } }
+            for (server in servers) row { SettingsToggle(server.name, all.on || isOn(server), enabled = !all.on) { set(server, it) } }
+            return@group
+        }
         val only = servers.singleOrNull()
         if (only != null) {
             row { SettingsToggle(title, isOn(only)) { set(only, it) } }

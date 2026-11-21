@@ -257,25 +257,29 @@ struct SettingsPage: View {
         let servers = store.servers.filter { $0.state == .connected && store.canChooseRestart($0) }
         if !servers.isEmpty {
             SettingsGroup("continue-limits", "Continue after usage limits", caption: "A thread whose agent reached its usage limit goes on once the limit resets") {
+                allServersRow(\.continueAfterLimits)
                 ForEach(servers) { server in
                     SettingsRow(control: Switch.height) {
                         serverName(server)
                     } trailing: {
-                        Switch(isOn: Binding { server.continueAfterLimits } set: {
+                        Switch(isOn: Binding { store.allServers.continueAfterLimits || server.continueAfterLimits } set: {
                             store.setContinueSettings(afterLimits: $0, afterRestarts: server.continueAfterRestarts, on: server)
                         })
+                        .disabled(store.allServers.continueAfterLimits)
                     }
                     if server.id != servers.last?.id { ThemeDivider() }
                 }
             }
             SettingsGroup("continue-restarts", "Continue after restarts", caption: "When your server comes back from a restart, agents that were working carry on.") {
+                allServersRow(\.continueAfterRestarts)
                 ForEach(servers) { server in
                     SettingsRow(control: Switch.height) {
                         serverName(server)
                     } trailing: {
-                        Switch(isOn: Binding { server.continueAfterRestarts } set: {
+                        Switch(isOn: Binding { store.allServers.continueAfterRestarts || server.continueAfterRestarts } set: {
                             store.setContinueSettings(afterLimits: server.continueAfterLimits, afterRestarts: $0, on: server)
                         })
+                        .disabled(store.allServers.continueAfterRestarts)
                     }
                     if server.id != servers.last?.id { ThemeDivider() }
                 }
@@ -288,16 +292,36 @@ struct SettingsPage: View {
         let servers = store.servers.filter { $0.state == .connected && $0.computerUse != nil }
         if !servers.isEmpty {
             SettingsGroup("computer-use", "Computer use", caption: "Agents can see and use the apps on the server's screen.") {
+                allServersRow(\.computerUse)
                 ForEach(servers) { server in
                     let computerUse = server.computerUse
                     SettingsRow(control: Switch.height) {
                         SettingsLabel(server.name, description: computerUse?.problem, icon: .server)
                     } trailing: {
-                        Switch(isOn: Binding { computerUse?.enabled ?? false } set: { store.setComputerUse($0, on: server) })
+                        Switch(isOn: Binding { store.allServers.computerUse || computerUse?.enabled == true } set: {
+                            store.setComputerUse($0, on: server)
+                        })
+                        .disabled(store.allServers.computerUse)
                     }
                     if server.id != servers.last?.id { ThemeDivider() }
                 }
             }
+        }
+    }
+
+    /// Turns the setting on for every server, those linked later too.
+    @ViewBuilder private func allServersRow(_ setting: WritableKeyPath<AllServers, Bool>) -> some View {
+        if store.allServers.available {
+            SettingsRow(control: Switch.height) {
+                SettingsLabel("All Servers")
+            } trailing: {
+                Switch(isOn: Binding { store.allServers[keyPath: setting] } set: {
+                    var settings = store.allServers
+                    settings[keyPath: setting] = $0
+                    store.setAllServers(settings)
+                })
+            }
+            ThemeDivider()
         }
     }
 

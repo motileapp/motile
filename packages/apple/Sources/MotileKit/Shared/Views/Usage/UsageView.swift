@@ -134,9 +134,9 @@ final class UsageModel {
         servers = picked
     }
 
-    /// "All servers", the one server's name, or how many.
+    /// "All Servers", the one server's name, or how many.
     func serversLabel(among all: [Server]) -> String {
-        guard let chosen = picked(among: all) else { return "All servers" }
+        guard let chosen = picked(among: all) else { return "All Servers" }
         let named = all.filter { chosen.contains($0.id) }
         return named.count == 1 ? named[0].name : "\(named.count) servers"
     }
