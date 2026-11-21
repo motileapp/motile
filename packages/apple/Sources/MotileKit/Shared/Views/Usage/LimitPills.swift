@@ -25,7 +25,11 @@ struct LimitPills: View {
 
 /// How much of something is used, as one of the account limits' bars.
 struct LimitPill: View {
+    #if os(macOS)
+    private static let height: CGFloat = 3
+    #else
     private static let height: CGFloat = 4
+    #endif
 
     @Environment(\.surface) private var surface
     let usedPercent: Double
@@ -38,12 +42,11 @@ struct LimitPill: View {
                 .overlay(alignment: .leading) {
                     Capsule()
                         .fill(color)
-                        .opacity(.colorTintChartStrongest)
                         .frame(width: pill.size.width * usedPercent / 100)
                 }
                 .clipShape(Capsule())
         }
-        .frame(height: scaled(Self.height))
+        .frame(height: Self.height)
     }
 }
 

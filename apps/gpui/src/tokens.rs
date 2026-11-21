@@ -137,7 +137,7 @@ impl Tokens {
             muted_foreground: hex(0x606470),
             muted_stronger_foreground: hex(0x8e919d),
             muted_strongest_foreground: hex(0xadb1bc),
-            muted_strongest_plus_foreground: hex(0xc4c7d0),
+            muted_strongest_plus_foreground: hex(0xd0d3da),
             primary: hex(0x2a5bd7),
             primary_foreground: hex(0xffffff),
             destructive: hex(0xc62828),

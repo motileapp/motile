@@ -14,7 +14,7 @@ use motile_protocol::wire::{Access, Agent, AgentAccount, ModelContext, ModelInfo
 use super::{access_symbol, effort_label, effort_symbol};
 use crate::models::{ACCESSES, AGENTS, ComposerPickerPart, ModelInfoExt, access_detail, access_label, agent_name};
 use crate::store::Store;
-use crate::theme::{ControlSize, IconSize, Layer, Opacity, Radius, Surface, TextSize, colors};
+use crate::theme::{ControlSize, IconSize, Layer, Radius, Surface, TextSize, colors};
 use crate::ui::dropdown::{GAP, backdrop, over_content};
 use crate::ui::dropdown_list::{self as list, PADDING};
 use crate::ui::menu::Anchor;
@@ -844,13 +844,12 @@ fn limit_bar(used_percent: f64, tone: limits::Tone, cx: &App) -> Div {
         limits::Tone::Pending => c.pending,
         limits::Tone::Warning => c.warning,
     };
-    div().h(px(4.)).rounded_full().overflow_hidden().bg(Surface::Popover.layer(Layer::Control, c)).child(
-        div()
-            .h_full()
-            .w(relative((used_percent / 100.).clamp(0., 1.) as f32))
-            .rounded_full()
-            .bg(c.at(fill, Opacity::ColorTintChartStrongest)),
-    )
+    div()
+        .h(px(3.))
+        .rounded_full()
+        .overflow_hidden()
+        .bg(Surface::Popover.layer(Layer::Control, c))
+        .child(div().h_full().w(relative((used_percent / 100.).clamp(0., 1.) as f32)).rounded_full().bg(fill))
 }
 
 /// How full the open thread's context is: its tokens, and under them how much of the window they
