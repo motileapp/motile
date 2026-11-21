@@ -89,6 +89,7 @@ impl Gateway {
         let capture = store.setting(CAPTURE).unwrap_or((Capture::Off, None));
         let prices = pricing::read_kept(&data_dir.join("prices.json")).unwrap_or_default();
         let http = reqwest::Client::builder()
+            .user_agent(concat!("Motile/", env!("CARGO_PKG_VERSION")))
             .connect_timeout(Duration::from_secs(30))
             .read_timeout(Duration::from_secs(600))
             .build()?;

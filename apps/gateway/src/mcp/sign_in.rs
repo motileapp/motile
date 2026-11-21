@@ -274,6 +274,14 @@ async fn register(http: &reqwest::Client, endpoint: &str, redirect: &str) -> any
         let said = answer["error_description"].as_str().or(answer["error"].as_str()).unwrap_or_default();
         bail!("The MCP server refused to register Motile ({status}). {said}");
     }
+    if let Some(allowed) = answer["redirect_uris"].as_array()
+        && !allowed.iter().any(|allowed| allowed.as_str() == Some(redirect))
+    {
+        bail!(
+            "This MCP server only lets the apps it knows sign in, and Motile isn't one of them yet. \
+             Ask its makers to allow {redirect}."
+        );
+    }
     let client_id = answer["client_id"].as_str().context("The MCP server registered Motile without an id.")?;
     Ok((client_id.to_string(), answer["client_secret"].as_str().map(String::from)))
 }
