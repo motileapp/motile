@@ -149,7 +149,8 @@ impl Client {
             | Event::Sent { .. }
             | Event::Found { .. }
             | Event::Reveal { .. }
-            | Event::Gateway { .. } => {}
+            | Event::Gateway { .. }
+            | Event::AllServers { .. } => {}
         }
     }
 

@@ -133,9 +133,9 @@ class UsageModel {
         servers = picked
     }
 
-    /** "All servers", the one server's name, or how many. */
+    /** "All Servers", the one server's name, or how many. */
     fun serversLabel(all: List<Server>): String {
-        val chosen = picked(all) ?: return "All servers"
+        val chosen = picked(all) ?: return "All Servers"
         val named = all.filter { it.id in chosen }
         return if (named.size == 1) named[0].name else "${named.size} servers"
     }

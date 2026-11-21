@@ -618,9 +618,9 @@ impl Store {
         (!picked.is_empty() && picked.len() < self.servers.len()).then_some(picked)
     }
 
-    /// "All servers", the one server's name, or how many.
+    /// "All Servers", the one server's name, or how many.
     pub fn usage_servers_label(&self) -> String {
-        let Some(picked) = self.counted_servers() else { return "All servers".into() };
+        let Some(picked) = self.counted_servers() else { return "All Servers".into() };
         let named: Vec<&Server> = self.servers.iter().filter(|server| picked.contains(&server.id)).collect();
         match named.as_slice() {
             [one] => one.name.clone(),

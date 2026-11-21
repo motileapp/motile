@@ -1067,6 +1067,10 @@ pub enum Request {
     SetComputerUse {
         enabled: bool,
     },
+    /// Keeps the settings every server of the account has on, when they are newer than its own.
+    SetAllServers {
+        settings: AllServers,
+    },
     /// What the agents spent between `since` and `until`, in buckets of `bucket_secs` that start
     /// where the hours and days of a clock `utc_offset_secs` ahead of UTC do. `Usage` answers.
     Usage {
@@ -2245,6 +2249,16 @@ pub struct ContinueSettings {
     pub after_restarts: bool,
 }
 
+/// The settings every server of the account has on, those linked later too. Each server keeps a
+/// copy for the clients, and the one changed last is the account's.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug, Default)]
+pub struct AllServers {
+    pub continue_after_limits: bool,
+    pub continue_after_restarts: bool,
+    pub computer_use: bool,
+    pub changed_at: f64,
+}
+
 /// Whether the agents can see and use the apps on the server's screen, and how that stands.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
 pub struct ComputerUse {
@@ -2729,6 +2743,9 @@ pub struct ServerInfo {
     /// None from a server that can't give the agents its screen.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub computer_use: Option<ComputerUse>,
+    /// None from a server that can't keep them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub all_servers: Option<AllServers>,
 }
 
 /// Where an update of the server is.

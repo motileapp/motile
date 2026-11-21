@@ -295,6 +295,8 @@ class AppStore(private val context: Context) {
         private set
     /** The account's S3 bucket, which every server backs up to and syncs through. */
     var backup by mutableStateOf(Backup())
+    /** The settings every server has on, those linked later too. */
+    var allServers by mutableStateOf(AllServers())
         private set
     private val serverUpdates = mutableStateMapOf<String, ServerUpdate>()
     /** Every server's projects as the core sent them, the removed servers' too. */
@@ -593,6 +595,10 @@ class AppStore(private val context: Context) {
             "backup" -> {
                 val backup = Backup(event.obj("backup") ?: EmptyJSON)
                 return { this.backup = backup }
+            }
+            "all_servers" -> {
+                val allServers = AllServers(event.obj("all_servers") ?: EmptyJSON)
+                return { this.allServers = allServers }
             }
             "threads" -> {
                 val serverID = event.string("server_id")
@@ -1677,6 +1683,15 @@ class AppStore(private val context: Context) {
 
     fun setComputerUse(enabled: Boolean, server: Server) {
         core.send("set_computer_use", mapOf("server_id" to server.id, "enabled" to enabled)) { alert(it) }
+    }
+
+    fun saveAllServers(settings: AllServers) {
+        val json = mapOf(
+            "continue_after_limits" to settings.continueAfterLimits,
+            "continue_after_restarts" to settings.continueAfterRestarts,
+            "computer_use" to settings.computerUse,
+        )
+        core.send("set_all_servers", json) { alert(it) }
     }
 
     fun setContinueSettings(afterLimits: Boolean, afterRestarts: Boolean, server: Server) {

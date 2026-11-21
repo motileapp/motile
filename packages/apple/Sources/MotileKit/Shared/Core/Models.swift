@@ -206,6 +206,24 @@ struct AgentAccount: Equatable, Identifiable {
 }
 
 /// What a server keeps of the account's other servers' threads, as the core says it.
+/// The settings every server of the account has on, those linked later too.
+struct AllServers: Equatable {
+    /// Some server can keep them; servers too old to don't.
+    var available = false
+    var continueAfterLimits = false
+    var continueAfterRestarts = false
+    var computerUse = false
+
+    init() {}
+
+    init(json: JSON) {
+        available = json.bool("available")
+        continueAfterLimits = json.bool("continue_after_limits")
+        continueAfterRestarts = json.bool("continue_after_restarts")
+        computerUse = json.bool("computer_use")
+    }
+}
+
 /// Whether the server's agents can see and use the apps on its screen, and how that stands.
 struct ComputerUseStatus: Equatable {
     let enabled: Bool

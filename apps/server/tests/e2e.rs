@@ -17,7 +17,7 @@ use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::gateway_wire::{AccountStatus, GatewayAccount, GatewayReply, GatewayRequest, WsMessage};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
-    Access as AgentAccess, Actor, Agent, AgentAccount, AgentLimits, Approval, Ask, CONTINUE_PROMPT, Change,
+    Access as AgentAccess, Actor, Agent, AgentAccount, AgentLimits, AllServers, Approval, Ask, CONTINUE_PROMPT, Change,
     CheckStatus, ClientForm, ClientInfo, ClientKind, ComputerUse, ComputerUseState, CopiedThread, DiffScope,
     EngagedRecord, EventKind, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind,
     LimitWindow, LineComment, MergeMethod, Mergeable, Message, NewThread, NewWorktree, Project, PullRequestAction,
@@ -5303,6 +5303,37 @@ async fn the_agents_started_while_computer_use_runs_get_the_driver() {
     let thread_id = send(&connection, None, new_thread, "Say hello").await;
     finished_transcript(&connection, &thread_id).await;
     assert!(!harness.recorded_turns().pop().unwrap().contains("cua-driver"), "agents started after go without");
+}
+
+async fn all_servers_kept(list: &mut Follow) -> AllServers {
+    loop {
+        if let Message::Server { server } | Message::Welcome { server, .. } = next(list).await {
+            return server.all_servers.expect("every server keeps a copy");
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_server_keeps_the_newest_copy_of_what_every_server_has_on() {
+    let harness = Harness::start(fixture(Agent::Claude), "0").await;
+    let connection = harness.connect().await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    let all = |changed_at| AllServers {
+        continue_after_limits: true,
+        continue_after_restarts: false,
+        computer_use: true,
+        changed_at,
+    };
+    assert_eq!(all_servers_kept(&mut list).await, AllServers::default());
+
+    let newer = connection.request(&Request::SetAllServers { settings: all(9.0) }).await.unwrap();
+    assert_eq!(newer, Message::Ok);
+    assert_eq!(all_servers_kept(&mut list).await, all(9.0));
+    let older = AllServers { computer_use: false, ..all(5.0) };
+    assert_eq!(connection.request(&Request::SetAllServers { settings: older }).await.unwrap(), Message::Ok);
+    drop(list);
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    assert_eq!(all_servers_kept(&mut list).await, all(9.0), "an older copy is ignored");
 }
 
 #[tokio::test]
