@@ -422,6 +422,7 @@ impl SettingsPage {
         groups.extend(self.backup(cx));
         groups.push(self.relay(cx));
         groups.extend(self.continuing(cx));
+        groups.extend(self.computer_use(cx));
         groups.extend(self.removed_servers(&removed, cx));
         groups
     }
@@ -579,6 +580,39 @@ impl SettingsPage {
                 cx,
             ),
         ]
+    }
+
+    /// Whether each server's agents can see and use the apps on its screen, and how that stands.
+    fn computer_use(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let servers: Vec<Server> = self
+            .store
+            .read(cx)
+            .servers
+            .iter()
+            .filter(|server| server.connected() && server.computer_use.is_some())
+            .cloned()
+            .collect();
+        if servers.is_empty() {
+            return None;
+        }
+        let mut rows = Vec::new();
+        for (index, server) in servers.iter().enumerate() {
+            let Some(computer_use) = &server.computer_use else { continue };
+            let (store, changed) = (self.store.clone(), server.clone());
+            let switch = Switch::new(("computer-use", index), computer_use.enabled).on_change(move |on, _, cx| {
+                store.update(cx, |store, cx| {
+                    store.set_computer_use(on, &changed);
+                    cx.notify();
+                })
+            });
+            let name = label(server.name.clone(), computer_use.problem.clone(), Some("server"), Cut::Wraps, cx);
+            rows.push(switch_row(vec![name], switch).into_any_element());
+            if index + 1 < servers.len() {
+                rows.push(divider_on(Surface::Card, cx).into_any_element());
+            }
+        }
+        let caption = "Agents can see and use the apps on the server's screen.";
+        Some(group("computer-use", "Computer use", Some(caption), true, rows, cx))
     }
 
     /// A row with a switch for each server, divided.

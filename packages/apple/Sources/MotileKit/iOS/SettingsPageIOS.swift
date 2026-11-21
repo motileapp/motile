@@ -249,6 +249,29 @@ struct SettingsPage: View {
             }
             .id("continue-restarts")
         }
+        let computerUse = store.servers.filter { $0.state == .connected && $0.computerUse != nil }
+        if !computerUse.isEmpty {
+            Section {
+                ForEach(computerUse) { server in
+                    Toggle(isOn: Binding { server.computerUse?.enabled ?? false } set: { store.setComputerUse($0, on: server) }) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(server.name)
+                            if let problem = server.computerUse?.problem {
+                                Text(problem)
+                                    .font(.footnote)
+                                    .foregroundStyle(Color.themeMutedForeground)
+                            }
+                        }
+                    }
+                }
+            } header: {
+                Text("Computer use")
+            } footer: {
+                Text("Agents can see and use the apps on the server's screen.")
+                    .foregroundStyle(Color.themeMutedForeground)
+            }
+            .id("computer-use")
+        }
         if !store.removedServers.isEmpty {
             Section("Unlinked") {
                 ForEach(store.removedServers) { server in

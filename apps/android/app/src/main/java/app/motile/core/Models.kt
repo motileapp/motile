@@ -223,6 +223,8 @@ data class Server(
     val update: ServerUpdate?,
     /** How its copies of the account's other servers' threads stand. */
     val sync: ServerSync? = null,
+    /** Null for a server that can't give its agents its screen. */
+    val computerUse: ComputerUseStatus? = null,
 ) {
     enum class State(val raw: String) {
         Connecting("connecting"), Connected("connected"), Disconnected("disconnected"), Refused("refused");
@@ -342,6 +344,7 @@ data class Server(
                 known = info != null,
                 update = info?.obj("update")?.let { ServerUpdate(it, version) },
                 sync = json.obj("sync")?.let(::ServerSync),
+                computerUse = json.obj("computer_use")?.let(::ComputerUseStatus),
             )
         }
 
@@ -358,6 +361,15 @@ data class Server(
 }
 
 /** A server that is installing a new version of itself. */
+/** Whether a server's agents can see and use the apps on its screen, and how that stands. */
+data class ComputerUseStatus(
+    val enabled: Boolean,
+    /** What it needs before the agents can use it. */
+    val problem: String?,
+) {
+    constructor(json: JSON) : this(json.bool("enabled"), json.optionalString("problem"))
+}
+
 /** What a server keeps of the account's other servers' threads, as the core says it. */
 data class ServerSync(
     val state: State,
@@ -1439,6 +1451,7 @@ fun toolSymbol(icon: String): Symbol = when (icon) {
     "web" -> Symbol.Globe
     "agent" -> Symbol.Bot
     "watch" -> Symbol.Eye
+    "screen" -> Symbol.Monitor
     "question" -> Symbol.MessageCircleQuestionMark
     "todo" -> Symbol.ListChecks
     else -> Symbol.Wrench

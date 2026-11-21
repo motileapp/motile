@@ -4,6 +4,7 @@ pub mod actors;
 pub mod agent_accounts;
 pub mod agents;
 pub mod backup;
+pub mod computer_use;
 pub mod config;
 pub mod drafts;
 pub mod files;

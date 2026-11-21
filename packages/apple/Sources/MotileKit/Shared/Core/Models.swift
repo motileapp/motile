@@ -206,6 +206,18 @@ struct AgentAccount: Equatable, Identifiable {
 }
 
 /// What a server keeps of the account's other servers' threads, as the core says it.
+/// Whether the server's agents can see and use the apps on its screen, and how that stands.
+struct ComputerUseStatus: Equatable {
+    let enabled: Bool
+    /// What it needs before the agents can use it.
+    let problem: String?
+
+    init(json: JSON) {
+        enabled = json.bool("enabled")
+        problem = json.optionalString("problem")
+    }
+}
+
 struct ServerSync: Equatable {
     enum State: String {
         case synced, copying, waiting, failed, off
@@ -283,6 +295,8 @@ struct Server: Equatable, Identifiable {
     let update: ServerUpdate?
     /// How its copies of the account's other servers' threads stand.
     let sync: ServerSync?
+    /// Nil for a server that can't give its agents its screen.
+    let computerUse: ComputerUseStatus?
 
     init(json: JSON) {
         id = json.string("id")
@@ -300,6 +314,7 @@ struct Server: Equatable, Identifiable {
         accountResets = (json["account_resets"] as? [String: JSON] ?? [:]).mapValues(LimitResets.init(json:))
         accountsByRoom = json.strings("accounts_by_room")
         sync = json.object("sync").map(ServerSync.init(json:))
+        computerUse = json.object("computer_use").map(ComputerUseStatus.init(json:))
         let info = json.object("info")
         known = info != nil
         home = info?.string("home") ?? ""

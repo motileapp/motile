@@ -168,6 +168,7 @@ private fun SettingsGroups.servers(store: AppStore, navigator: SettingsNavigator
     backup(store, navigator, remove)
     relay(store, navigator, remove)
     continuing(store)
+    computerUse(store)
     group("removed-servers", header = "Unlinked") {
         for (server in store.removedServers) row {
             SettingsLink({ navigator.push(SettingsRoute.ServerPage(server.id, removed = true)) }) {
@@ -191,6 +192,29 @@ private fun SettingsGroups.continuing(store: AppStore) {
         caption = "When your server comes back from a restart, agents that were working carry on.",
         isOn = { it.continueAfterRestarts },
     ) { server, on -> store.setContinueSettings(afterLimits = server.continueAfterLimits, afterRestarts = on, server = server) }
+}
+
+/** Whether each server's agents can see and use the apps on its screen, and how that stands. */
+private fun SettingsGroups.computerUse(store: AppStore) {
+    val servers = store.servers.filter { it.state == Server.State.Connected && it.computerUse != null }
+    if (servers.isEmpty()) return
+    val caption = "Agents can see and use the apps on the server's screen."
+    group("computer-use", header = "Computer use", footer = caption) {
+        for (server in servers) {
+            val computerUse = server.computerUse ?: continue
+            val problem = computerUse.problem
+            row {
+                if (problem == null) {
+                    SettingsToggle(server.name, computerUse.enabled) { store.setComputerUse(it, server) }
+                } else {
+                    SettingsRow {
+                        SettingsItem(server.name, problem, lines = Int.MAX_VALUE)
+                        Switch(computerUse.enabled, { store.setComputerUse(it, server) })
+                    }
+                }
+            }
+        }
+    }
 }
 
 /** The account's own iroh relay, which every device uses in place of iroh's public ones. */

@@ -2569,6 +2569,7 @@ dependencies = [
  "futures-lite",
  "futures-util",
  "hex",
+ "image",
  "imagesize",
  "iroh",
  "libc",

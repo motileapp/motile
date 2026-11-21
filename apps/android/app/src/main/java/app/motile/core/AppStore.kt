@@ -1675,6 +1675,10 @@ class AppStore(private val context: Context) {
         core.send("update_server", json("server_id" to server.id, "when" to RestartWhen.Now.raw)) { alert(it) }
     }
 
+    fun setComputerUse(enabled: Boolean, server: Server) {
+        core.send("set_computer_use", mapOf("server_id" to server.id, "enabled" to enabled)) { alert(it) }
+    }
+
     fun setContinueSettings(afterLimits: Boolean, afterRestarts: Boolean, server: Server) {
         val settings = mapOf("after_limits" to afterLimits, "after_restarts" to afterRestarts)
         core.send("set_continue_settings", mapOf("server_id" to server.id, "settings" to settings)) { alert(it) }

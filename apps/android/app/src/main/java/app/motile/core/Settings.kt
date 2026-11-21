@@ -77,6 +77,7 @@ data class SettingsEntry(
             SettingsEntry("relay", "Relay", SettingsSection.Servers, "iroh relay network connection nat direct"),
             SettingsEntry("continue-limits", "Continue after usage limits", SettingsSection.Servers, "rate limit reset resume quota wait"),
             SettingsEntry("continue-restarts", "Continue after restarts", SettingsSection.Servers, "restart update crash resume interrupted"),
+            SettingsEntry("computer-use", "Computer use", SettingsSection.Servers, "screen apps desktop click type screenshot accessibility cua"),
             SettingsEntry("gateway", "Gateway", SettingsSection.AgentGateway, "add remove replace enroll docker unbind image volume code connected"),
             SettingsEntry("gateway-accounts", "Accounts", SettingsSection.AgentGateway, "claude codex sign in priority accounts pool limits next"),
             SettingsEntry("gateway-log", "Log", SettingsSection.AgentGateway, "requests errors capture captured headers body"),

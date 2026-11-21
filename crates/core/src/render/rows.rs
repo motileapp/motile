@@ -16,6 +16,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use super::agents::{self, AgentState, AgentView, ThreadState, workflow_name};
+use super::computer_use;
 use super::highlight::{self, Incremental, Spans};
 use super::markdown::{self, Block, ParaKind, Prose};
 use super::openui::UiRow;
@@ -1756,6 +1757,12 @@ fn describe(call: &ToolCall, cwd: &str, at: f64) -> Tool {
                 })
                 .collect();
             ("todo", verb("Updating", "Updated"), "the plan".to_string(), lines.join("\n"), String::new())
+        }
+        name if name.starts_with(computer_use::TOOL_PREFIX) => {
+            let described = computer_use::describe(&name[computer_use::TOOL_PREFIX.len()..], &input);
+            let pretty = serde_json::to_string_pretty(&input).unwrap_or_default();
+            let shown = if pretty == "{}" { String::new() } else { pretty };
+            ("screen", verb(&described.doing, &described.did), described.target, shown, "json".to_string())
         }
         name => {
             let (verb_text, target) = match name.strip_prefix("mcp__").and_then(|rest| rest.split_once("__")) {

@@ -18,12 +18,12 @@ use motile_protocol::gateway_wire::{AccountStatus, GatewayAccount, GatewayReply,
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{
     Access as AgentAccess, Actor, Agent, AgentAccount, AgentLimits, Approval, Ask, CONTINUE_PROMPT, Change,
-    CheckStatus, ClientForm, ClientInfo, ClientKind, CopiedThread, DiffScope, EngagedRecord, EventKind, FileKind,
-    GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind, LimitWindow, LineComment, MergeMethod,
-    Mergeable, Message, NewThread, NewWorktree, Project, PullRequestAction, PullRequestDetail, PullRequestEdit,
-    PullRequestState, Queued, ReactionKind, Request, RestartWhen, ReviewVerdict, ServerInfo, ServerReason,
-    ServerUpdate, Side, Skill, SkillMention, SkillSource, Thread, ThreadChange, Tokens, ToolCall, ToolStatus,
-    TurnChanges, TurnOutcome, TurnStarter, TurnSummary, UsageBucket, Variable,
+    CheckStatus, ClientForm, ClientInfo, ClientKind, ComputerUse, ComputerUseState, CopiedThread, DiffScope,
+    EngagedRecord, EventKind, FileKind, GitAction, GitHubState, GitStage, GitStatus, Interruption, Item, ItemKind,
+    LimitWindow, LineComment, MergeMethod, Mergeable, Message, NewThread, NewWorktree, Project, PullRequestAction,
+    PullRequestDetail, PullRequestEdit, PullRequestState, Queued, ReactionKind, Request, RestartWhen, ReviewVerdict,
+    ServerInfo, ServerReason, ServerUpdate, Side, Skill, SkillMention, SkillSource, Thread, ThreadChange, Tokens,
+    ToolCall, ToolStatus, TurnChanges, TurnOutcome, TurnStarter, TurnSummary, UsageBucket, Variable,
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
@@ -230,6 +230,7 @@ async fn serve(
         dir.path().join("attachments"),
         dir.path().join("worktrees"),
         dir.path().join("no-project"),
+        dir.path().join("computer-use"),
         environment,
     )
     .unwrap();
@@ -242,6 +243,9 @@ async fn serve(
     hub.keep_snoozes_woken(Duration::from_millis(100));
     hub.continue_interrupted();
     hub.keep_parents_told();
+    // SAFETY: every test's server stands in the same driver.
+    unsafe { std::env::set_var("MOTILE_CUA_DRIVER", repo_file("scripts/fake-cua-driver")) };
+    hub.keep_computer_use_running();
 
     // After a restart the old endpoint may take a moment to let go of the port.
     let options = BindOptions { local_only: true, port };
@@ -5261,6 +5265,59 @@ async fn a_programs_tools_read_the_threads_folder_and_run_only_what_its_access_a
 }
 
 /// The ids of the server's accounts once the clients are told they are `wanted`, and the server.
+async fn computer_use_until(list: &mut Follow, wanted: impl Fn(&ComputerUse) -> bool) -> ComputerUse {
+    loop {
+        if let Message::Server { server } | Message::Welcome { server, .. } = next(list).await {
+            let computer_use = server.computer_use.expect("every server can give its agents its screen");
+            if wanted(&computer_use) {
+                return computer_use;
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn the_agents_started_while_computer_use_runs_get_the_driver() {
+    let harness = Harness::start(fixture(Agent::Claude), "0").await;
+    let connection = harness.connect().await;
+    let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+    computer_use_until(&mut list, |computer_use| computer_use.state == ComputerUseState::Off).await;
+
+    let on = connection.request(&Request::SetComputerUse { enabled: true }).await.unwrap();
+    assert_eq!(on, Message::Ok);
+    let ready = computer_use_until(&mut list, |computer_use| computer_use.state != ComputerUseState::Starting).await;
+    assert_eq!(ready, ComputerUse { enabled: true, state: ComputerUseState::Ready { virtual_screen: false } });
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Say hello").await;
+    finished_transcript(&connection, &thread_id).await;
+    let turn = harness.recorded_turns().pop().unwrap();
+    let config = turn.lines().skip_while(|line| *line != "--mcp-config").nth(1).unwrap();
+    let driver = &serde_json::from_str::<serde_json::Value>(config).unwrap()["mcpServers"]["cua-driver"];
+    assert_eq!(driver["args"][0], "mcp", "{config}");
+    assert!(turn.contains("The cua-driver tools see and use the apps"));
+
+    let off = connection.request(&Request::SetComputerUse { enabled: false }).await.unwrap();
+    assert_eq!(off, Message::Ok);
+    computer_use_until(&mut list, |computer_use| computer_use.state == ComputerUseState::Off).await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Say hello").await;
+    finished_transcript(&connection, &thread_id).await;
+    assert!(!harness.recorded_turns().pop().unwrap().contains("cua-driver"), "agents started after go without");
+}
+
+#[tokio::test]
+async fn a_turn_on_the_screen_keeps_the_screenshot_its_driver_showed() {
+    let harness = Harness::start(fixture(Agent::Claude), "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let thread_id = send(&connection, None, new_thread, "Use the calculator").await;
+    let transcript = finished_transcript(&connection, &thread_id).await;
+    let driven = ["mcp__cua-driver__launch_app", "mcp__cua-driver__run_steps", "mcp__cua-driver__hotkey"];
+    assert_eq!(transcript.tools(), driven.map(|name| (name, ToolStatus::Succeeded)));
+    let shown: Vec<usize> = transcript.items.iter().map(|item| item.media.len()).filter(|count| *count > 0).collect();
+    assert_eq!(shown, vec![1], "the screenshot is kept with the call that showed it");
+}
+
 async fn accounts_until(list: &mut Follow, wanted: &[&str]) -> ServerInfo {
     loop {
         if let Message::Server { server } | Message::Welcome { server, .. } = next(list).await {

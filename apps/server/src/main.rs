@@ -67,6 +67,9 @@ enum CliCommand {
         #[command(subcommand)]
         command: ServiceCommand,
     },
+    /// Prints the macOS permissions computer use needs, which are the server's when it runs this.
+    #[command(hide = true)]
+    ComputerUsePermissions,
 }
 
 #[derive(Subcommand)]
@@ -107,6 +110,11 @@ async fn main() -> anyhow::Result<()> {
             let data_dir = cli.data_dir.context("--data-dir is required.")?;
             service::install_unit(&std::env::current_exe()?, &data_dir, &user)
         }
+        CliCommand::ComputerUsePermissions => {
+            #[cfg(target_os = "macos")]
+            motile_server::computer_use::macos::print();
+            Ok(())
+        }
     }
 }
 
@@ -146,6 +154,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
         data_dir.attachments(),
         data_dir.worktrees(),
         data_dir.no_project(),
+        data_dir.computer_use(),
         environment,
     )?;
     hub.refresh_icons().await;
@@ -155,6 +164,7 @@ async fn run(data_dir: &DataDir, allow_keys: Vec<String>, options: BindOptions) 
     if let Err(error) = hub.serve_mcp().await {
         tracing::warn!("the agents can't read threads: {error:#}");
     }
+    hub.keep_computer_use_running();
     hub.refresh_models_soon();
     hub.keep_files_swept();
     hub.keep_earlier_attachments();

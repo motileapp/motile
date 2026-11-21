@@ -1063,6 +1063,10 @@ pub enum Request {
         #[serde(default)]
         after_restarts: Option<bool>,
     },
+    /// Lets the agents see and use the apps on the server's screen, from each agent's next start.
+    SetComputerUse {
+        enabled: bool,
+    },
     /// What the agents spent between `since` and `until`, in buckets of `bucket_secs` that start
     /// where the hours and days of a clock `utc_offset_secs` ahead of UTC do. `Usage` answers.
     Usage {
@@ -2241,6 +2245,39 @@ pub struct ContinueSettings {
     pub after_restarts: bool,
 }
 
+/// Whether the agents can see and use the apps on the server's screen, and how that stands.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+pub struct ComputerUse {
+    pub enabled: bool,
+    pub state: ComputerUseState,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum ComputerUseState {
+    #[default]
+    Off,
+    /// Downloading the driver or starting it.
+    Starting,
+    /// The agents started from now on can use it. `virtual_screen` when the server has no screen
+    /// they can use, and gave them one of its own.
+    Ready {
+        #[serde(default)]
+        virtual_screen: bool,
+    },
+    /// The server's program needs these macOS permissions, which only someone at it can grant.
+    NeedsPermissions {
+        accessibility: bool,
+        screen_recording: bool,
+    },
+    Failed {
+        message: String,
+    },
+    /// One a newer server has.
+    #[serde(other)]
+    Other,
+}
+
 /// What the server does with pull requests by itself.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct PullRequestSettings {
@@ -2689,6 +2726,9 @@ pub struct ServerInfo {
     pub update: Option<ServerUpdate>,
     #[serde(default)]
     pub backup: Option<BackupState>,
+    /// None from a server that can't give the agents its screen.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub computer_use: Option<ComputerUse>,
 }
 
 /// Where an update of the server is.
