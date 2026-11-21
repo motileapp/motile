@@ -73,6 +73,8 @@ struct Fake {
     mcp_generation: AtomicU64,
     mcp_renewals: AtomicUsize,
     mcp_refuse_renewal: AtomicBool,
+    /// The MCP server's registration keeps its own list of redirects, as Namecheap's does.
+    mcp_fixed_redirects: AtomicBool,
     /// Every account's one reset was used.
     reset_used: AtomicBool,
     /// Claude's usage page fails.
@@ -385,7 +387,10 @@ async fn mcp_resource(State(fake): Shared) -> Json<Value> {
     Json(json!({"resource": format!("{base}/mcp/oauth"), "authorization_servers": [format!("{base}/as")]}))
 }
 
-async fn mcp_authorization_server(State(fake): Shared) -> Json<Value> {
+async fn mcp_authorization_server(State(fake): Shared, headers: HeaderMap) -> Response {
+    if !headers.contains_key("user-agent") {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let base = fake.base.lock().unwrap().clone();
     Json(json!({
         "issuer": format!("{base}/as"),
@@ -393,12 +398,16 @@ async fn mcp_authorization_server(State(fake): Shared) -> Json<Value> {
         "token_endpoint": format!("{base}/as/token"),
         "registration_endpoint": format!("{base}/as/register"),
     }))
+    .into_response()
 }
 
 async fn mcp_register(State(fake): Shared, Json(body): Json<Value>) -> Json<Value> {
     let base = fake.base.lock().unwrap().clone();
     assert_eq!(body["redirect_uris"], json!([format!("{base}/mcp/callback")]));
-    Json(json!({"client_id": "client-1"}))
+    if fake.mcp_fixed_redirects.load(Ordering::SeqCst) {
+        return Json(json!({"client_id": "client-1", "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"]}));
+    }
+    Json(json!({"client_id": "client-1", "redirect_uris": body["redirect_uris"]}))
 }
 
 async fn mcp_token(State(fake): Shared, Form(form): Form<Vec<(String, String)>>) -> Response {
@@ -1258,6 +1267,16 @@ async fn a_mcp_server_with_a_key_gives_agents_only_the_tools_that_are_on() {
     assert!(mcp_servers.is_empty(), "an MCP server that is off isn't given to agents");
     let (_, off) = mcp(&server, "Unbind_Banano", call(4, "list_issues")).await;
     assert_eq!(off["result"]["isError"], true);
+}
+
+#[tokio::test]
+async fn a_mcp_server_that_refuses_motiles_redirect_says_so_before_the_sign_in() {
+    let harness = Harness::start().await;
+    harness.fake.mcp_fixed_redirects.store(true, Ordering::SeqCst);
+    let base = harness.fake.base.lock().unwrap().clone();
+    let reply = harness.manage(Manage::AddMcpServer { url: format!("{base}/mcp/oauth"), name: None, key: None }).await;
+    let GatewayReply::Error { message } = reply else { panic!("an error, not {reply:?}") };
+    assert!(message.contains(&format!("{base}/mcp/callback")), "{message}");
 }
 
 #[tokio::test]
