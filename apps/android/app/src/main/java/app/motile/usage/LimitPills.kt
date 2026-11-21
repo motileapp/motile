@@ -17,12 +17,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import app.motile.core.LimitsReport
-import app.motile.platform.scaled
 import app.motile.theme.LocalPalette
 import app.motile.theme.LocalSurface
-import app.motile.theme.Opacity
 import app.motile.theme.Surface
-import app.motile.theme.at
 
 /** An account's windows as thin pills side by side, each filled as far as it was used. */
 @Composable
@@ -38,9 +35,9 @@ fun LimitPills(windows: List<LimitsReport.Window>, modifier: Modifier = Modifier
 @Composable
 fun LimitBar(usedPercent: Double, tone: LimitsReport.Window.Tone, modifier: Modifier = Modifier) {
     val track = LocalSurface.current.color(Surface.Layer.Control)
-    Box(modifier.fillMaxWidth().height(scaled(4f).dp).clip(CircleShape).background(track)) {
+    Box(modifier.fillMaxWidth().height(4.dp).clip(CircleShape).background(track)) {
         val used = (usedPercent / 100).toFloat().coerceIn(0f, 1f)
-        Box(Modifier.fillMaxWidth(used).fillMaxHeight().background(tone.color.at(Opacity.ColorTintChartStrongest), CircleShape))
+        Box(Modifier.fillMaxWidth(used).fillMaxHeight().background(tone.color, CircleShape))
     }
 }
 

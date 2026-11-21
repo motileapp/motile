@@ -35,6 +35,7 @@ import app.motile.ui.ActionButton
 import app.motile.ui.AgentIcon
 import app.motile.ui.Appearing
 import app.motile.ui.ButtonVariant
+import kotlin.math.PI
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -115,8 +116,8 @@ private fun SettingsButton(title: String, effortShown: Boolean, server: Boolean)
 
 /**
  * How full the context window is: a ring drawn as a Lucide circle, 22 wide with its stroke in a
- * square of 24, a step quieter than the dots beside it, with an arc in `color` over it from the top
- * round clockwise.
+ * square of 24. An arc in `color` runs from the top round clockwise, and the rest of the ring is an
+ * arc a step quieter than the dots beside it, apart from it by [RingSplit] at both ends.
  */
 @Composable
 private fun ContextRing(usedPercent: Double, color: Color, size: IconSize) {
@@ -127,7 +128,19 @@ private fun ContextRing(usedPercent: Double, color: Color, size: IconSize) {
         val inset = this.size.width / 24 + line / 2
         val topLeft = Offset(inset, inset)
         val circle = Size(this.size.width - inset * 2, this.size.height - inset * 2)
-        drawArc(track, 0f, 360f, useCenter = false, topLeft = topLeft, size = circle, style = Stroke(line))
-        if (used > 0f) drawArc(color, -90f, 360f * used, useCenter = false, topLeft = topLeft, size = circle, style = Stroke(line, cap = StrokeCap.Round))
+        val half = (RingSplit.toPx() + line) / 2 / (PI.toFloat() * circle.width)
+        val arcs = when {
+            used <= 0f -> listOf(Triple(0f, 1f, track))
+            used >= 1f -> listOf(Triple(0f, 1f, color))
+            else -> listOf(Triple(half, used - half, color), Triple(used + half, 1 - half, track))
+        }
+        for ((start, end, tint) in arcs) {
+            val from = if (end > start) start else (start + end) / 2
+            val sweep = maxOf(end - from, 0.0001f)
+            drawArc(tint, -90f + 360f * from, 360f * sweep, useCenter = false, topLeft = topLeft, size = circle, style = Stroke(line, cap = StrokeCap.Round))
+        }
     }
 }
+
+/** Between the context ring's two arcs, from one round end to the other. */
+private val RingSplit = 1.dp

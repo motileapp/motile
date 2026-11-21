@@ -12,7 +12,7 @@ mod strips;
 mod unlinked;
 
 use std::cell::Cell;
-use std::f32::consts::PI;
+use std::f32::consts::{PI, TAU};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -833,12 +833,15 @@ fn settings_part(mark: Option<AnyElement>, title: Option<String>, gateway_mark: 
 /// Between the effort's words and the context's ring, as between a symbol and its words.
 const RING_GAP: f32 = 5.;
 
+/// Between the context ring's two arcs, from one round end to the other.
+const RING_SPLIT: f32 = 1.;
+
 /// How full the context window is: a ring drawn as a Lucide circle, 22 wide with its stroke in a
-/// square of 24, in the dividers' colour, with an arc in the tone's colour over it from the top
-/// round clockwise.
+/// square of 24. An arc in the tone's colour runs from the top round clockwise, and the rest of the
+/// ring is an arc a step quieter than the dots beside it, apart from it by `RING_SPLIT` at both ends.
 fn context_ring(used_percent: f64, tone: Tone, size: IconSize, c: &theme::Colors) -> Div {
-    let (track, arc) = (
-        c.border_composer_stronger,
+    let (track, fill) = (
+        c.muted_strongest_plus_foreground,
         match tone {
             Tone::Success => c.success,
             Tone::Pending => c.pending,
@@ -849,37 +852,55 @@ fn context_ring(used_percent: f64, tone: Tone, size: IconSize, c: &theme::Colors
     let side = size.side();
     let line = side / 12.;
     let radius = side / 2. - side / 24. - line / 2.;
+    let half = (RING_SPLIT + line) / 2. / (TAU * radius);
+    let arcs = if used <= 0. {
+        vec![(0., 1., track)]
+    } else if used >= 1. {
+        vec![(0., 1., fill)]
+    } else {
+        vec![(half, used - half, fill), (used + half, 1. - half, track)]
+    };
     let ring = canvas(
         |_, _, _| {},
         move |bounds, _, window, _| {
-            let center = bounds.center();
-            let at = |angle: f32| point(center.x + px(radius * angle.cos()), center.y + px(radius * angle.sin()));
-            let radii = point(px(radius), px(radius));
-            let mut circle = PathBuilder::stroke(px(line));
-            circle.move_to(at(-PI / 2.));
-            circle.arc_to(radii, px(0.), false, true, at(PI / 2.));
-            circle.arc_to(radii, px(0.), false, true, at(-PI / 2.));
-            if let Ok(path) = circle.build() {
-                window.paint_path(path, track);
-            }
-            if used <= 0. {
-                return;
-            }
-            let round = StrokeOptions::default().with_line_width(line).with_line_cap(LineCap::Round);
-            let mut filled = PathBuilder::stroke(px(line)).with_style(PathStyle::Stroke(round));
-            filled.move_to(at(-PI / 2.));
-            if used >= 1. {
-                filled.arc_to(radii, px(0.), false, true, at(PI / 2.));
-                filled.arc_to(radii, px(0.), false, true, at(-PI / 2.));
-            } else {
-                filled.arc_to(radii, px(0.), used > 0.5, true, at(-PI / 2. + 2. * PI * used));
-            }
-            if let Ok(path) = filled.build() {
-                window.paint_path(path, arc);
+            for &(start, end, color) in &arcs {
+                paint_ring_arc(window, bounds.center(), radius, line, start, end, color);
             }
         },
     );
     div().size(px(side)).flex_shrink_0().child(ring.size_full())
+}
+
+/// The ring from `start` to `end`, as fractions round from the top; a dot where it is too short to
+/// reach past its own gaps.
+fn paint_ring_arc(
+    window: &mut Window,
+    center: Point<Pixels>,
+    radius: f32,
+    line: f32,
+    start: f32,
+    end: f32,
+    color: Hsla,
+) {
+    let start = if end > start { start } else { (start + end) / 2. };
+    let end = end.max(start + 0.001);
+    let at = |fraction: f32| {
+        let angle = -PI / 2. + TAU * fraction;
+        point(center.x + px(radius * angle.cos()), center.y + px(radius * angle.sin()))
+    };
+    let radii = point(px(radius), px(radius));
+    let round = StrokeOptions::default().with_line_width(line).with_line_cap(LineCap::Round);
+    let mut arc = PathBuilder::stroke(px(line)).with_style(PathStyle::Stroke(round));
+    arc.move_to(at(start));
+    if end - start >= 1. {
+        arc.arc_to(radii, px(0.), false, true, at(start + 0.5));
+        arc.arc_to(radii, px(0.), false, true, at(start));
+    } else {
+        arc.arc_to(radii, px(0.), end - start > 0.5, true, at(end));
+    }
+    if let Ok(path) = arc.build() {
+        window.paint_path(path, color);
+    }
 }
 
 /// "Medium · 1M": the effort, and the context window where the model offers more than one.

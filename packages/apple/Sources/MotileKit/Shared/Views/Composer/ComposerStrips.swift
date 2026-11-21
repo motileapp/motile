@@ -265,11 +265,11 @@ struct ComposerDivider: View {
 }
 
 /// How full the context window is: a ring drawn as a Lucide circle, 22 wide with its stroke in a
-/// square of 24, with an arc in `color` over it from the top round clockwise. Its track is the
-/// dividers' colour on the composer, and on glass a step quieter than the dots between the words
-/// around it.
+/// square of 24. An arc in `color` runs from the top round clockwise, and the rest of the ring is
+/// an arc a step quieter than the dots beside it, apart from it by `gap` at both ends.
 struct ContextRing: View {
-    @Environment(\.surface) private var surface
+    private static let gap: CGFloat = 1
+
     let usedPercent: Double
     let color: Color
     let size: IconSize
@@ -277,15 +277,31 @@ struct ContextRing: View {
     var body: some View {
         let side = PlatformImage.symbolSide(size)
         let line = side / 12
+        let inset = side / 24 + line / 2
+        let used = min(max(usedPercent, 0), 100) / 100
+        let half = (Self.gap + line) / 2 / (.pi * (side - inset * 2))
         ZStack {
-            Circle().stroke(surface == .glass ? Color.themeMutedStrongestPlusForeground : Color.themeBorderComposerStronger, lineWidth: line)
-            Circle()
-                .trim(from: 0, to: min(max(usedPercent, 0), 100) / 100)
-                .stroke(color, style: StrokeStyle(lineWidth: line, lineCap: .round))
-                .rotationEffect(.degrees(-90))
+            if used <= 0 {
+                arc(0, 1, Color.themeMutedStrongestPlusForeground, line)
+            } else if used >= 1 {
+                arc(0, 1, color, line)
+            } else {
+                arc(half, used - half, color, line)
+                arc(used + half, 1 - half, Color.themeMutedStrongestPlusForeground, line)
+            }
         }
-        .padding(side / 24 + line / 2)
+        .padding(inset)
         .frame(width: side, height: side)
+    }
+
+    /// The ring from `start` to `end`, as fractions round from the top; a dot where it is too short
+    /// to reach past its own gaps.
+    private func arc(_ start: Double, _ end: Double, _ color: Color, _ line: CGFloat) -> some View {
+        let from = end > start ? start : (start + end) / 2
+        return Circle()
+            .trim(from: from, to: max(end, from + 0.0001))
+            .stroke(color, style: StrokeStyle(lineWidth: line, lineCap: .round))
+            .rotationEffect(.degrees(-90))
     }
 }
 

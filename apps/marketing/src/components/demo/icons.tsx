@@ -52,38 +52,55 @@ export function EffortHighIcon() {
 const LOGO_SHARE = 22 / 24
 
 /**
- * How full the context window is, as the clients draw it: a ring in the dividers' colour with an
- * arc over it from the top round clockwise, in the colour of how full it is.
+ * How full the context window is, as the clients draw it: an arc in the colour of how full it is
+ * from the top round clockwise, and the rest of the ring a quieter arc apart from it at both ends.
  */
 export function ContextRing({ usedPercent }: { usedPercent: number }) {
+  const used = Math.min(Math.max(usedPercent, 0), 100)
+  const fill =
+    used >= 75 ? "stroke-warning" : used >= 50 ? "stroke-pending" : "stroke-success"
+  const track = "stroke-muted-strongest-plus-foreground"
+  const half = ((RING_SPLIT + 2) / 2 / (2 * Math.PI * 10)) * 100
+  const arcs: [number, number, string][] =
+    used <= 0
+      ? [[0, 100, track]]
+      : used >= 100
+        ? [[0, 100, fill]]
+        : [
+            [half, used - half, fill],
+            [used + half, 100 - half, track],
+          ]
   return (
     <svg
       viewBox="0 0 24 24"
       className="size-3.5 shrink-0"
       fill="none"
       strokeWidth="2"
+      strokeLinecap="round"
       aria-hidden="true"
     >
-      <circle cx="12" cy="12" r="10" className="stroke-border-composer-stronger" />
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        pathLength="100"
-        strokeDasharray={`${usedPercent} 100`}
-        strokeLinecap="round"
-        transform="rotate(-90 12 12)"
-        className={
-          usedPercent >= 75
-            ? "stroke-warning"
-            : usedPercent >= 50
-              ? "stroke-pending"
-              : "stroke-success"
-        }
-      />
+      {arcs.map(([start, end, stroke]) => {
+        const from = end > start ? start : (start + end) / 2
+        return (
+          <circle
+            key={stroke}
+            cx="12"
+            cy="12"
+            r="10"
+            pathLength="100"
+            strokeDasharray={`${Math.max(end - from, 0)} 100`}
+            strokeDashoffset={-from}
+            transform="rotate(-90 12 12)"
+            className={stroke}
+          />
+        )
+      })}
     </svg>
   )
 }
+
+/** Between the context ring's two arcs, from one round end to the other: 1px at its 14px, in its units. */
+const RING_SPLIT = 24 / 14
 
 export function AgentIcon({
   agent,

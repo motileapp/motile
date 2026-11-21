@@ -135,7 +135,7 @@ class Palette(
             mutedForeground = Color(0xFF606470),
             mutedStrongerForeground = Color(0xFF8E919D),
             mutedStrongestForeground = Color(0xFFADB1BC),
-            mutedStrongestPlusForeground = Color(0xFFC4C7D0),
+            mutedStrongestPlusForeground = Color(0xFFD0D3DA),
             primary = Color(0xFF2A5BD7),
             primaryForeground = Color(0xFFFFFFFF),
             destructive = Color(0xFFC62828),
