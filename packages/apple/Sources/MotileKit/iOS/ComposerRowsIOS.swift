@@ -75,8 +75,10 @@ struct ComposerTouchControls: View {
         let model = store.composerModel
         let logo = model.map { AnyView(AgentIcon(agent: $0.agent, size: ControlSize.regular.symbol)) }
         let effort = store.composerEffort.flatMap { $0.isEmpty ? nil : ComposerView.effortSymbol($0) }
+        let fill = store.composerContextFill
+        let ring = fill.usedPercent.map { AnyView(ContextRing(usedPercent: $0, color: fill.tone.color, size: ControlSize.regular.smallSymbol)) }
         return ActionButton(
-            title, picture: logo, detail: shown ? effort : nil, place: server ? store.composerServer?.shortName : nil,
+            title, picture: logo, detail: shown ? effort : nil, detailMark: ring, place: server ? store.composerServer?.shortName : nil,
             proxied: store.composerProxied, pinned: store.composerPinned, variant: .ghost, gap: 5
         ) {
             store.showsThreadSettings = true

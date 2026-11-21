@@ -108,7 +108,7 @@ fun CardLine(text: String, middle: Boolean = false, proxied: Boolean = false, pi
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = if (wraps) Alignment.Top else Alignment.CenterVertically) {
             LevelWithFirstLine(wraps, icon)
             Text(
-                dotted(text, palette.mutedStrongerForeground).proxied(proxied, pinned), size = TextSize.Xs, maxLines = if (wraps) Int.MAX_VALUE else 1,
+                dotted(text, palette.mutedStrongestForeground).proxied(proxied, pinned), size = TextSize.Xs, maxLines = if (wraps) Int.MAX_VALUE else 1,
                 overflow = if (middle) TextOverflow.MiddleEllipsis else TextOverflow.Ellipsis,
                 inlineContent = if (proxied) GatewayMark.content(palette.mutedForeground, TextSize.Xs, ThreadCard.iconSize) else emptyMap(),
             )

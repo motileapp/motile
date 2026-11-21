@@ -60,7 +60,7 @@ enum class Symbol(val character: String?) {
     CornerLeftUp("\uE0A4"),
     Diff("\uE30C"),
     Download("\uE0B2"),
-    /** The reasoning efforts up to high: a ring round a pie a quarter, half or three quarters full, which Lucide doesn't have. */
+    /** The reasoning efforts up to high: a rounded frame filled from the bottom a third, two thirds or all the way, which Lucide doesn't have. */
     EffortLow(null),
     EffortMedium(null),
     EffortHigh(null),

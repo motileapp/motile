@@ -466,7 +466,7 @@ fun McpServerCallSheet(entry: Long) {
                     Text("Your gateway no longer has this call", size = TextSize.Sm, color = palette.mutedForeground)
                     return@McpServerSheetFrame
                 }
-                Text(dotted(view.row.summary, palette.mutedStrongerForeground), size = TextSize.Xs, color = palette.mutedForeground, maxLines = 2)
+                Text(dotted(view.row.summary, palette.mutedStrongestForeground), size = TextSize.Xs, color = palette.mutedForeground, maxLines = 2)
                 SheetLabel("Arguments")
                 McpServerTextBox(view.arguments, scaled(180f).dp)
                 view.error?.let { failure ->

@@ -24,7 +24,7 @@ export function MenuChevron() {
   )
 }
 
-/** The reasoning effort High, as the clients draw it: a ring round a pie three quarters full. */
+/** The reasoning effort High, as the clients draw it: a rounded frame filled all the way. */
 export function EffortHighIcon() {
   return (
     <svg
@@ -33,21 +33,57 @@ export function EffortHighIcon() {
       fill="currentColor"
       aria-hidden="true"
     >
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
+      <rect
+        x="5"
+        y="2"
+        width="14"
+        height="20"
+        rx="5"
         fill="none"
         stroke="currentColor"
         strokeWidth="2"
       />
-      <path d="M12 12V6a6 6 0 1 1-6 6Z" />
+      <rect x="8" y="5" width="8" height="14" rx="2" />
     </svg>
   )
 }
 
 /** As large as Lucide's icons look, as the clients draw a logo. */
 const LOGO_SHARE = 22 / 24
+
+/**
+ * How full the context window is, as the clients draw it: a ring in the dividers' colour with an
+ * arc over it from the top round clockwise, in the colour of how full it is.
+ */
+export function ContextRing({ usedPercent }: { usedPercent: number }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="size-3.5 shrink-0"
+      fill="none"
+      strokeWidth="2"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="10" className="stroke-border-composer-stronger" />
+      <circle
+        cx="12"
+        cy="12"
+        r="10"
+        pathLength="100"
+        strokeDasharray={`${usedPercent} 100`}
+        strokeLinecap="round"
+        transform="rotate(-90 12 12)"
+        className={
+          usedPercent >= 75
+            ? "stroke-warning"
+            : usedPercent >= 50
+              ? "stroke-pending"
+              : "stroke-success"
+        }
+      />
+    </svg>
+  )
+}
 
 export function AgentIcon({
   agent,

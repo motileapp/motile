@@ -375,7 +375,7 @@ fun McpServerCallRowView(row: McpServerCallRow) {
                 Text(row.mcpServer, size = TextSize.Sm, weight = FontWeight.Medium, maxLines = 1)
                 Text(row.tool, Modifier.weight(1f, fill = false), style = Theme.uiMono(TextSize.Xs), maxLines = 1)
                 Spacer(Modifier.weight(1f))
-                Text(dotted("${row.latency} · ${row.time}", palette.mutedStrongerForeground), style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground, maxLines = 1)
+                Text(dotted("${row.latency} · ${row.time}", palette.mutedStrongestForeground), style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground, maxLines = 1)
             }
             Text(row.source, size = TextSize.Xs, color = palette.mutedForeground)
             row.error?.let { Text(it, size = TextSize.Xs, color = palette.warning) }

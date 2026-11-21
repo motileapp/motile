@@ -264,6 +264,31 @@ struct ComposerDivider: View {
     }
 }
 
+/// How full the context window is: a ring drawn as a Lucide circle, 22 wide with its stroke in a
+/// square of 24, with an arc in `color` over it from the top round clockwise. Its track is the
+/// dividers' colour on the composer, and on glass a step quieter than the dots between the words
+/// around it.
+struct ContextRing: View {
+    @Environment(\.surface) private var surface
+    let usedPercent: Double
+    let color: Color
+    let size: IconSize
+
+    var body: some View {
+        let side = PlatformImage.symbolSide(size)
+        let line = side / 12
+        ZStack {
+            Circle().stroke(surface == .glass ? Color.themeMutedStrongestPlusForeground : Color.themeBorderComposerStronger, lineWidth: line)
+            Circle()
+                .trim(from: 0, to: min(max(usedPercent, 0), 100) / 100)
+                .stroke(color, style: StrokeStyle(lineWidth: line, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .padding(side / 24 + line / 2)
+        .frame(width: side, height: side)
+    }
+}
+
 /// The branches of the project's repository, to switch to one or make a new one. What is typed
 /// narrows the list, and becomes the name of a branch to make when it matches none. With `base`
 /// it picks the branch a new worktree starts from instead, and switches nothing.
