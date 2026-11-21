@@ -67,7 +67,7 @@ const DEFAULT_CHARS: usize = 20_000;
 const MAX_CHARS: usize = 50_000;
 
 /// Where an agent reads threads and reaches the gateway's MCP servers, and the token it does both with.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct McpAccess {
     pub url: String,
     pub token: String,

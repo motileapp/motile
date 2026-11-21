@@ -100,7 +100,9 @@ starts with `/name`, Codex's text names `$name`.
 A prompt that tells what the thread said before ends with its message after "User message:", which
 is what picks its turn. "crash before taking this" has it exit before it takes the prompt. With
 FAKE_AGENT_SESSIONS_FILE every new session gets an id of its own, kept in that file, and a session
-to resume that isn't there is refused, as Claude Code and Codex refuse one. Codex takes what a
+to resume that isn't there is refused, as Claude Code and Codex refuse one. Claude Code takes the MCP
+servers it is given while it runs (`mcp_set_servers`), unless FAKE_AGENT_REFUSES_MCP is set, and
+records them as it records a changed setting. Codex takes what a
 thread said before as messages (`thread/inject_items`), unless FAKE_AGENT_NO_INJECT is set, and
 refuses a method it doesn't know.
 
@@ -382,7 +384,8 @@ def use_codex_reset():
 
 
 def answer_control(message):
-    """Answers what Claude Code is asked about its login and the limits of its plan."""
+    """Answers what Claude Code is asked about its login and the limits of its plan, and takes the MCP
+    servers it is given."""
     subtype = message["request"].get("subtype")
     if subtype == "initialize":
         answer = {"account": {"email": signed_in_email(), "subscriptionType": "Claude Max"}, "commands": claude_commands()}
@@ -394,6 +397,12 @@ def answer_control(message):
         answer = {"models": claude_models()}
     elif subtype == "mcp_status":
         answer = {"mcpServers": [{"name": "claude.ai Linear", "status": "connected"}]}
+    elif subtype == "mcp_set_servers" and os.environ.get("FAKE_AGENT_REFUSES_MCP"):
+        error = "Unsupported control request subtype: mcp_set_servers"
+        emit({"type": "control_response", "response": {"subtype": "error", "request_id": message["request_id"], "error": error}})
+        return
+    elif subtype == "mcp_set_servers":
+        answer = {"added": sorted(message["request"]["servers"]), "removed": [], "errors": {}}
     elif subtype == "get_settings":
         model = sys.argv[sys.argv.index("--model") + 1] if "--model" in sys.argv else "claude-opus-5-5"
         effort = "high" if "fable" in model else "medium"

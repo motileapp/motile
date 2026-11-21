@@ -371,6 +371,12 @@ struct Run {
     background: Background,
     /// The agent's own name for the turn that runs.
     turn_id: Option<String>,
+    /// The MCP servers the process has: those it started with, or was given since.
+    mcp: Option<McpAccess>,
+    /// It was told how to use the computer use driver, as it started or with a prompt since.
+    instructed: bool,
+    /// It refused MCP servers it was given, so it isn't kept for another turn.
+    stale: bool,
 }
 
 pub struct ListSubscription {
@@ -543,6 +549,31 @@ impl Hub {
         live.mcp_token.get_or_insert_with(|| self.mcp_tokens.mint(&live.stored.thread.id)).clone()
     }
 
+    /// Gives every running Claude Code the MCP servers it is to have now.
+    async fn send_mcp_setups(&self) {
+        self.each_thread(|live| {
+            self.send_mcp_setup(live);
+            None::<()>
+        })
+        .await;
+    }
+
+    /// Gives the thread's running Claude Code the MCP servers it is to have now, when they changed
+    /// since it last had them. Codex takes them with its next process.
+    fn send_mcp_setup(&self, live: &mut Live) {
+        let running = live.run.as_ref().is_some_and(|run| run.input.is_some() && !run.stale);
+        if live.stored.thread.agent != Agent::Claude || !running {
+            return;
+        }
+        let Some(mcp) = self.mcp_access(live) else { return };
+        if live.run.as_ref().is_some_and(|run| run.mcp.as_ref() == Some(&mcp)) || !live.write(claude::mcp_lines(&mcp)) {
+            return;
+        }
+        if let Some(run) = &mut live.run {
+            run.mcp = Some(mcp);
+        }
+    }
+
     /// Serves the way the Gateway accounts' agents reach the account's gateway over `endpoint`, and
     /// offers those accounts, which keep their folders in `folder`, while `key` says the account
     /// has a gateway.
@@ -629,6 +660,9 @@ impl Hub {
         *way.mcp_servers.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = mcp_servers;
         let pool = way.pool();
         let mut threads = self.every_thread().await;
+        for live in threads.iter_mut() {
+            self.send_mcp_setup(live);
+        }
         let accounts = self.agent_accounts();
         let offered =
             agent_accounts::with_gateway(accounts.clone(), has_gateway.then_some((way.folder.as_path(), &pool)));
@@ -1133,11 +1167,13 @@ impl Hub {
             while changes.changed().await.is_ok() {
                 let Some(hub) = hub.upgrade() else { return };
                 hub.announce_server();
+                hub.send_mcp_setups().await;
             }
         });
     }
 
-    /// Lets the agents started from now on see and use the apps on the server's screen.
+    /// Lets the agents see and use the apps on the server's screen: those started from now on, and
+    /// the running ones once the driver is ready.
     pub fn set_computer_use(&self, enabled: bool) -> anyhow::Result<()> {
         self.store.set_setting(COMPUTER_USE, Some(if enabled { "true" } else { "false" }))?;
         self.computer_use.set_enabled(enabled);
@@ -3854,6 +3890,9 @@ impl Hub {
             input: Some(input),
             background: Background::default(),
             turn_id: None,
+            instructed: mcp.as_ref().is_some_and(|mcp| mcp.computer_use.is_some()),
+            mcp,
+            stale: false,
         });
         self.announce_working(live)?;
 
@@ -3928,7 +3967,8 @@ impl Hub {
             return self.resume(live);
         }
         let Some(run) = &mut live.run else { return Ok(()) };
-        let rests = run.background.is_empty() && !interrupted && live.stored.thread.agent == Agent::Claude;
+        let rests =
+            run.background.is_empty() && !interrupted && !run.stale && live.stored.thread.agent == Agent::Claude;
         if !rests && (run.background.is_empty() || interrupted) {
             run.input = None;
             return Ok(());
@@ -4287,6 +4327,13 @@ impl Hub {
             }
             AgentEvent::Write(lines) => {
                 live.write(lines);
+            }
+            AgentEvent::McpRefused => {
+                tracing::warn!(thread_id = live.stored.thread.id, "the agent refused the MCP servers it was given");
+                if let Some(run) = &mut live.run {
+                    run.stale = true;
+                }
+                live.let_go();
             }
             AgentEvent::Limited { resets_at } => {
                 let noted = self.gateway.get().and_then(|way| way.tunnel.take_limit_reset(&live.stored.thread.id));
@@ -4823,7 +4870,8 @@ impl Live {
 
     /// Writes a prompt to the agent's process, with the thread's settings. `false` when it takes
     /// none.
-    fn write_prompt(&self, prompt: &str, id: &str) -> bool {
+    fn write_prompt(&mut self, prompt: &str, id: &str) -> bool {
+        let prompt = &self.noted(prompt);
         let thread = &self.stored.thread;
         let model = thread.model.as_deref().or(self.session_model.as_deref());
         let settings = Settings { model, effort: thread.effort.as_deref() };
@@ -4838,8 +4886,8 @@ impl Live {
     /// `false` when it takes no more.
     fn give(&mut self, store: &Store, index: usize) -> anyhow::Result<bool> {
         self.note_skills(&self.queued[index].skills.clone());
-        let queued = &self.queued[index];
-        if !self.write_prompt(&prompt(queued), &queued.id) {
+        let (prompt, id) = (prompt(&self.queued[index]), self.queued[index].id.clone());
+        if !self.write_prompt(&prompt, &id) {
             return Ok(false);
         }
         self.note_given(store, index)?;
@@ -4855,11 +4903,12 @@ impl Live {
         }
         self.note_skills(&self.queued[index].skills.clone());
         let queued = &self.queued[index];
+        let (prompt, id) = (prompt(queued), queued.id.clone());
+        let prompt = self.noted(&prompt);
         let thread = &self.stored.thread;
         let turn_id = self.run.as_ref().and_then(|run| run.turn_id.as_deref());
         let session_id = self.stored.session_id.as_deref();
-        let prompt = prompt(queued);
-        let line = agents::steer(thread.agent, session_id, turn_id, &prompt, &self.skills, &queued.id);
+        let line = agents::steer(thread.agent, session_id, turn_id, &prompt, &self.skills, &id);
         if !line.is_some_and(|line| self.write(line)) {
             return Ok(false);
         }
@@ -4880,6 +4929,20 @@ impl Live {
     /// Whether the agent works on the thread, or is about to.
     fn busy(&self) -> bool {
         self.preparing.is_some() || self.run.as_ref().is_some_and(|run| run.resting.is_none())
+    }
+
+    /// The prompt, after what the process is to be told first of the computer use it got since it
+    /// started. A command, which only runs at the start, is left for the next prompt to follow.
+    fn noted(&mut self, prompt: &str) -> String {
+        let Some(run) = self.run.as_mut().filter(|run| !run.instructed && !prompt.starts_with('/')) else {
+            return prompt.to_string();
+        };
+        let Some(driver) = run.mcp.as_ref().and_then(|mcp| mcp.computer_use.as_ref()) else {
+            return prompt.to_string();
+        };
+        let note = crate::computer_use::note(driver);
+        run.instructed = true;
+        format!("{note}\n\n{prompt}")
     }
 
     /// Lets the resting process go: its stdin closes and it exits. The next turn starts a new one.

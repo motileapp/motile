@@ -229,6 +229,8 @@ pub enum AgentEvent {
     },
     /// Lines the agent's process has to be given now.
     Write(String),
+    /// Claude Code refused the MCP servers it was given while it ran, so it keeps what it had.
+    McpRefused,
     Failed {
         message: String,
     },

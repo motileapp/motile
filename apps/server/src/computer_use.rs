@@ -11,6 +11,7 @@ mod release;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -74,6 +75,9 @@ const PERMISSIONS_CHECKED_EVERY: Duration = Duration::from_secs(5);
 const PERMISSIONS_RECHECKED_EVERY: Duration = Duration::from_secs(30);
 /// What the driver last wrote to its error output, to say why it stopped.
 const STDERR_KEPT: usize = 2000;
+/// Numbers each run of the driver for the agents' MCP servers, which stop with the run they reach:
+/// a new run changes what they are given, so they are started again.
+const RUN_VARIABLE: &str = "MOTILE_DRIVER_RUN";
 
 /// What an agent's process is given to reach the driver.
 #[derive(Clone, Debug, PartialEq)]
@@ -104,6 +108,7 @@ pub struct ComputerUse {
     enabled: watch::Sender<bool>,
     state: watch::Sender<ComputerUseState>,
     access: Mutex<Option<DriverAccess>>,
+    runs: AtomicU64,
 }
 
 impl ComputerUse {
@@ -116,6 +121,7 @@ impl ComputerUse {
             enabled: watch::Sender::new(enabled),
             state: watch::Sender::new(ComputerUseState::Off),
             access: Mutex::new(None),
+            runs: AtomicU64::new(0),
         })
     }
 
@@ -124,7 +130,8 @@ impl ComputerUse {
     }
 
     pub fn set_enabled(&self, enabled: bool) {
-        if self.enabled.send_replace(enabled) == enabled {
+        let changed = self.enabled.send_if_modified(|on| std::mem::replace(on, enabled) != enabled);
+        if !changed {
             return;
         }
         if !enabled {
@@ -157,9 +164,10 @@ impl ComputerUse {
                     continue;
                 }
                 this.state.send_replace(ComputerUseState::Starting);
+                // Turned off, or off and on again before this saw it: the driver starts over or stops.
                 let ran = tokio::select! {
                     ran = this.run() => ran,
-                    _ = enabled.wait_for(|on| !on) => Ok(()),
+                    _ = enabled.changed() => Ok(()),
                 };
                 this.set_access(None);
                 let Err(error) = ran else { continue };
@@ -220,6 +228,8 @@ impl ComputerUse {
         let mut variables = self.login.clone();
         variables.extend(screen_variables.iter().cloned());
         variables.extend(driver_variables);
+        let run = self.runs.fetch_add(1, Ordering::Relaxed) + 1;
+        variables.push((RUN_VARIABLE.to_string(), run.to_string()));
         self.set_access(Some(DriverAccess {
             command: program,
             arguments: mcp_arguments(&socket),
@@ -393,6 +403,17 @@ pub fn instructions(access: &DriverAccess) -> String {
     text
 }
 
+/// What a process that was started before it got the driver is told with its next prompt: what
+/// it would have been told as it started, and the screen its shell doesn't know of.
+pub fn note(access: &DriverAccess) -> String {
+    let mut text = format!("Computer use is on now. {}", instructions(access).trim_start());
+    if !access.screen.is_empty() {
+        let screen: Vec<String> = access.screen.iter().map(|(name, value)| format!("{name}={value}")).collect();
+        text += &format!(" Your shell started without that screen: start apps with {}.", screen.join(" "));
+    }
+    text
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -474,5 +495,11 @@ mod tests {
         changes.wait_for(|state| *state == ComputerUseState::Off).await.unwrap();
         assert_eq!(computer_use.access(), None);
         assert_eq!(computer_use.info(), ComputerUseInfo { enabled: false, state: ComputerUseState::Off });
+
+        computer_use.set_enabled(true);
+        changes.wait_for(|state| matches!(state, ComputerUseState::Ready { .. })).await.unwrap();
+        let again = computer_use.access().unwrap();
+        assert_eq!((&again.command, &again.arguments), (&access.command, &access.arguments));
+        assert_ne!(again, access, "the agents' servers reached the run that stopped, so they start again");
     }
 }

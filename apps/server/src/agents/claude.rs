@@ -18,6 +18,7 @@ use serde_json::{Value, json};
 
 use super::{AgentEvent, Background, ModelUsage, Turn, content_images};
 use crate::computer_use::{self, DriverAccess};
+use crate::mcp::McpAccess;
 
 /// Background tasks that watch a command: the Monitor tool's and shells left running.
 const WATCH_TASKS: [&str; 4] = ["local_bash", "shell", "monitor", "monitor_mcp"];
@@ -27,6 +28,8 @@ const IDLE_TASKS: [&str; 2] = ["plan", "dream"];
 const WORKFLOW_TASK: &str = "local_workflow";
 /// What Claude Code says when the session it was told to resume isn't in its folder.
 pub const NO_CONVERSATION: &str = "No conversation found";
+/// What the answer to `mcp_lines` is known by.
+const MCP_SETUP: &str = "mcp_setup:";
 /// How claude.ai's connectors are named among the MCP servers.
 const CONNECTOR: &str = "claude.ai ";
 /// How long Claude Code may take to list claude.ai's connectors once it has started.
@@ -57,31 +60,15 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
     .map(String::from)
     .into();
     if let Some(mcp) = turn.mcp {
-        // The token is read from the environment, so that it never shows among the arguments.
-        let headers = json!({"Authorization": format!("${{{}}}", crate::mcp::AUTHORIZATION_VARIABLE)});
-        let server = |url: &str| json!({"type": "http", "url": url, "headers": headers});
-        let mut servers = serde_json::Map::new();
-        for (slug, url) in &mcp.mcp_servers {
-            servers.insert(slug.clone(), server(url));
-        }
-        servers.insert(crate::mcp::SERVER_NAME.to_string(), server(&mcp.url));
-        // The gateway's MCP servers ask for approval themselves, as their tools' permissions say.
-        let gateway_tools = mcp.mcp_servers.iter().map(|(slug, _)| format!("mcp__{slug}"));
-        let mut allowed: Vec<String> =
-            crate::mcp::TOOLS.iter().map(|tool| tool.to_string()).chain(gateway_tools).collect();
-        if let Some(driver) = &mcp.computer_use {
-            servers.insert(computer_use::SERVER_NAME.to_string(), computer_use_server(driver));
-            allowed.extend(computer_use::LOOKING_TOOLS.iter().map(|tool| computer_use_tool(tool)));
-        }
+        let setup = McpSetup::of(mcp);
         arguments.extend([
             "--mcp-config".to_string(),
-            json!({"mcpServers": servers}).to_string(),
+            json!({"mcpServers": setup.servers}).to_string(),
             "--allowedTools".to_string(),
-            allowed.join(","),
+            setup.allowed.join(","),
         ]);
-        if mcp.computer_use.is_some() {
-            let hidden: Vec<String> = computer_use::HIDDEN_TOOLS.iter().map(|tool| computer_use_tool(tool)).collect();
-            arguments.extend(["--disallowedTools".to_string(), hidden.join(",")]);
+        if !setup.hidden.is_empty() {
+            arguments.extend(["--disallowedTools".to_string(), setup.hidden.join(",")]);
         }
     }
     arguments.extend(
@@ -104,6 +91,48 @@ pub fn arguments(turn: &Turn) -> Vec<String> {
     }
     arguments.extend(["--append-system-prompt".to_string(), super::instructions(turn)]);
     arguments
+}
+
+/// The MCP servers a process is given, the tools it uses without asking and those it doesn't get.
+struct McpSetup {
+    servers: serde_json::Map<String, Value>,
+    allowed: Vec<String>,
+    hidden: Vec<String>,
+}
+
+impl McpSetup {
+    fn of(mcp: &McpAccess) -> Self {
+        // The token is read from the environment, so that it never shows among the arguments.
+        let headers = json!({"Authorization": format!("${{{}}}", crate::mcp::AUTHORIZATION_VARIABLE)});
+        let server = |url: &str| json!({"type": "http", "url": url, "headers": headers});
+        let mut servers = serde_json::Map::new();
+        for (slug, url) in &mcp.mcp_servers {
+            servers.insert(slug.clone(), server(url));
+        }
+        servers.insert(crate::mcp::SERVER_NAME.to_string(), server(&mcp.url));
+        // The gateway's MCP servers ask for approval themselves, as their tools' permissions say.
+        let gateway_tools = mcp.mcp_servers.iter().map(|(slug, _)| format!("mcp__{slug}"));
+        let mut allowed: Vec<String> =
+            crate::mcp::TOOLS.iter().map(|tool| tool.to_string()).chain(gateway_tools).collect();
+        let mut hidden = Vec::new();
+        if let Some(driver) = &mcp.computer_use {
+            servers.insert(computer_use::SERVER_NAME.to_string(), computer_use_server(driver));
+            allowed.extend(computer_use::LOOKING_TOOLS.iter().map(|tool| computer_use_tool(tool)));
+            hidden.extend(computer_use::HIDDEN_TOOLS.iter().map(|tool| computer_use_tool(tool)));
+        }
+        Self { servers, allowed, hidden }
+    }
+}
+
+/// Lines that give a running process the MCP servers it is to have now, in place of all it had,
+/// with the tools it uses without asking. Unchanged servers stay connected.
+pub fn mcp_lines(mcp: &McpAccess) -> String {
+    let setup = McpSetup::of(mcp);
+    let servers = json!({"subtype": "mcp_set_servers", "servers": setup.servers, "denied_tools": setup.hidden});
+    let allowed = json!({"subtype": "apply_flag_settings", "settings": {"permissions": {"allow": setup.allowed}}});
+    let request_id = format!("{MCP_SETUP}{}", random_id());
+    let servers = format!("{}\n", json!({"type": "control_request", "request_id": request_id, "request": servers}));
+    servers + &control(allowed)
 }
 
 /// The computer use driver as a server Claude Code starts, which every tool its access allows
@@ -264,6 +293,7 @@ impl Parser {
             }
             Some("user") => parse_user(&object["message"]),
             Some("control_request") => parse_control_request(&object),
+            Some("control_response") => mcp_refused(&object["response"]),
             Some("control_cancel_request") => {
                 let id = object["request_id"].as_str().unwrap_or_default().to_string();
                 vec![AgentEvent::ApprovalWithdrawn { id }]
@@ -692,6 +722,15 @@ fn content_text(content: &Value) -> String {
 
 fn object_json(value: &Value) -> String {
     if value.is_object() { value.to_string() } else { "{}".to_string() }
+}
+
+/// Whether the answer is Claude Code's refusal of the MCP servers `mcp_lines` gave it.
+fn mcp_refused(response: &Value) -> Vec<AgentEvent> {
+    let ours = response["request_id"].as_str().is_some_and(|id| id.starts_with(MCP_SETUP));
+    if !ours || response["subtype"] == "success" {
+        return vec![];
+    }
+    vec![AgentEvent::McpRefused]
 }
 
 fn random_id() -> String {
