@@ -90,9 +90,10 @@ impl Pictures {
         }
         let generation = Self::start(key, cx);
         let (key, url, file) = (key.to_string(), url.to_string(), file.to_path_buf());
+        let svg = cx.svg_renderer();
         let reading = cx.background_executor().spawn(async move {
             let fetched = file.exists() || download(&url, &file);
-            fetched.then(|| decode(&file, max_pixels)).flatten()
+            fetched.then(|| read(&file, max_pixels, &svg)).flatten()
         });
         cx.spawn(async move |cx| {
             let read = reading.await;
@@ -149,7 +150,8 @@ impl Pictures {
     }
 
     fn decode(key: String, generation: u64, file: PathBuf, max_pixels: u32, cx: &mut App) {
-        let decoding = cx.background_executor().spawn(async move { decode(&file, max_pixels) });
+        let svg = cx.svg_renderer();
+        let decoding = cx.background_executor().spawn(async move { read(&file, max_pixels, &svg) });
         cx.spawn(async move |cx| {
             let decoded = decoding.await;
             cx.update(|cx| Self::finish(&key, generation, decoded.ok_or(Failure::Decode), cx));
@@ -195,6 +197,30 @@ impl Pictures {
         }
         dropped
     }
+}
+
+/// How large an SVG is drawn at most, on its longer side.
+const SVG_MAX_PIXELS: u32 = 4096;
+
+/// The image of the file, no larger than `max_pixels` on a side; an SVG drawn that large.
+fn read(file: &Path, max_pixels: u32, svg: &SvgRenderer) -> Option<Shown> {
+    let is_svg = file.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("svg"));
+    if !is_svg {
+        return decode(file, max_pixels);
+    }
+    let parsed = svg.parse_svg(&std::fs::read(file).ok()?).ok()?;
+    let side = max_pixels.min(SVG_MAX_PIXELS) as i32;
+    let draw = |width: i32| {
+        let image =
+            svg.render_parsed(&parsed, SvgSize::Size(size(DevicePixels(width.max(1)), DevicePixels(0)))).ok()?;
+        let drawn = image.size(0);
+        Some((image, i32::from(drawn.width), i32::from(drawn.height)))
+    };
+    let (mut image, mut width, mut height) = draw(side)?;
+    if height > side {
+        (image, width, height) = draw(side * width / height)?;
+    }
+    Some(Shown { image, width: width as u32, height: height as u32 })
 }
 
 /// Reads the image, no larger than `max_pixels` on a side, the right way round, in the BGRA GPUI
@@ -375,4 +401,33 @@ pub fn download(url: &str, file: &std::path::Path) -> bool {
         let _ = std::fs::create_dir_all(folder);
     }
     std::fs::write(file, bytes).is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use gpui_kit::SvgRenderer;
+
+    use super::{SVG_MAX_PIXELS, read};
+
+    fn drawn(svg: &str, max_pixels: u32) -> (u32, u32) {
+        let file = std::env::temp_dir().join(format!("motile-picture-{}.svg", uuid::Uuid::new_v4()));
+        std::fs::write(&file, svg).unwrap();
+        let shown = read(&file, max_pixels, &SvgRenderer::new(Arc::new(())));
+        let _ = std::fs::remove_file(&file);
+        let shown = shown.expect("the SVG is drawn");
+        (shown.width, shown.height)
+    }
+
+    #[test]
+    fn an_svg_is_drawn_as_large_as_asked_in_its_own_shape() {
+        let wide =
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="64" height="32"><rect width="64" height="32"/></svg>"#;
+        let tall =
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 400"><rect width="200" height="400"/></svg>"#;
+        assert_eq!(drawn(wide, 192), (192, 96));
+        assert_eq!(drawn(tall, 192), (96, 192));
+        assert_eq!(drawn(tall, 100_000), (SVG_MAX_PIXELS / 2, SVG_MAX_PIXELS));
+    }
 }

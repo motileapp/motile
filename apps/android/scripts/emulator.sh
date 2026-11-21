@@ -17,6 +17,7 @@ serial() {
     for device in $("$ADB" devices | awk '/^emulator-/ {print $1}'); do
         [ "$("$ADB" -s "$device" emu avd name 2>/dev/null | head -1 | tr -d '\r')" = "$AVD" ] && { echo "$device"; return; }
     done
+    return 0
 }
 
 boot_emulator() {

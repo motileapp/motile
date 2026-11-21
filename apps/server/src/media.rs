@@ -46,6 +46,17 @@ pub fn compact_shown(bytes: Vec<u8>) -> Vec<u8> {
     compacted
 }
 
+/// An image's width and height in pixels; an SVG's as it asks to be drawn.
+fn dimensions(path: &Path) -> Option<(u32, u32)> {
+    if path.extension().is_some_and(|extension| extension == "svg") {
+        let tree = usvg::Tree::from_data(&std::fs::read(path).ok()?, &usvg::Options::default()).ok()?;
+        let size = tree.size();
+        return Some((size.width().ceil() as u32, size.height().ceil() as u32));
+    }
+    let dimensions = imagesize::size(path).ok()?;
+    Some((u32::try_from(dimensions.width).ok()?, u32::try_from(dimensions.height).ok()?))
+}
+
 #[derive(Clone)]
 pub struct MediaStore {
     folder: PathBuf,
@@ -135,15 +146,14 @@ impl MediaStore {
             return Some(media);
         }
         // A file that only has an image's name isn't shown as one.
-        let Ok(dimensions) = imagesize::size(self.folder.join(&media.id)) else {
+        let Some((width, height)) = dimensions(&self.folder.join(&media.id)) else {
             if any_file {
                 return Some(Media { file: true, ..media });
             }
             self.remove(&media.id);
             return None;
         };
-        let (width, height) = (u32::try_from(dimensions.width).ok(), u32::try_from(dimensions.height).ok());
-        Some(Media { width, height, ..media })
+        Some(Media { width: Some(width), height: Some(height), ..media })
     }
 
     /// The file a reply's image points at, if it is one on this machine.
@@ -437,6 +447,25 @@ mod tests {
         assert_eq!(std::fs::read(dir.path().join("media").join(&captured[0].id)).unwrap(), png(10, 20));
         assert_eq!(std::fs::read(dir.path().join("media").join(&captured[3].id)).unwrap(), b"a report");
         assert_eq!(std::fs::read_dir(dir.path().join("media")).unwrap().count(), 5);
+    }
+
+    #[test]
+    fn an_svg_is_shown_at_the_size_it_asks_for_and_a_broken_one_is_sent() {
+        let dir = tempfile::tempdir().unwrap();
+        let (store, cwd) = store(&dir);
+        let logo =
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 12"><rect width="24" height="12"/></svg>"#;
+        let sized = r#"<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150" viewBox="0 0 2 1"/>"#;
+        std::fs::write(dir.path().join("project/logo.svg"), logo).unwrap();
+        std::fs::write(dir.path().join("project/sized.svg"), sized).unwrap();
+        std::fs::write(dir.path().join("project/broken.svg"), "not an svg").unwrap();
+
+        let captured = store.capture_new("![a](logo.svg) ![b](sized.svg) ![c](broken.svg)", &cwd, &[]);
+
+        let shown: Vec<(bool, Option<u32>, Option<u32>)> =
+            captured.iter().map(|media| (media.file, media.width, media.height)).collect();
+        assert_eq!(shown, vec![(false, Some(24), Some(12)), (false, Some(300), Some(150)), (true, None, None)]);
+        assert!(captured[0].id.ends_with(".svg"));
     }
 
     #[test]

@@ -66,9 +66,19 @@ enum Pictures {
         cache.object(forKey: id as NSString)
     }
 
-    /// Calls `done` on the main thread with the image, no larger than `maxPixels` on a side.
+    /// Calls `done` on the main thread with the image, no larger than `maxPixels` on a side. An SVG
+    /// is drawn that large, up to `svgMaxPixels`.
     static func decode(_ file: URL, id: String, maxPixels: CGFloat, done: @escaping (CGImage?) -> Void) {
+        let finish = { (image: CGImage?) in
+            if let image {
+                cache.setObject(image, forKey: id as NSString, cost: image.bytesPerRow * image.height)
+            }
+            DispatchQueue.main.async { done(image) }
+        }
         decoding.async {
+            guard file.pathExtension.lowercased() != "svg" else {
+                return drawSVG(file, side: min(maxPixels, svgMaxPixels), done: finish)
+            }
             let options: [CFString: Any] = [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceCreateThumbnailWithTransform: true,
@@ -76,12 +86,33 @@ enum Pictures {
                 kCGImageSourceThumbnailMaxPixelSize: maxPixels,
             ]
             let source = CGImageSourceCreateWithURL(file as CFURL, nil)
-            let image = source.flatMap { CGImageSourceCreateThumbnailAtIndex($0, 0, options as CFDictionary) }
-            if let image {
-                cache.setObject(image, forKey: id as NSString, cost: image.bytesPerRow * image.height)
-            }
-            DispatchQueue.main.async { done(image) }
+            finish(source.flatMap { CGImageSourceCreateThumbnailAtIndex($0, 0, options as CFDictionary) })
         }
+    }
+
+    /// How large an SVG is drawn at most, on its longer side.
+    private static let svgMaxPixels: CGFloat = 4096
+
+    /// The SVG drawn `side` pixels on its longer side.
+    private static func drawSVG(_ file: URL, side: CGFloat, done: @escaping (CGImage?) -> Void) {
+        #if os(macOS)
+        guard let svg = NSImage(contentsOf: file), svg.size.width > 0, svg.size.height > 0 else { return done(nil) }
+        let scale = side / max(svg.size.width, svg.size.height)
+        let (width, height) = (max(1, Int((svg.size.width * scale).rounded())), max(1, Int((svg.size.height * scale).rounded())))
+        guard let canvas = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return done(nil) }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(cgContext: canvas, flipped: false)
+        NSGraphicsContext.current?.imageInterpolation = .high
+        svg.draw(in: NSRect(x: 0, y: 0, width: width, height: height))
+        NSGraphicsContext.restoreGraphicsState()
+        done(canvas.makeImage())
+        #else
+        guard let data = try? Data(contentsOf: file) else { return done(nil) }
+        Task { @MainActor in done(await SVGImage.image(of: data, side: side)?.cgImage) }
+        #endif
     }
 
     /// Calls `done` on the main thread with the first frame of a video, no larger than `maxPixels`

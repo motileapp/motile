@@ -2494,7 +2494,7 @@ pub enum FileKind {
 impl FileKind {
     /// What a file is shown as by its name, when that is an image or a video.
     pub fn shown(path: &str) -> Option<FileKind> {
-        const IMAGES: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "heic", "bmp", "tiff", "ico"];
+        const IMAGES: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "heic", "bmp", "tiff", "ico", "svg"];
         let extension = std::path::Path::new(path).extension()?.to_str()?.to_lowercase();
         match extension.as_str() {
             image if IMAGES.contains(&image) => Some(FileKind::Image),
