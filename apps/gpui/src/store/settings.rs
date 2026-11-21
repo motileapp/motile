@@ -1,6 +1,7 @@
 //! The settings open over the window: which section, the group a search picked, and what the
 //! settings change on the servers.
 
+use motile_core::all_servers::AllServersView;
 use motile_core::api::Command;
 use motile_protocol::wire::{AgentAccount, Bucket, ContinueSettings, PullRequestSettings, Request};
 
@@ -276,6 +277,20 @@ impl Store {
     /// Lets the server's agents see and use the apps on its screen, from each agent's next start.
     pub fn set_computer_use(&mut self, enabled: bool, server: &Server) {
         let command = Command::SetComputerUse { server_id: server.id.clone(), enabled };
+        self.ask(command, |store, result, _| {
+            if let Err(error) = result {
+                store.fail(error);
+            }
+        });
+    }
+
+    /// The settings every server of the account has on, those linked later too.
+    pub fn set_all_servers(&mut self, settings: AllServersView) {
+        let command = Command::SetAllServers {
+            continue_after_limits: settings.continue_after_limits,
+            continue_after_restarts: settings.continue_after_restarts,
+            computer_use: settings.computer_use,
+        };
         self.ask(command, |store, result, _| {
             if let Err(error) = result {
                 store.fail(error);

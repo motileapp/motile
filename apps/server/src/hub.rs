@@ -19,13 +19,13 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use motile_protocol::gateway_wire::{AccountStatus, GatewayAccount};
 use motile_protocol::wire::{
-    AccountSkills, ActionRecord, Activity, Actor, ActorKind, Agent, AgentAccount, AgentLimits, AgentNotice, Approval,
-    BackupState, BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContextUsed, ContinueSettings, CopiedThread,
-    DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus, HandoffEnd, Interruption, Item, ItemKind, Media,
-    MergeMethod, Message, ModelInfo, NewThread, NoticeEvent, OriginActivity, OriginUsage, PLAN_TOOL, Project,
-    PullRequest, PullRequestAction, QUESTION_TOOL, Queued, Request, RunsOn, ServerInfo, ServerReason, ServerUpdate,
-    SkillMention, Subagent, Thread, ThreadChange, ThreadParent, ToolCall, ToolStatus, TurnChanges, TurnOutcome,
-    TurnStarter, TurnSummary, Worktree,
+    AccountSkills, ActionRecord, Activity, Actor, ActorKind, Agent, AgentAccount, AgentLimits, AgentNotice, AllServers,
+    Approval, BackupState, BranchInstructions, CONTINUE_PROMPT, ChangedFile, ContextUsed, ContinueSettings,
+    CopiedThread, DiffScope, FileKind, GitAction, GitHubState, GitStage, GitStatus, HandoffEnd, Interruption, Item,
+    ItemKind, Media, MergeMethod, Message, ModelInfo, NewThread, NoticeEvent, OriginActivity, OriginUsage, PLAN_TOOL,
+    Project, PullRequest, PullRequestAction, QUESTION_TOOL, Queued, Request, RunsOn, ServerInfo, ServerReason,
+    ServerUpdate, SkillMention, Subagent, Thread, ThreadChange, ThreadParent, ToolCall, ToolStatus, TurnChanges,
+    TurnOutcome, TurnStarter, TurnSummary, Worktree,
 };
 use motile_protocol::{error_text, now};
 use serde_json::Value;
@@ -90,6 +90,7 @@ const BRANCH_INSTRUCTIONS: &str = "branch_instructions";
 const CONTINUE_AFTER_LIMITS: &str = "continue_after_limits";
 const CONTINUE_AFTER_RESTARTS: &str = "continue_after_restarts";
 const COMPUTER_USE: &str = "computer_use";
+const ALL_SERVERS: &str = "all_servers";
 /// Set while the server restarts after its agents were stopped for it, whatever the settings say.
 const CONTINUE_AFTER_THIS_RESTART: &str = "continue_after_this_restart";
 /// How long a stopped agent has to save its session before it is killed.
@@ -748,6 +749,7 @@ impl Hub {
             update: *self.update.lock().unwrap_or_else(|poisoned| poisoned.into_inner()),
             backup: self.backup.lock().unwrap_or_else(|poisoned| poisoned.into_inner()).clone(),
             computer_use: Some(self.computer_use.info()),
+            all_servers: Some(self.all_servers()),
         }
     }
 
@@ -1141,6 +1143,20 @@ impl Hub {
     pub fn set_computer_use(&self, enabled: bool) -> anyhow::Result<()> {
         self.store.set_setting(COMPUTER_USE, Some(if enabled { "true" } else { "false" }))?;
         self.computer_use.set_enabled(enabled);
+        self.announce_server();
+        Ok(())
+    }
+
+    fn all_servers(&self) -> AllServers {
+        self.store.setting(ALL_SERVERS).and_then(|kept| serde_json::from_str(&kept).ok()).unwrap_or_default()
+    }
+
+    /// Keeps the settings every server has on, unless the server already has a newer copy.
+    pub fn set_all_servers(&self, settings: AllServers) -> anyhow::Result<()> {
+        if settings.changed_at <= self.all_servers().changed_at {
+            return Ok(());
+        }
+        self.store.set_setting(ALL_SERVERS, Some(&serde_json::to_string(&settings)?))?;
         self.announce_server();
         Ok(())
     }

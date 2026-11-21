@@ -6,6 +6,7 @@ use std::rc::Rc;
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+use motile_core::all_servers::AllServersView;
 use motile_core::api::{SyncState, SyncView};
 use motile_core::link::State;
 use motile_protocol::wire::{Agent, AgentAccount, ContinueSettings, PullRequestSettings};
@@ -542,26 +543,40 @@ impl SettingsPage {
         if servers.is_empty() {
             return Vec::new();
         }
-        let limits = self.switch_rows(
+        let mut limits = self.all_servers_row(
+            "continue-limits-all",
+            |all| all.continue_after_limits,
+            |all, on| all.continue_after_limits = on,
+            cx,
+        );
+        limits.extend(self.switch_rows(
             "continue-limits",
             &servers,
+            self.store.read(cx).all_servers.continue_after_limits,
             |server| server.continue_settings.after_limits,
             |store, server, on| {
                 let settings = ContinueSettings { after_limits: on, ..server.continue_settings };
                 store.set_continue_settings(settings, server)
             },
             cx,
+        ));
+        let mut restarts = self.all_servers_row(
+            "continue-restarts-all",
+            |all| all.continue_after_restarts,
+            |all, on| all.continue_after_restarts = on,
+            cx,
         );
-        let restarts = self.switch_rows(
+        restarts.extend(self.switch_rows(
             "continue-restarts",
             &servers,
+            self.store.read(cx).all_servers.continue_after_restarts,
             |server| server.continue_settings.after_restarts,
             |store, server, on| {
                 let settings = ContinueSettings { after_restarts: on, ..server.continue_settings };
                 store.set_continue_settings(settings, server)
             },
             cx,
-        );
+        ));
         vec![
             group(
                 "continue-limits",
@@ -595,16 +610,20 @@ impl SettingsPage {
         if servers.is_empty() {
             return None;
         }
-        let mut rows = Vec::new();
+        let all = self.store.read(cx).all_servers.computer_use;
+        let mut rows =
+            self.all_servers_row("computer-use-all", |all| all.computer_use, |all, on| all.computer_use = on, cx);
         for (index, server) in servers.iter().enumerate() {
             let Some(computer_use) = &server.computer_use else { continue };
             let (store, changed) = (self.store.clone(), server.clone());
-            let switch = Switch::new(("computer-use", index), computer_use.enabled).on_change(move |on, _, cx| {
-                store.update(cx, |store, cx| {
-                    store.set_computer_use(on, &changed);
-                    cx.notify();
-                })
-            });
+            let switch = Switch::new(("computer-use", index), all || computer_use.enabled).disabled(all).on_change(
+                move |on, _, cx| {
+                    store.update(cx, |store, cx| {
+                        store.set_computer_use(on, &changed);
+                        cx.notify();
+                    })
+                },
+            );
             let name = label(server.name.clone(), computer_use.problem.clone(), Some("server"), Cut::Wraps, cx);
             rows.push(switch_row(vec![name], switch).into_any_element());
             if index + 1 < servers.len() {
@@ -615,11 +634,39 @@ impl SettingsPage {
         Some(group("computer-use", "Computer use", Some(caption), true, rows, cx))
     }
 
-    /// A row with a switch for each server, divided.
+    /// The row that turns a setting on for every server, those linked later too, and its divider.
+    /// None while no server can keep it.
+    fn all_servers_row(
+        &self,
+        id: &'static str,
+        on: fn(&AllServersView) -> bool,
+        set: fn(&mut AllServersView, bool),
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let all = self.store.read(cx).all_servers;
+        if !all.available {
+            return Vec::new();
+        }
+        let store = self.store.clone();
+        let switch = Switch::new(id, on(&all)).on_change(move |on, _, cx| {
+            store.update(cx, |store, cx| {
+                let mut settings = store.all_servers;
+                set(&mut settings, on);
+                store.set_all_servers(settings);
+                cx.notify();
+            })
+        });
+        let name = label("All Servers", None, None, Cut::Wraps, cx);
+        vec![switch_row(vec![name], switch).into_any_element(), divider_on(Surface::Card, cx).into_any_element()]
+    }
+
+    /// A row with a switch for each server, divided. While `all` is on, every switch is on and
+    /// can't be turned off.
     fn switch_rows(
         &self,
         id: &'static str,
         servers: &[Server],
+        all: bool,
         on: fn(&Server) -> bool,
         change: fn(&mut Store, &Server, bool),
         cx: &mut Context<Self>,
@@ -627,7 +674,7 @@ impl SettingsPage {
         let mut rows = Vec::new();
         for (index, server) in servers.iter().enumerate() {
             let (store, changed) = (self.store.clone(), server.clone());
-            let switch = Switch::new((id, index), on(server)).on_change(move |on, _, cx| {
+            let switch = Switch::new((id, index), all || on(server)).disabled(all).on_change(move |on, _, cx| {
                 store.update(cx, |store, cx| {
                     change(store, &changed, on);
                     cx.notify();
@@ -903,6 +950,7 @@ impl SettingsPage {
         let merged = self.switch_rows(
             "done-on-merge",
             &servers,
+            false,
             |server| server.pull_request_settings.done_on_merge,
             |store, server, on| {
                 let settings = PullRequestSettings { done_on_merge: on, ..server.pull_request_settings };
@@ -913,6 +961,7 @@ impl SettingsPage {
         let worktrees = self.switch_rows(
             "remove-merged-worktrees",
             &servers,
+            false,
             |server| server.pull_request_settings.remove_merged_worktrees,
             |store, server, on| {
                 let settings = PullRequestSettings { remove_merged_worktrees: on, ..server.pull_request_settings };
@@ -929,6 +978,7 @@ impl SettingsPage {
             let rows = self.switch_rows(
                 "pull-default-branch",
                 &pulling,
+                false,
                 |server| server.pull_request_settings.pull_default_branch,
                 |store, server, on| {
                     let settings = PullRequestSettings { pull_default_branch: on, ..server.pull_request_settings };

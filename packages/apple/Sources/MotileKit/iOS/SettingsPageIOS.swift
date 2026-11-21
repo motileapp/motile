@@ -231,7 +231,7 @@ struct SettingsPage: View {
         let continuing = store.servers.filter { $0.state == .connected && store.canChooseRestart($0) }
         if !continuing.isEmpty {
             SettingsToggles(
-                "Continue after usage limits", servers: continuing,
+                "Continue after usage limits", servers: continuing, all: allServers(\.continueAfterLimits),
                 caption: "A thread whose agent reached its usage limit goes on once the limit resets."
             ) { server in
                 Binding { server.continueAfterLimits } set: {
@@ -240,7 +240,7 @@ struct SettingsPage: View {
             }
             .id("continue-limits")
             SettingsToggles(
-                "Continue after restarts", servers: continuing,
+                "Continue after restarts", servers: continuing, all: allServers(\.continueAfterRestarts),
                 caption: "When your server comes back from a restart, agents that were working carry on."
             ) { server in
                 Binding { server.continueAfterRestarts } set: {
@@ -252,8 +252,12 @@ struct SettingsPage: View {
         let computerUse = store.servers.filter { $0.state == .connected && $0.computerUse != nil }
         if !computerUse.isEmpty {
             Section {
+                let all = store.allServers.computerUse
+                if let everyServer = allServers(\.computerUse) {
+                    Toggle("All Servers", isOn: everyServer)
+                }
                 ForEach(computerUse) { server in
-                    Toggle(isOn: Binding { server.computerUse?.enabled ?? false } set: { store.setComputerUse($0, on: server) }) {
+                    Toggle(isOn: Binding { all || server.computerUse?.enabled == true } set: { store.setComputerUse($0, on: server) }) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(server.name)
                             if let problem = server.computerUse?.problem {
@@ -263,6 +267,7 @@ struct SettingsPage: View {
                             }
                         }
                     }
+                    .disabled(all)
                 }
             } header: {
                 Text("Computer use")
@@ -285,6 +290,16 @@ struct SettingsPage: View {
                 }
             }
             .id("removed-servers")
+        }
+    }
+
+    /// Turns the setting on for every server, those linked later too; nil while no server can keep it.
+    private func allServers(_ setting: WritableKeyPath<AllServers, Bool>) -> Binding<Bool>? {
+        guard store.allServers.available else { return nil }
+        return Binding { store.allServers[keyPath: setting] } set: {
+            var settings = store.allServers
+            settings[keyPath: setting] = $0
+            store.setAllServers(settings)
         }
     }
 
@@ -862,19 +877,31 @@ extension SettingsItem where Footer == EmptyView {
 private struct SettingsToggles: View {
     let title: String
     let servers: [Server]
+    /// Turns it on for every server, those linked later too; nil while no server can keep it.
+    var all: Binding<Bool>?
     var caption: String?
     let isOn: (Server) -> Binding<Bool>
 
-    init(_ title: String, servers: [Server], caption: String? = nil, isOn: @escaping (Server) -> Binding<Bool>) {
+    init(
+        _ title: String, servers: [Server], all: Binding<Bool>? = nil, caption: String? = nil,
+        isOn: @escaping (Server) -> Binding<Bool>
+    ) {
         self.title = title
         self.servers = servers
+        self.all = all
         self.caption = caption
         self.isOn = isOn
     }
 
     var body: some View {
         Section {
-            if servers.count == 1, let server = servers.first {
+            if let all {
+                Toggle("All Servers", isOn: all)
+                ForEach(servers) { server in
+                    Toggle(server.name, isOn: all.wrappedValue ? .constant(true) : isOn(server))
+                        .disabled(all.wrappedValue)
+                }
+            } else if servers.count == 1, let server = servers.first {
                 Toggle(title, isOn: isOn(server))
             } else {
                 ForEach(servers) { server in
@@ -882,7 +909,7 @@ private struct SettingsToggles: View {
                 }
             }
         } header: {
-            if servers.count > 1 { Text(title) }
+            if servers.count > 1 || all != nil { Text(title) }
         } footer: {
             if let caption { Text(caption).foregroundStyle(Color.themeMutedForeground) }
         }

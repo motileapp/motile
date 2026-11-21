@@ -492,6 +492,12 @@ pub enum Command {
         server_id: String,
         enabled: bool,
     },
+    /// The settings every server of the account has on, those linked later too.
+    SetAllServers {
+        continue_after_limits: bool,
+        continue_after_restarts: bool,
+        computer_use: bool,
+    },
     /// Says how the server's writer names the branches it makes. Without `instructions` the
     /// server goes back to its own.
     SetBranchInstructions {
@@ -770,6 +776,10 @@ pub enum Event {
     /// The account's backup, which follows `Servers`.
     Backup {
         backup: BackupView,
+    },
+    /// The settings every server has on, which follow `Servers`.
+    AllServers {
+        all_servers: crate::all_servers::AllServersView,
     },
     /// All of a server's threads, replacing what the client had for it.
     Threads {

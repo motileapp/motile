@@ -323,10 +323,10 @@ fun SettingsLabeled(title: String, value: @Composable () -> Unit) {
 }
 
 @Composable
-fun SettingsToggle(title: String, isOn: Boolean, onChange: (Boolean) -> Unit) {
+fun SettingsToggle(title: String, isOn: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     SettingsRow {
         RowText(title, Modifier.weight(1f))
-        Switch(isOn, onChange)
+        Switch(isOn, onChange, enabled = enabled)
     }
 }
 

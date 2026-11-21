@@ -397,6 +397,22 @@ data class ServerSync(
 }
 
 /** The account's S3 bucket, which every server backs up to and syncs through. */
+/** The settings every server of the account has on, those linked later too. */
+data class AllServers(
+    /** Some server can keep them; servers too old to don't. */
+    val available: Boolean = false,
+    val continueAfterLimits: Boolean = false,
+    val continueAfterRestarts: Boolean = false,
+    val computerUse: Boolean = false,
+) {
+    constructor(json: JSON) : this(
+        json.bool("available"),
+        json.bool("continue_after_limits"),
+        json.bool("continue_after_restarts"),
+        json.bool("computer_use"),
+    )
+}
+
 data class Backup(
     /** Null while there is no backup. Its secret is empty unless this device keeps the keys. */
     val bucket: BackupBucket? = null,
