@@ -126,6 +126,7 @@ object DemoDriver {
             "new" -> store.startNewThread(store.composerProject ?: store.projects.firstOrNull())
             "continue" -> store.continueOnAnotherServer()
             "type" -> store.draft = rest
+            "attach" -> store.attach(rest.split(' ').map { File(it) })
             "send" -> store.send()
             "stop" -> store.stop()
             "agent" -> {

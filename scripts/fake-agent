@@ -29,6 +29,7 @@ reply made up on the spot instead:
   one that takes several, and says what it was told.
 - "plan the hello": a turn that presents a plan and, once that is approved, carries it out.
 - "show the screenshot": a turn that writes `screenshot.png` in its folder, reads it, and shows it in the reply.
+- "show the logo": a turn that writes `logo.svg` in its folder and shows it in the reply.
 - "send the report": a turn that writes `signups.csv` in its folder and sends it in the reply.
 - "use the calculator": a turn that works out 12 × 7 in Calculator through the computer use
   driver's tools, the second of which shows a screenshot.
@@ -533,6 +534,8 @@ def title_answer():
         title = "Watch the Deploy"
     if "show the screenshot" in message:
         title = "Screenshot of the Landing Page"
+    if "show the logo" in message:
+        title = "The New Logo"
     if "show the ui html" in message:
         title = "Catch the Dot"
     if "show the ui map" in message:
@@ -1305,6 +1308,26 @@ def show_screenshot():
     turn.done()
 
 
+LOGO = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160">
+  <defs><linearGradient id="dusk" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff8a3d"/><stop offset="1" stop-color="#e0335a"/></linearGradient></defs>
+  <rect x="8" y="8" width="144" height="144" rx="32" fill="url(#dusk)"/>
+  <path d="M40 120 L68 56 L90 98 L106 74 L124 120 Z" fill="#fff"/>
+  <circle cx="114" cy="48" r="12" fill="#fff"/>
+  <text x="176" y="96" font-family="Helvetica, Arial, sans-serif" font-size="40" font-weight="700" fill="#e0335a">peak</text>
+</svg>
+"""
+
+
+def show_the_logo():
+    turn = Turn("00000000-0000-4000-8000-0000000005c9")
+    path = os.path.join(os.getcwd(), "logo.svg")
+    with open(path, "w") as f:
+        f.write(LOGO)
+    turn.tool("Write", {"file_path": path, "content": LOGO}, f"File created successfully at: {path}", seconds=0.1)
+    turn.text(f"Here is the new logo:\n\n![The logo]({path})\n\nIt is an SVG, so it stays sharp at any size.")
+    turn.done()
+
+
 def use_the_calculator():
     turn = Turn("00000000-0000-4000-8000-0000000ca1c0")
     driver = "mcp__cua-driver__"
@@ -1826,6 +1849,7 @@ SCRIPTED = {
     "ask a few questions": ask_a_few_questions,
     "change the settings": change_the_settings,
     "show the screenshot": show_screenshot,
+    "show the logo": show_the_logo,
     "send the report": send_the_report,
     "use the calculator": use_the_calculator,
     "show the recording": show_the_recording,

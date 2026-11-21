@@ -7,7 +7,7 @@ use std::ops::Range;
 use pulldown_cmark::{Event, Options, Parser, Tag};
 use sha2::{Digest, Sha256};
 
-pub const IMAGES: [&str; 5] = ["png", "jpg", "jpeg", "gif", "webp"];
+pub const IMAGES: [&str; 6] = ["png", "jpg", "jpeg", "gif", "webp", "svg"];
 pub const VIDEOS: [&str; 4] = ["mp4", "mov", "m4v", "webm"];
 pub const MAX_SIZE: u64 = 200 * 1024 * 1024;
 const HASH_LENGTH: usize = 64;

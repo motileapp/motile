@@ -68,9 +68,11 @@ fn tile(attachment: &Attachment, store: Entity<Store>, open: Rc<OnClick>, cx: &m
                 false => Pictures::load_file(&key, file, max_pixels, cx),
             };
             match picture {
+                // The tile's own shape, which GPUI would otherwise take from the image.
                 Picture::Ready(shown) => Some(
                     img(ImageSource::Render(shown.image))
                         .size(px(TILE))
+                        .aspect_ratio(1.)
                         .object_fit(ObjectFit::Contain)
                         .into_any_element(),
                 ),
