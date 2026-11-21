@@ -17,8 +17,10 @@ const MAX_SERIES: usize = 8;
 const DEFAULT_HEIGHT: f64 = 240.0;
 const TOP: f64 = 10.0;
 const BOTTOM: f64 = 26.0;
-/// How far a tooltip's centre keeps from the plot's ends.
-const TIP_INSET: f64 = 70.0;
+/// How far a tooltip keeps from what it tells of.
+const TIP_GAP: f64 = 10.0;
+/// How far above a point's centre a tooltip beside it starts, so that its title lines up with it.
+const TIP_RISE: f64 = 19.0;
 /// Up to this many rows a line shows a dot on each.
 const DOTTED_ROWS: usize = 16;
 
@@ -278,9 +280,12 @@ fn dot(cx: f64, cy: f64, r: f64, color: Color) -> Item {
     }
 }
 
-/// `Math.min(Math.max(x, 70), width - 70)`.
-fn tip_x(x: f64, width: f64) -> f64 {
-    x.max(TIP_INSET).min(width - TIP_INSET)
+/// A tooltip beside what spans `reach` either side of `x`, on the side of the scene with more room,
+/// its top at `y`.
+fn tip(x: f64, reach: f64, y: f64, width: f64, title: String, rows: Vec<TipRow>) -> Tip {
+    let left = x > width / 2.0;
+    let edge = if left { x - reach - TIP_GAP } else { x + reach + TIP_GAP };
+    Tip { x: round(edge), y: round(y.max(0.0)), left, title, rows }
 }
 
 /// The end of a bar away from its baseline, the only one that is rounded.
@@ -481,7 +486,14 @@ fn cartesian(spec: &Spec, width: f64) -> Scene {
                 },
                 at,
                 lit,
-                tip: Tip { x: round(tip_x(x_at(i), width)), y: round(TOP), title: spec.label(rows[i]), rows: rows_ },
+                tip: tip(
+                    x_at(i),
+                    if *kind == Kind::Bar { band / 2.0 } else { 0.0 },
+                    TOP,
+                    width,
+                    spec.label(rows[i]),
+                    rows_,
+                ),
             }
         })
         .collect();
@@ -603,11 +615,13 @@ fn scatter(spec: &Spec, width: f64) -> Scene {
                 region: Region::Circle { cx: round(cx), cy: round(cy), r: 5.0 },
                 at: 0,
                 lit: vec![point(cx, cy, 6.5, si)],
-                tip: Tip {
-                    x: round(tip_x(cx, width)),
-                    y: round((cy - 70.0).max(0.0)),
+                tip: tip(
+                    cx,
+                    6.5,
+                    cy - TIP_RISE,
+                    width,
                     title,
-                    rows: vec![
+                    vec![
                         TipRow { color: None, name: x.clone(), value: x_value },
                         TipRow {
                             color: Some(series_color(si)),
@@ -615,7 +629,7 @@ fn scatter(spec: &Spec, width: f64) -> Scene {
                             value: format.write(num(row.get(key)), false),
                         },
                     ],
-                },
+                ),
             });
         }
     }
@@ -712,12 +726,14 @@ fn pie(spec: &Spec, width: f64) -> Scene {
             },
             at: 0,
             lit: Vec::new(),
-            tip: Tip {
-                x: round(r + reach * middle.cos()),
-                y: round(r + reach * middle.sin()),
-                title: format!("{label}: {}", spec.format.write(*value, false)),
-                rows: Vec::new(),
-            },
+            tip: tip(
+                r + reach * middle.cos(),
+                0.0,
+                r + reach * middle.sin() - TIP_RISE,
+                size,
+                format!("{label}: {}", spec.format.write(*value, false)),
+                Vec::new(),
+            ),
         });
     }
     let count = shapes.len() as u32;

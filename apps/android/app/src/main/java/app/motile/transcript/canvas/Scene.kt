@@ -207,8 +207,11 @@ class SceneHit(val region: Region, val at: Int, val lit: List<SceneItem>, val ti
         }
     }
 
-    /** A tooltip, centred on `x` with its top at `y`: its title, then a row for each value. */
-    class Tip(val x: Float, val y: Float, val title: String, val rows: List<Row>) {
+    /**
+     * A tooltip beside what it tells of, its top at `y` and its near edge at `x`: its right edge when
+     * it lies `left` of it, else its left edge. Its title, then a row for each value.
+     */
+    class Tip(val x: Float, val y: Float, val left: Boolean, val title: String, val rows: List<Row>) {
         class Row(val color: SceneColor?, val name: String, val value: String)
     }
 
@@ -222,7 +225,7 @@ class SceneHit(val region: Region, val at: Int, val lit: List<SceneItem>, val ti
             }
             val tip = json.obj("tip") ?: return null
             val rows = tip.objects("rows").map { Tip.Row(it["color"]?.let(SceneColor::of), it.string("name"), it.string("value")) }
-            return SceneHit(region, json.int("at"), json.objects("lit").mapNotNull(SceneItem::of), Tip(tip.float("x"), tip.float("y"), tip.string("title"), rows))
+            return SceneHit(region, json.int("at"), json.objects("lit").mapNotNull(SceneItem::of), Tip(tip.float("x"), tip.float("y"), tip.bool("left"), tip.string("title"), rows))
         }
     }
 }

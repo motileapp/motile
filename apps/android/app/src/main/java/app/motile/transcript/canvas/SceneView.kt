@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,11 +27,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.takeOrElse
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -56,6 +61,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 
@@ -70,6 +76,25 @@ object Canvases {
 
     suspend fun laidOut(kind: String, props: JsonObject, width: Float, textSize: Float, text: CanvasText): CanvasScene? =
         withContext(Dispatchers.Default) { layout(kind, props, width, textSize, text) }
+}
+
+/** The taps anywhere in the window, where they land in its root, which let go of the scenes they miss. */
+object SceneTaps {
+    val taps = MutableSharedFlow<Offset>(extraBufferCapacity = 1)
+}
+
+/** Tells [SceneTaps] of every tap on what it wraps, which should be the window's root, leaving the tap to what it lands on. */
+fun Modifier.watchingSceneTaps(): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        while (true) {
+            val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
+            if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) return@awaitEachGesture
+            if (change.pressed) continue
+            SceneTaps.taps.tryEmit(change.position)
+            return@awaitEachGesture
+        }
+    }
 }
 
 /** The text styles of the legend and the tooltip, as LAYOUT.md names them. */
@@ -151,8 +176,9 @@ private fun Density.pieDotTop(): Int = ((CanvasType.small.lineHeight.toPx() - Le
 /**
  * A canvas scene, laid out at the view's density, on the surface it lies in, with its legend:
  * `canvas.scene`'s size without one, the column's width with one, `sceneHeight` tall. A tap lights
- * the hit under it and shows its tooltip, a sideways drag moves it along, a tap elsewhere hides it;
- * an upward or downward drag is the transcript's. `current` is the text's colour around it.
+ * the hit under it and shows its tooltip, a sideways drag moves it along, a tap on it again or
+ * anywhere else hides it; an upward or downward drag is the transcript's. `current` is the text's
+ * colour around it.
  */
 @Composable
 fun SceneView(canvas: CanvasScene, modifier: Modifier = Modifier, current: Color = LocalForeground.current) {
@@ -183,7 +209,9 @@ fun SceneView(canvas: CanvasScene, modifier: Modifier = Modifier, current: Color
 private fun ScenePlot(canvas: CanvasScene, colors: SceneColors, modifier: Modifier = Modifier) {
     val scene = canvas.scene
     var lit by remember(canvas) { mutableStateOf<Int?>(null) }
-    Box(modifier.size(scene.width.dp, scene.height.dp)) {
+    var bounds by remember { mutableStateOf(Rect.Zero) }
+    LaunchedEffect(canvas) { SceneTaps.taps.collect { if (!bounds.contains(it)) lit = null } }
+    Box(modifier.size(scene.width.dp, scene.height.dp).onGloballyPositioned { bounds = it.boundsInRoot() }) {
         Canvas(
             Modifier
                 .size(scene.width.dp, scene.height.dp)
@@ -197,7 +225,7 @@ private fun ScenePlot(canvas: CanvasScene, colors: SceneColors, modifier: Modifi
                         while (true) {
                             val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: return@awaitEachGesture
                             if (!change.pressed) {
-                                if (!dragging) lit = at(change.position)
+                                if (!dragging) lit = at(change.position).takeIf { it != lit }
                                 return@awaitEachGesture
                             }
                             if (dragging) {
@@ -222,7 +250,7 @@ private fun ScenePlot(canvas: CanvasScene, colors: SceneColors, modifier: Modifi
     }
 }
 
-/** A hit's tooltip, in the popover's look, centred on its x with its top at its y, over the scene and beyond it, taking no presses. */
+/** A hit's tooltip, in the popover's look, beside what it tells of as [SceneHit.Tip] places it, over the scene and beyond it, taking no presses. */
 @Composable
 private fun Tooltip(tip: SceneHit.Tip, colors: SceneColors) {
     val palette = colors.palette
@@ -231,7 +259,8 @@ private fun Tooltip(tip: SceneHit.Tip, colors: SceneColors) {
             .zIndex(1f)
             .layout { measurable, _ ->
                 val placeable = measurable.measure(Constraints())
-                layout(0, 0) { placeable.place((tip.x.dp.toPx() - placeable.width / 2f).roundToInt(), tip.y.dp.roundToPx()) }
+                val x = tip.x.dp.roundToPx()
+                layout(0, 0) { placeable.place(if (tip.left) x - placeable.width else x, tip.y.dp.roundToPx()) }
             }
             .widthIn(min = 110.dp)
             .width(IntrinsicSize.Max),

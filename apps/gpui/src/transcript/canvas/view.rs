@@ -22,7 +22,7 @@ const TIP_DOT_GAP: f32 = 6.;
 const TIP_VALUE_GAP: f32 = 8.;
 const TIP_TEXT: TextSize = TextSize::Xs;
 const TIP_LINE: f32 = 18.;
-/// Half the room the tooltip is centred in, wider than any.
+/// The room beside its edge the tooltip lies in, wider than any.
 const TIP_ROOM: f32 = 600.;
 
 /// A scene as a component shows it, `width` wide (the column's, for a chart): with its legend,
@@ -144,8 +144,8 @@ fn arranged(
     state.read(cx).arrangement.clone()
 }
 
-/// The tooltip, centred on the tip's x with its top at its y, in the scene's points from where the
-/// scene lies in the view. It takes no input, so the pointer still moves over the scene under it.
+/// The tooltip beside what it tells of, its near edge at the tip's x and its top at its y, in the
+/// scene's points from where the scene lies in the view. It takes no input, so the pointer still moves over the scene under it.
 fn tooltip(tip: &Tip, scene_at: Point<Pixels>, palette: &Palette, cx: &App) -> Div {
     let c = palette.colors;
     let title = div().font_weight(FontWeight::SEMIBOLD).text_color(c.foreground).child(tip.title.clone());
@@ -180,13 +180,14 @@ fn tooltip(tip: &Tip, scene_at: Point<Pixels>, palette: &Palette, cx: &App) -> D
         .whitespace_nowrap()
         .child(title)
         .children(rows);
+    let room_left = if tip.left { tip.x - TIP_ROOM } else { tip.x };
     div()
         .absolute()
-        .left(scene_at.x + px(tip.x - TIP_ROOM))
+        .left(scene_at.x + px(room_left))
         .top(scene_at.y + px(tip.y))
-        .w(px(TIP_ROOM * 2.))
+        .w(px(TIP_ROOM))
         .flex()
-        .justify_center()
+        .when(tip.left, |room| room.justify_end())
         .items_start()
         .child(card)
 }

@@ -539,6 +539,8 @@ def title_answer():
         title = "San Francisco, Your Way"
     if "show the ui drones" in message:
         title = "The Drone Photography Market"
+    if "show the ui chart" in message:
+        title = "Drone Services Revenue"
     if "send the report" in message:
         title = "Weekly Signups Report"
     if "show the recording" in message:

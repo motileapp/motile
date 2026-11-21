@@ -555,6 +555,37 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(app.menuItems["Copy"].waitForExistence(timeout: 3))
     }
 
+    /// A tap on a program's chart shows the tooltip of the column under it, beside the column, and a
+    /// tap anywhere off the chart hides it. In a thread of its own, deleted after.
+    func testATapOffAProgramsChartHidesItsTooltip() {
+        addTeardownBlock { [self] in deleteThread("Drone Services Revenue") }
+        app.buttons["Threads"].tap()
+        XCTAssertTrue(shown(newThread))
+        newThread.tap()
+        send("show the ui chart")
+        let chart = app.images.matching(NSPredicate(format: "label BEGINSWITH %@", "bar chart")).firstMatch
+        XCTAssertTrue(chart.waitForExistence(timeout: 10))
+        for _ in 0..<4 where !chart.isHittable { app.swipeDown() }
+        XCTAssertTrue(shown(chart))
+        // Inside the tooltip of the last column, which lies left of it, where the chart is empty.
+        let inTip = CGPoint(x: chart.frame.maxX - 97, y: chart.frame.minY + 65)
+        let plain = pixel(at: inTip)
+        chart.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        sleep(1)
+        XCTAssertNotEqual(pixel(at: inTip), plain, "the tooltip shows")
+        chart.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0)).withOffset(CGVector(dx: 0, dy: -80)).tap()
+        sleep(1)
+        XCTAssertEqual(pixel(at: inTip), plain, "the tooltip is hidden")
+    }
+
+    /// The colour of the screen at a point of the app's, as red, green and blue.
+    private func pixel(at point: CGPoint) -> [UInt8] {
+        guard let image = app.screenshot().image.cgImage, let data = image.dataProvider?.data, let bytes = CFDataGetBytePtr(data) else { return [] }
+        let scale = CGFloat(image.width) / app.frame.width
+        let offset = Int(point.y * scale) * image.bytesPerRow + Int(point.x * scale) * image.bitsPerPixel / 8
+        return (0..<3).map { bytes[offset + $0] }
+    }
+
     func testATapBesideTheComposersTextBringsTheKeyboard() {
         let text = app.textViews.firstMatch
         XCTAssertTrue(text.waitForExistence(timeout: 10))
