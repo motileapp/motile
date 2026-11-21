@@ -535,7 +535,7 @@ struct SettingsPage: View {
 let settingsInset: CGFloat = 14
 /// How tall a list that keeps growing, as a log, is before it scrolls.
 let settingsListHeight: CGFloat = 420
-let settingsRowHeight: CGFloat = scaled(48)
+let settingsRowHeight: CGFloat = scaled(52)
 private let settingsRowSpacing: CGFloat = 10
 
 /// What stands a control this tall as far from its row's right as from its top and bottom.
@@ -753,7 +753,7 @@ struct SettingsRow<Leading: View, Trailing: View>: View {
     var body: some View {
         HStack(spacing: settingsRowSpacing) {
             leading
-                .padding(.vertical, scaled(8))
+                .padding(.vertical, scaled(10))
             Spacer(minLength: 12)
             HStack(spacing: edge) { controls(edge / 2) }
                 .padding(.trailing, edge - settingsInset)

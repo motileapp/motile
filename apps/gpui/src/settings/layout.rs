@@ -13,7 +13,7 @@ use crate::ui::{ActionMenu, Switch, card_default, icons};
 /// How far a group's rows stand from the card's sides.
 pub const INSET: f32 = 14.;
 /// How tall a row is at least.
-pub const ROW_HEIGHT: f32 = 48.;
+pub const ROW_HEIGHT: f32 = 52.;
 pub use crate::theme::CONTENT_WIDTH;
 /// The room around the page's groups, and under the last one.
 pub const PAGE_PADDING: f32 = 20.;
@@ -162,7 +162,8 @@ pub fn switch_row(leading: Vec<AnyElement>, switch: Switch) -> Div {
     row_with(leading, vec![switch.into_any_element()], row_outset(Switch::HEIGHT))
 }
 
-fn row_with(leading: Vec<AnyElement>, trailing: Vec<AnyElement>, outset: f32) -> Div {
+/// A row whose last control, `outset` past the row's inset, is as far from its right as from its top and bottom.
+pub fn row_with(leading: Vec<AnyElement>, trailing: Vec<AnyElement>, outset: f32) -> Div {
     div()
         .px(px(INSET))
         .min_h(px(ROW_HEIGHT))
@@ -173,7 +174,7 @@ fn row_with(leading: Vec<AnyElement>, trailing: Vec<AnyElement>, outset: f32) ->
             let last = leading.len().saturating_sub(1);
             leading.into_iter().enumerate().map(move |(index, part)| {
                 div()
-                    .py(px(8.))
+                    .py(px(10.))
                     .flex()
                     .map(|cell| if index == last { cell.flex_1().min_w_0() } else { cell.flex_shrink_0() })
                     .child(part)

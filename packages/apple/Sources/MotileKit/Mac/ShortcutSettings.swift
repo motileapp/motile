@@ -86,6 +86,9 @@ struct ShortcutSettings: View {
         }
     }
 
+    /// How far the warning's button stands from the card's top and right.
+    private static let edge = scaled(12)
+
     private func issues(_ issues: [String]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
@@ -95,7 +98,7 @@ struct ShortcutSettings: View {
                     .font(.ui(.sm, weight: .medium))
                 Spacer(minLength: 12)
                 ActionButton("Open", variant: .outline, size: .large) { store.openShortcutsFile() }
-                    .padding(.trailing, -rowOutset(for: ControlSize.large.height))
+                    .padding(.trailing, Self.edge - settingsInset)
             }
             ForEach(issues, id: \.self) { issue in
                 Text(issue)
@@ -105,7 +108,7 @@ struct ShortcutSettings: View {
             }
         }
         .padding(.horizontal, settingsInset)
-        .padding(.vertical, scaled(12))
+        .padding(.vertical, Self.edge)
         .card()
     }
 }

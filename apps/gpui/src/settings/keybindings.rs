@@ -9,8 +9,8 @@ use gpui_kit::*;
 use motile_core::keybindings::{Group, Row};
 
 use super::layout::{
-    END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, ROW_HEIGHT, TITLE_GAP, column, group, group_title, half_gap,
-    large_outset, note, spaced_row,
+    END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, ROW_HEIGHT, TITLE_GAP, column, group, group_title, half_gap, note,
+    spaced_row,
 };
 use crate::store::Store;
 use crate::store::shortcuts::ShortcutCheck;
@@ -30,6 +30,8 @@ const POPOVER_PRIORITY: usize = 50;
 const POPOVER_WIDTH: f32 = 420.;
 /// Room before a command's name and its condition in the new shortcut's row.
 const COMMAND_PADDING: f32 = 10.;
+/// How far the warning's button stands from the card's top and right.
+const ISSUES_EDGE: f32 = 12.;
 
 /// A shortcut being added: its command, its keys and its condition, kept once all are right.
 #[derive(Default)]
@@ -259,7 +261,7 @@ impl KeybindingsPage {
     fn issues(&self, issues: &[String], cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
         let store = self.store.clone();
-        card_default(div().px(px(INSET)).py(px(12.)).flex().flex_col().gap(px(8.)), cx)
+        card_default(div().px(px(INSET)).py(px(ISSUES_EDGE)).flex().flex_col().gap(px(8.)), cx)
             .child(
                 div()
                     .flex()
@@ -274,7 +276,7 @@ impl KeybindingsPage {
                             .child("Some of keybindings.json is skipped"),
                     )
                     .child(
-                        div().ml(px(12.)).mr(px(-large_outset())).child(
+                        div().ml(px(12.)).mr(px(ISSUES_EDGE - INSET)).child(
                             ActionButton::new("open-issues", "Open")
                                 .outline()
                                 .large()

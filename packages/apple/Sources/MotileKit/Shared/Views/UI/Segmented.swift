@@ -7,6 +7,8 @@ struct Segmented<Value: Hashable>: View {
     /// How far a choice's light stands from the track's border, and from the next one's.
     static var inset: CGFloat { 2 }
     static var border: CGFloat { 1 }
+    /// How tall its track is around choices of this size.
+    static func height(for size: ControlSize) -> CGFloat { size.height + 2 * (inset + border) }
     /// The track of a compact one, which lies in a dropdown, is as round as the dropdown's
     /// corners, and its choices' lights round to follow it.
     static var compactRadius: CGFloat { Radius.md }

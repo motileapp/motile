@@ -103,31 +103,39 @@ struct McpServerToolRow: View {
     let tool: McpServerTool
 
     var body: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(tool.title)
-                    .font(.ui(.sm))
-                    .foregroundStyle(Color.themeForeground)
-                    .lineLimit(1)
-                if let summary = tool.summary {
-                    Text(summary)
-                        .font(.ui(.xs))
-                        .foregroundStyle(Color.themeMutedForeground)
-                        .lineLimit(1)
-                }
-            }
-            .opacity(.disabled, when: tool.permission == .block)
-            Spacer(minLength: 8)
-            #if os(macOS)
+        #if os(macOS)
+        SettingsRow(control: Segmented<McpToolPermission>.height(for: .small)) {
+            label
+        } trailing: {
             Segmented(
                 symbols: McpToolPermission.allCases.map { ($0.title, $0.symbol, $0) },
                 selection: Binding { tool.permission } set: { store.setMcpServerTool(mcpServer, tool, to: $0) },
                 size: .small
             )
-            #else
-            McpPermissionMenu(permission: tool.permission, wordless: true) { store.setMcpServerTool(mcpServer, tool, to: $0) }
-            #endif
         }
+        #else
+        HStack(spacing: 10) {
+            label
+            Spacer(minLength: 8)
+            McpPermissionMenu(permission: tool.permission, wordless: true) { store.setMcpServerTool(mcpServer, tool, to: $0) }
+        }
+        #endif
+    }
+
+    private var label: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(tool.title)
+                .font(.ui(.sm))
+                .foregroundStyle(Color.themeForeground)
+                .lineLimit(1)
+            if let summary = tool.summary {
+                Text(summary)
+                    .font(.ui(.xs))
+                    .foregroundStyle(Color.themeMutedForeground)
+                    .lineLimit(1)
+            }
+        }
+        .opacity(.disabled, when: tool.permission == .block)
     }
 }
 
