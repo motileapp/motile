@@ -371,7 +371,7 @@ fun ControlLabel(
     val trailing = if (wordless) 0.dp else sidePadding - (if (chevron) size.chevronOutset else 0.dp)
     val width = if (fills) Modifier.fillMaxWidth() else Modifier
     val pictureSide = symbolSide(markSize)
-    Box(modifier.height(size.height).widthIn(min = size.height).then(width), contentAlignment = Alignment.Center) {
+    Box(modifier.boundedWidth().height(size.height).widthIn(min = size.height).then(width), contentAlignment = Alignment.Center) {
         Row(
             Modifier.then(width).padding(start = leading, end = trailing),
             horizontalArrangement = Arrangement.spacedBy(size.gap, alignment),
@@ -390,6 +390,13 @@ fun ControlLabel(
         }
         if (pending && icon == null && waitingTitle == null) Spinner(markSize)
     }
+}
+
+/** Without a bound, the weighted words and symbol of a label would get no width at all; it takes the width they want. */
+private fun Modifier.boundedWidth(): Modifier = layout { measurable, constraints ->
+    val bounded = if (constraints.hasBoundedWidth) constraints else constraints.copy(maxWidth = measurable.maxIntrinsicWidth(constraints.maxHeight))
+    val placeable = measurable.measure(bounded)
+    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
 }
 
 /**

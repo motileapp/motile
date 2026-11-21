@@ -9,15 +9,17 @@ use std::rc::Rc;
 use crate::media::pictures::{Picture, Pictures};
 use crate::models::{Attachment, UploadState};
 use crate::store::Store;
-use crate::theme::{ControlSize, IconSize, Layer, Radius, Surface, TextSize, colors};
+use crate::theme::{ControlSize, IconSize, Layer, Surface, TextSize, colors};
 use crate::ui::{ActionButton, Chip, Variant, icons};
 
 pub const TILE: f32 = 96.;
 const NAME_INSET_X: f32 = 10.;
 const NAME_INSET_Y: f32 = 8.;
-const KIND_INSET: f32 = 6.;
-/// The remove button sits level with a file's kind.
-const REMOVE_INSET: f32 = KIND_INSET - (ControlSize::Small.height() - Chip::COMPACT_HEIGHT) / 2.;
+const REMOVE_INSET: f32 = 4.;
+/// The tile's corner is concentric with the remove button.
+const TILE_RADIUS: f32 = REMOVE_INSET + ControlSize::Small.height() / 2.;
+/// A file's kind sits level with the remove button.
+const KIND_INSET: f32 = REMOVE_INSET + (ControlSize::Small.height() - Chip::COMPACT_HEIGHT) / 2.;
 /// A file's kind is cut short before the remove button.
 const KIND_WIDTH: f32 = TILE - KIND_INSET - 4. - ControlSize::Small.height() - REMOVE_INSET;
 /// How wide the title of the thread a draft goes on from gets before it is cut.
@@ -133,7 +135,7 @@ fn frame(attachment: &Attachment, cx: &App) -> Stateful<Div> {
         .size(px(TILE))
         .flex_shrink_0()
         .cursor_default()
-        .rounded(px(Radius::XL))
+        .rounded(px(TILE_RADIUS))
         .overflow_hidden()
         .bg(Surface::ComposerBox.color(c))
         .border_1()

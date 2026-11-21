@@ -46,7 +46,6 @@ import app.motile.theme.LocalRow
 import app.motile.theme.LocalSurface
 import app.motile.theme.OnSurface
 import app.motile.theme.OverPicture
-import app.motile.theme.Radius
 import app.motile.theme.Surface
 import app.motile.theme.Theme
 import app.motile.theme.scrimStronger
@@ -99,10 +98,13 @@ fun AttachmentTile(attachment: Attachment, open: () -> Unit) {
     }
 }
 
-private val kindInset = 6.dp
+private val removeInset = 4.dp
 
-/** The remove button sits level with a file's kind. */
-private val removeInset get() = kindInset - (ControlSize.Small.height - Chip.compactHeight) / 2
+/** The tile's corner is concentric with the remove button. */
+private val tileRadius get() = removeInset + ControlSize.Small.height / 2
+
+/** A file's kind sits level with the remove button. */
+private val kindInset get() = removeInset + (ControlSize.Small.height - Chip.compactHeight) / 2
 
 /** A file's kind is cut short before the remove button. */
 private val kindWidth get() = AttachmentTile.side - kindInset - 4.dp - ControlSize.Small.height - removeInset
@@ -125,7 +127,7 @@ fun AttachmentFileTile(attachment: Attachment) {
 @Composable
 private fun TileLook(attachment: Attachment, open: (() -> Unit)?, content: @Composable () -> Unit) = OnSurface(Surface.ComposerBox) {
     val store = LocalStore.current
-    val shape = RoundedCornerShape(Radius.xl)
+    val shape = RoundedCornerShape(tileRadius)
     val summary = attachment.bytes?.let { "${attachment.name}, ${Formatter.formatShortFileSize(Platform.context, it)}" } ?: attachment.name
     Box(Modifier.semantics { contentDescription = summary }) {
         val framed = Modifier.size(AttachmentTile.side).clip(shape).background(Surface.ComposerBox.color).border(1.dp, Surface.ComposerBox.border, shape)

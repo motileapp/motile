@@ -73,9 +73,11 @@ struct AttachmentFileTile: View {
     }
 }
 
-private let kindInset: CGFloat = 6
-/// The remove button sits level with a file's kind.
-private let removeInset = kindInset - (ControlSize.small.height - Chip.compactHeight) / 2
+private let removeInset: CGFloat = 4
+/// The tile's corner is concentric with the remove button.
+private let tileRadius = removeInset + ControlSize.small.height / 2
+/// A file's kind sits level with the remove button.
+private let kindInset = removeInset + (ControlSize.small.height - Chip.compactHeight) / 2
 /// A file's kind is cut short before the remove button.
 private let kindWidth = AttachmentTile.side - kindInset - 4 - ControlSize.small.height - removeInset
 
@@ -88,7 +90,7 @@ private struct TileLook: ViewModifier {
     let open: (() -> Void)?
 
     func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: Radius.xl, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: tileRadius, style: .continuous)
         let box = composer.tile
         let tile = content
             .frame(width: AttachmentTile.side, height: AttachmentTile.side)
