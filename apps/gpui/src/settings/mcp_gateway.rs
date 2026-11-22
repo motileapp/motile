@@ -16,7 +16,10 @@ use motile_protocol::gateway_wire::{McpAuth, McpChange, ToolKind, ToolPermission
 use serde_json::{Map, Value};
 
 use super::agent_gateway::{GatewayHeader, MCP_CAPTION, large};
-use super::layout::{Cut, INSET, ROW_HEIGHT, group, half_gap, label, more, row, row_outset, row_with, spaced_row};
+use super::layout::{
+    Cut, END_ROOM, GROUP_GAP, INSET, PAGE_PADDING, ROW_HEIGHT, column, group, half_gap, label, more, row, row_outset,
+    row_with, spaced_row,
+};
 use crate::panel::code_view::{CodeActions, CodeSnapshot, CodeView};
 use crate::panel::state::{CodeDocument, CodeMarks, Loaded};
 use crate::sign_in::Session;
@@ -28,7 +31,7 @@ use crate::ui::modal::{Answer as Choice, Confirmation, confirmation, modal, pres
 use crate::ui::parts::FadingScroll;
 use crate::ui::{
     ActionButton, ActionMenu, Chip, Highlight, InputField, Segmented, Spinner, Switch, TextArea, Variant, beside,
-    card_default, divider_on, edges, icons, text_area_state,
+    card_default, card_slice, divider_on, edges, icons, text_area_state,
 };
 
 const NONE_DETAIL: &str = "Add Linear, GitHub, Notion or any MCP by its address.";
@@ -325,7 +328,46 @@ pub struct McpGatewayPage {
     key: Option<Entity<KeySheet>>,
     trying: Option<Entity<TrySheet>>,
     call: Option<Entity<CallSheet>>,
+    /// The parts of the page, of which only those on screen are laid out.
+    list: ListState,
+    items: Vec<Item>,
+    listed: Vec<String>,
+    mcp_servers: Vec<McpServerRow>,
+    /// What a search picked, to reveal once the page is drawn.
+    revealing: Option<String>,
     _subscription: Subscription,
+}
+
+/// A part of the page, which the list lays out only while it is on screen: an MCP server's card is
+/// a slice for its header, each of its groups and each tool of a group that is unfolded.
+#[derive(Clone, Copy)]
+enum Item {
+    Header,
+    McpServers,
+    Card { server: usize, last: bool },
+    Group { server: usize, group: usize, open: bool, last: bool },
+    Tool { server: usize, group: usize, tool: usize, last: bool },
+    Activity,
+}
+
+impl Item {
+    /// What the part is and how it looks, which a list laid out again keeps its place by.
+    fn key(self, mcp_servers: &[McpServerRow]) -> String {
+        match self {
+            Item::Header => "header".into(),
+            Item::McpServers => "mcp-servers".into(),
+            Item::Card { server, last } => format!("card-{}-{last}", mcp_servers[server].id),
+            Item::Group { server, group, open, last } => {
+                let mcp_server = &mcp_servers[server];
+                format!("group-{}-{:?}-{open}-{last}", mcp_server.id, mcp_server.groups[group].kind)
+            }
+            Item::Tool { server, group, tool, last } => {
+                let mcp_server = &mcp_servers[server];
+                format!("tool-{}-{}-{last}", mcp_server.id, mcp_server.groups[group].tools[tool].name)
+            }
+            Item::Activity => "mcp-activity".into(),
+        }
+    }
 }
 
 impl McpGatewayPage {
@@ -341,8 +383,103 @@ impl McpGatewayPage {
             key: None,
             trying: None,
             call: None,
+            list: ListState::new(0, ListAlignment::Top, px(ROW_HEIGHT * 4.)),
+            items: Vec::new(),
+            listed: Vec::new(),
+            mcp_servers: Vec::new(),
+            revealing: None,
             _subscription: subscription,
         }
+    }
+
+    /// Shows what a search picked in the middle of the page: the MCP servers or the activity.
+    pub fn reveal(&mut self, target: String) {
+        self.revealing = Some(target);
+    }
+
+    /// Scrolls to the part, roughly at once, as the rows before it aren't laid out, and right to
+    /// the middle on the next frame, once it is.
+    fn scroll_to_item(&self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let rows_above = (self.list.viewport_bounds().size.height / 2. / px(ROW_HEIGHT)) as usize;
+        self.list.scroll_to(ListOffset { item_ix: index.saturating_sub(rows_above), offset_in_item: px(0.) });
+        cx.on_next_frame(window, move |page, _, cx| {
+            let Some(bounds) = page.list.bounds_for_item(index) else { return };
+            page.list.scroll_by(bounds.center().y - page.list.viewport_bounds().center().y);
+            cx.notify();
+        });
+    }
+
+    /// The page as parts: the header, the MCP servers' group and their cards slice by slice, and
+    /// the activity.
+    fn items(&self, view: Option<&View>, cx: &App) -> Vec<Item> {
+        let mut items = vec![Item::Header];
+        if !view.is_some_and(|view| view.exists) {
+            return items;
+        }
+        items.push(Item::McpServers);
+        let unfolded = &self.store.read(cx).mcp_servers.unfolded;
+        for (server, mcp_server) in self.mcp_servers.iter().enumerate() {
+            items.push(Item::Card { server, last: mcp_server.groups.is_empty() });
+            for (group, tools) in mcp_server.groups.iter().enumerate() {
+                let open = unfolded.contains(&(mcp_server.id.clone(), tools.kind));
+                let last_group = group + 1 == mcp_server.groups.len();
+                items.push(Item::Group { server, group, open, last: last_group && !(open && !tools.tools.is_empty()) });
+                if !open {
+                    continue;
+                }
+                let count = tools.tools.len();
+                items.extend((0..count).map(|tool| Item::Tool {
+                    server,
+                    group,
+                    tool,
+                    last: last_group && tool + 1 == count,
+                }));
+            }
+        }
+        if !self.mcp_servers.is_empty() {
+            items.push(Item::Activity);
+        }
+        items
+    }
+
+    fn item(&self, index: usize, cx: &mut Context<Self>) -> AnyElement {
+        let Some(&item) = self.items.get(index) else { return div().into_any_element() };
+        let (part, gap) = match item {
+            Item::Header => (self.header.clone().into_any_element(), 0.),
+            Item::McpServers => {
+                let view = self.store.read(cx).gateway.view.clone();
+                let Some(view) = view else { return div().into_any_element() };
+                (self.mcp_servers(&view, cx), GROUP_GAP)
+            }
+            Item::Card { server, last } => {
+                let header = self.card_header(&self.mcp_servers[server], cx);
+                (card_slice(div().overflow_hidden(), true, last, cx).child(header).into_any_element(), 12.)
+            }
+            Item::Group { server, group, open, last } => {
+                let mcp_server = &self.mcp_servers[server];
+                let row =
+                    group_row(&self.store, &mcp_server.id, &mcp_server.groups[group], Some(open), Surface::Card, cx);
+                (self.slice(mcp_server, row, last, cx), 0.)
+            }
+            Item::Tool { server, group, tool, last } => {
+                let mcp_server = &self.mcp_servers[server];
+                let row = tool_row(&self.store, &mcp_server.id, &mcp_server.groups[group].tools[tool], cx);
+                (self.slice(mcp_server, row, last, cx), 0.)
+            }
+            Item::Activity => (self.activity(cx), GROUP_GAP),
+        };
+        column(part).pt(px(gap)).into_any_element()
+    }
+
+    /// A row of a card under its header, dimmed while the MCP server is off.
+    fn slice(&self, mcp_server: &McpServerRow, row: AnyElement, last: bool, cx: &App) -> AnyElement {
+        let content = div()
+            .flex()
+            .flex_col()
+            .child(divider_on(Surface::Card, cx))
+            .child(row)
+            .when(!mcp_server.enabled, |content| content.opacity(colors(cx).opacity(Opacity::Disabled)));
+        card_slice(div().overflow_hidden(), false, last, cx).child(content).into_any_element()
     }
 
     /// The gateway's MCP servers, or why it can't list them: it isn't connected, or is too old.
@@ -366,16 +503,16 @@ impl McpGatewayPage {
         let add = large("add-mcp-server", "Add MCP Server").symbol("plus").on_click(move |_, window, cx| {
             let _ = page.update(cx, |page, cx| page.open_add(window, cx));
         });
-        let mut cards = vec![div().flex().child(add).into_any_element()];
+        let mut rows = vec![div().flex().child(add).into_any_element()];
         if mcp_servers.is_empty() {
             let leading = label("No MCP servers yet", Some(NONE_DETAIL.into()), Some("plug"), Cut::Wraps, cx);
-            cards.push(card_default(row(vec![leading], Vec::new()), cx).into_any_element());
+            rows.push(card_default(row(vec![leading], Vec::new()), cx).into_any_element());
         }
-        cards.extend(mcp_servers.iter().map(|mcp_server| self.card(mcp_server, cx)));
-        group("mcp-servers", "MCP Servers", None, false, cards, cx)
+        group("mcp-servers", "MCP Servers", None, false, rows, cx)
     }
 
-    fn card(&self, mcp_server: &McpServerRow, cx: &mut Context<Self>) -> AnyElement {
+    /// An MCP server's card's header: its tile, name and how it stands, its switch and its menu.
+    fn card_header(&self, mcp_server: &McpServerRow, cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
         let off = !mcp_server.enabled;
         let dim = move |part: Div| part.when(off, |part| part.opacity(c.opacity(Opacity::Disabled)));
@@ -431,26 +568,7 @@ impl McpGatewayPage {
             dim(tile(&mcp_server.monogram, &mcp_server.tint, TILE, cx)).into_any_element(),
             dim(label).into_any_element(),
         ];
-        let mut rows = vec![spaced_row(row_id, leading, vec![trailing.into_any_element()]).into_any_element()];
-        let unfolded = &self.store.read(cx).mcp_servers.unfolded;
-        for tools in &mcp_server.groups {
-            let open = unfolded.contains(&(mcp_server.id.clone(), tools.kind));
-            let mut part = div().flex().flex_col().child(divider_on(Surface::Card, cx)).child(group_row(
-                &self.store,
-                &id,
-                tools,
-                Some(open),
-                Surface::Card,
-                cx,
-            ));
-            if open {
-                for tool in &tools.tools {
-                    part = part.child(divider_on(Surface::Card, cx)).child(tool_row(&self.store, &id, tool, cx));
-                }
-            }
-            rows.push(dim(part).into_any_element());
-        }
-        card_default(div().flex().flex_col().overflow_hidden(), cx).children(rows).into_any_element()
+        spaced_row(row_id, leading, vec![trailing.into_any_element()]).into_any_element()
     }
 
     fn menu(&self, mcp_server: &McpServerRow, cx: &mut Context<Self>) -> ActionMenu {
@@ -685,12 +803,13 @@ impl Render for McpGatewayPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         self.follow_call(cx);
         let view = self.store.read(cx).gateway.view.clone();
-        let mut groups = vec![self.header.clone().into_any_element()];
-        if let Some(view) = view.as_ref().filter(|view| view.exists) {
-            groups.push(self.mcp_servers(view, cx));
-        }
-        if listed(view.as_ref()).is_some_and(|mcp_servers| !mcp_servers.is_empty()) {
-            groups.push(self.activity(cx));
+        self.mcp_servers = listed(view.as_ref()).cloned().unwrap_or_default();
+        self.items = self.items(view.as_ref(), cx);
+        let keys: Vec<String> = self.items.iter().map(|item| item.key(&self.mcp_servers)).collect();
+        let revealed = self.revealing.take().and_then(|target| keys.iter().position(|key| *key == target));
+        crate::ui::relist(&self.list, &mut self.listed, keys);
+        if let Some(index) = revealed {
+            self.scroll_to_item(index, window, cx);
         }
         let removal = self.removal_confirmation(window, cx);
         let add =
@@ -709,10 +828,13 @@ impl Render for McpGatewayPage {
         let call =
             present_sheet("mcp-server-call", self.call.clone(), |sheet, leaving| sheet.leaving = leaving, window, cx);
         div()
-            .flex()
-            .flex_col()
-            .gap(px(super::layout::GROUP_GAP))
-            .children(groups)
+            .size_full()
+            .child(
+                list(self.list.clone(), cx.processor(|this, index, _, cx| this.item(index, cx)))
+                    .size_full()
+                    .pt(px(PAGE_PADDING))
+                    .pb(px(END_ROOM)),
+            )
             .children(removal)
             .children(add)
             .children(rename)

@@ -1117,14 +1117,16 @@ impl Render for SettingsPage {
             SettingsSection::PullRequests => self.pull_requests(cx),
             SettingsSection::Integrations => self.integrations(cx),
             SettingsSection::AgentGateway => vec![self.agent_gateway(cx).into_any_element()],
-            SettingsSection::McpGateway => vec![self.mcp_gateway(cx).into_any_element()],
+            SettingsSection::McpGateway => Vec::new(),
         };
         let keybindings = (section == SettingsSection::Keyboard).then(|| self.keybindings(window, cx));
+        let mcp_gateway = (section == SettingsSection::McpGateway).then(|| self.mcp_gateway(cx));
         if let Some(target) = self.store.read(cx).settings.target.clone() {
             self.store.update(cx, |store, _| store.settings.target = None);
-            match &keybindings {
-                Some(keybindings) => keybindings.update(cx, |page, _| page.reveal(target)),
-                None => self.scroll_to(target, window, cx),
+            match (&keybindings, &mcp_gateway) {
+                (Some(keybindings), _) => keybindings.update(cx, |page, _| page.reveal(target)),
+                (_, Some(mcp_gateway)) => mcp_gateway.update(cx, |page, _| page.reveal(target)),
+                _ => self.scroll_to(target, window, cx),
             }
         }
         self.step_scrolling(window);
@@ -1138,10 +1140,11 @@ impl Render for SettingsPage {
             .size_full()
             .pt(px(theme::TOP_BAR))
             .relative()
-            .child(match keybindings {
-                // Its own list, which lays out only the rows on screen.
-                Some(keybindings) => div().size_full().child(keybindings).into_any_element(),
-                None => div()
+            .child(match (keybindings, mcp_gateway) {
+                // Their own lists, which lay out only the rows on screen.
+                (Some(keybindings), _) => div().size_full().child(keybindings).into_any_element(),
+                (_, Some(mcp_gateway)) => div().size_full().child(mcp_gateway).into_any_element(),
+                _ => div()
                     .id("settings-scroll")
                     .size_full()
                     .overflow_y_scroll()
