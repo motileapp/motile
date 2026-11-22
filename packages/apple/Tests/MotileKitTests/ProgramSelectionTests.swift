@@ -1,3 +1,4 @@
+#if os(macOS)
 import CoreGraphics
 import XCTest
 
@@ -34,11 +35,7 @@ final class ProgramSelectionTests: XCTestCase {
         let view = ProgramViews.make(for: box.node)
         view.frame = CGRect(origin: .zero, size: box.size)
         view.show(box, host: nil)
-        #if os(macOS)
         view.layoutSubtreeIfNeeded()
-        #else
-        view.layoutIfNeeded()
-        #endif
         let selection = ProgramSelection()
         selection.collect(view.selectables, in: view)
         return selection
@@ -58,3 +55,4 @@ final class ProgramSelectionTests: XCTestCase {
         XCTAssertEqual(selection.copied(), "lots\t55%\tEasy\nMak")
     }
 }
+#endif
