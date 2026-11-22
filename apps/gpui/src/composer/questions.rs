@@ -16,7 +16,6 @@ use crate::ui::{ActionButton, Chip, FadingScroll, PickMark, Variant, beside, ico
 const OPTION_REACH: f32 = 8.;
 const OPTION_GAP: f32 = 2.;
 const MARK_GAP: f32 = 10.;
-const OWN_ANSWER_LINES: usize = 3;
 
 pub fn questions(store: &Entity<Store>, approval: &Waiting, room: StripRoom, cx: &App) -> Div {
     let c = colors(cx);
@@ -33,6 +32,7 @@ pub fn questions(store: &Entity<Store>, approval: &Waiting, room: StripRoom, cx:
         option_row(store, index, position, option, picked, question.multiple, cx)
     });
     let typed = state.typed_answer(approval).trim().to_string();
+    let end_on = state.typed_answer(approval);
     let written_chosen = state.is_written_chosen(approval);
     let (back, refuse, next) = (store.clone(), store.clone(), store.clone());
     let refuse_id = approval.id.clone();
@@ -68,6 +68,7 @@ pub fn questions(store: &Entity<Store>, approval: &Waiting, room: StripRoom, cx:
             div().relative().mx(px(-OPTION_REACH)).mt(px(6.)).mb(px(12.)).child(room.measure()).child(
                 FadingScroll::new(SharedString::from(format!("questions-{}", approval.id)), room.max_height)
                     .fill(c.composer)
+                    .end_on(end_on)
                     .child(div().flex().flex_col().gap(px(12.)).child(text).child(options)),
             ),
         )
@@ -234,7 +235,6 @@ fn own_answer(
             .line_height(px(18.))
             .font_weight(FontWeight::MEDIUM)
             .text_color(if written { c.foreground } else { c.muted_foreground })
-            .line_clamp(OWN_ANSWER_LINES)
             .child(words),
     );
     pressed.child(face).on_click(move |_, _, cx| {

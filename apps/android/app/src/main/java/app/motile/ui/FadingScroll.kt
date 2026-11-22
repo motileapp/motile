@@ -9,6 +9,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Dp
@@ -17,7 +18,8 @@ import androidx.compose.ui.unit.dp
 /**
  * Content as tall as it is up to `maxHeight`, past which it scrolls, fading out at an edge with more
  * behind it. With `anchor` at the bottom it starts at the end and stays there while it grows, as an
- * output that streams does. `padding` insets the content inside the scrolling edges.
+ * output that streams does. `padding` insets the content inside the scrolling edges. It scrolls to
+ * its end whenever `endOn` changes, as the answer written into a question's last row does.
  */
 @Composable
 fun FadingScroll(
@@ -25,9 +27,17 @@ fun FadingScroll(
     modifier: Modifier = Modifier,
     anchor: Alignment.Vertical = Alignment.Top,
     padding: Dp = 0.dp,
+    endOn: Any? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val scroll = rememberScrollState()
+    val shownEndOn = remember { arrayOf(endOn) }
+    LaunchedEffect(endOn) {
+        if (shownEndOn[0] == endOn) return@LaunchedEffect
+        shownEndOn[0] = endOn
+        withFrameNanos {}
+        scroll.scrollTo(scroll.maxValue)
+    }
     val followed = remember { intArrayOf(0) }
     if (anchor == Alignment.Bottom) {
         LaunchedEffect(scroll.maxValue) {

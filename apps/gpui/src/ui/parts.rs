@@ -585,13 +585,14 @@ pub struct FadingScroll {
     max_height: f32,
     padding: f32,
     starts_at_end: bool,
+    end_on: Option<u64>,
     fill: Option<Hsla>,
     children: Vec<AnyElement>,
 }
 
 impl FadingScroll {
     pub fn new(id: impl Into<ElementId>, max_height: f32) -> Self {
-        Self { id: id.into(), max_height, padding: 0., starts_at_end: false, fill: None, children: Vec::new() }
+        Self { id: id.into(), max_height, padding: 0., starts_at_end: false, end_on: None, fill: None, children: Vec::new() }
     }
 
     pub fn padding(mut self, padding: f32) -> Self {
@@ -602,6 +603,15 @@ impl FadingScroll {
     /// It starts scrolled to its end.
     pub fn starts_at_end(mut self, starts_at_end: bool) -> Self {
         self.starts_at_end = starts_at_end;
+        self
+    }
+
+    /// It scrolls to its end whenever `key` changes, as the answer written into a question's last
+    /// row does.
+    pub fn end_on(mut self, key: impl std::hash::Hash) -> Self {
+        let mut hasher = std::hash::DefaultHasher::new();
+        key.hash(&mut hasher);
+        self.end_on = Some(std::hash::Hasher::finish(&hasher));
         self
     }
 
@@ -621,11 +631,11 @@ impl ParentElement for FadingScroll {
 
 impl RenderOnce for FadingScroll {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let starts_at_end = self.starts_at_end;
-        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| (ScrollHandle::new(), starts_at_end));
-        let (handle, unscrolled) = state.read(cx).clone();
-        if unscrolled {
-            state.update(cx, |state, _| state.1 = false);
+        let (starts_at_end, end_on) = (self.starts_at_end, self.end_on);
+        let state = window.use_keyed_state(self.id.clone(), cx, |_, _| (ScrollHandle::new(), starts_at_end, end_on));
+        let (handle, unscrolled, shown_end_on) = state.read(cx).clone();
+        if unscrolled || end_on != shown_end_on {
+            state.update(cx, |state, _| (state.1, state.2) = (false, end_on));
             handle.scroll_to_bottom();
         }
         let fill = self.fill.unwrap_or(colors(cx).background);
