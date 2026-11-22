@@ -134,17 +134,21 @@ class ProgramNodeView: FlippedView {
 }
 
 /// Text a node draws: lines of a fixed height, cut short where its box says, with links that open
-/// in the browser. In a program's row it takes part in the row's selection.
+/// in the browser. On the Mac a program's row selects it with its other texts; on iOS it is
+/// selected on its own.
 final class ProgramTextView: FlippedView, ProgramSelectable {
     var part: ProgramTextPart? {
         didSet {
             laid = nil
+            #if os(iOS)
+            if let selected, NSMaxRange(selected) > selectableText.length { clearSelection() }
+            #endif
             redraw()
             hasLinks = part.map { Self.hasLinks($0.text) } ?? false
         }
     }
     var onLink: ((URL) -> Void)?
-    private var selected: NSRange?
+    var selected: NSRange?
     private var laid: (width: CGFloat, storage: NSTextStorage, geometry: TextGeometry)?
     private var hasLinks = false {
         didSet {
@@ -152,15 +156,18 @@ final class ProgramTextView: FlippedView, ProgramSelectable {
             guard hasLinks != oldValue else { return }
             onPress = hasLinks ? { [weak self] point in self?.press(at: point) } : nil
             pointer = hasLinks ? .hand : .arrow
-            isUserInteractionEnabled = hasLinks
             #endif
         }
     }
+    #if os(iOS)
+    weak var inputDelegate: UITextInputDelegate?
+    lazy var tokenizer: UITextInputTokenizer = UITextInputStringTokenizer(textInput: self)
+    #endif
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         #if os(iOS)
-        isUserInteractionEnabled = false
+        addTextInteraction()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: Self, _: UITraitCollection) in view.redraw() }
         #endif
     }
@@ -170,19 +177,24 @@ final class ProgramTextView: FlippedView, ProgramSelectable {
     #if os(macOS)
     /// Outside a row, as in a popover's panel, a click on a link opens it; in one the row does.
     override func mouseDown(with event: NSEvent) {
-        guard !inRow, let url = link(at: convert(event.locationInWindow, from: nil)) else { return super.mouseDown(with: event) }
+        guard programRow == nil, let url = link(at: convert(event.locationInWindow, from: nil)) else { return super.mouseDown(with: event) }
         onLink?(url)
     }
 
     override func cursor(at point: CGPoint) -> NSCursor {
         guard link(at: point) == nil else { return .pointingHand }
-        return inRow ? .iBeam : .arrow
+        return programRow != nil ? .iBeam : .arrow
+    }
+    #else
+    override var canBecomeFirstResponder: Bool { true }
+
+    override func copy(_ sender: Any?) {
+        guard let selected, selected.length > 0 else { return }
+        Platform.copy(TextSystem.withLineBreaks(Typesetter.words(of: selectableText.attributedSubstring(from: selected))))
     }
 
-    private var inRow: Bool {
-        var view = superview
-        while let current = view, !(current is ProgramRowView) { view = current.superview }
-        return view != nil
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        action == #selector(copy(_:)) && (selected?.length ?? 0) > 0
     }
     #endif
 
@@ -219,11 +231,13 @@ final class ProgramTextView: FlippedView, ProgramSelectable {
         return geometry
     }
 
+    #if os(macOS)
     func showSelected(_ range: NSRange?) {
         guard range != selected else { return }
         selected = range
         redraw()
     }
+    #endif
 
     func link(at point: CGPoint) -> URL? {
         guard hasLinks, bounds.contains(point) else { return nil }
@@ -654,7 +668,7 @@ final class ProgramMarkdownView: ProgramNodeView {
         let code = blocks.filter { $0.code != nil }
         while texts.count < prose.count {
             let text = RowTextView.make()
-            text.selectsWithProgram = true
+            text.inProgram = true
             addSubview(text)
             texts.append(text)
             headers.append([])
@@ -714,7 +728,7 @@ final class ProgramCodeBox: FlippedView {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        text.selectsWithProgram = true
+        text.inProgram = true
         addSubview(surface)
         surface.addSubview(header)
         surface.addSubview(text)

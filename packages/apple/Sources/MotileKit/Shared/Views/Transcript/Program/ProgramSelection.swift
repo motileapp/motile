@@ -6,13 +6,18 @@ import AppKit
 import UIKit
 #endif
 
-/// A text of a program that the program's one selection runs through.
+/// A text of a program. On the Mac the program's one selection runs through them all; on iOS
+/// each is selected on its own, as a reply's text is.
 protocol ProgramSelectable: PlatformView {
+    #if os(macOS)
     var selectableText: NSAttributedString { get }
     /// Where the text is laid out in the view.
     var textGeometry: TextGeometry? { get }
     /// Shows the part of the text selected, or none.
     func showSelected(_ range: NSRange?)
+    #else
+    func clearSelection()
+    #endif
 }
 
 /// Where the characters of a laid out text are, in the view that draws it.
@@ -85,6 +90,7 @@ struct TextGeometry {
     }
 }
 
+#if os(macOS)
 /// One selection across every text of a program, in the order they read, as text on a page is
 /// selected. The texts are joined into one, a tab between those side by side and a new line
 /// between the others, and a place in the selection is a place in that text.
@@ -258,6 +264,7 @@ extension PlatformView {
         return true
     }
 }
+#endif
 
 extension ProgramNodeView {
     /// The texts of the node and its children, in the order they read: line by line, and along

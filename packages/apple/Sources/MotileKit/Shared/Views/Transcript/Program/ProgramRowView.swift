@@ -7,7 +7,8 @@ import UIKit
 #endif
 
 /// A program in the transcript: the views of its tree, what keeps it from running under them,
-/// and its source while it has no tree. Its texts are selected as one, as text on a page is.
+/// and its source while it has no tree. On the Mac its texts are selected as one, as text on a
+/// page is; on iOS each is selected on its own, as a reply's text is.
 final class ProgramRowView: RowView, ProgramHost {
     private static let errorGap: CGFloat = 8
     /// The room over the program and under it, as a code box has.
@@ -19,21 +20,16 @@ final class ProgramRowView: RowView, ProgramHost {
     private lazy var errors = ErrorBox(in: self)
     private let images = NSHashTable<ProgramImageView>.weakObjects()
     private var lookingSoon = false
+    #if os(macOS)
     let selection = ProgramSelection()
-    #if os(iOS)
-    private let textInput = ProgramTextInput()
     #endif
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        source.text.selectsWithProgram = true
+        source.text.inProgram = true
         addSubview(source)
         #if os(macOS)
         focusRingType = .none
-        #endif
-        #if os(iOS)
-        textInput.row = self
-        addSubview(textInput)
         #endif
     }
 
@@ -67,12 +63,9 @@ final class ProgramRowView: RowView, ProgramHost {
 
     override func layout(width: CGFloat) -> CGFloat {
         guard let content else { return 0 }
-        defer {
-            keepSelection()
-            #if os(iOS)
-            bringSubviewToFront(textInput)
-            #endif
-        }
+        #if os(macOS)
+        defer { keepSelection() }
+        #endif
         var y = Self.above
         if let box = content.box(width: width) {
             let view = root.flatMap { ProgramViews.fits($0, box.node) ? $0 : nil } ?? {
@@ -147,11 +140,26 @@ final class ProgramRowView: RowView, ProgramHost {
 
     // MARK: Selection
 
-    /// Takes the program's texts as they are now, in the order they read.
-    func collectTexts() {
+    /// The program's texts as they are now, in the order they read.
+    private var texts: [ProgramSelectable] {
         var views = root?.selectables ?? []
         if !source.isHidden { views.append(source.text) }
-        selection.collect(views, in: self)
+        return views
+    }
+
+    #if os(iOS)
+    /// One of its texts starts a selection, so the others, here and in other rows, let go of theirs.
+    func textWillSelect(_ text: ProgramSelectable) {
+        owner?.rowWillSelect(self)
+        for other in texts where other !== text { other.clearSelection() }
+    }
+
+    override func clearSelection() {
+        for text in texts { text.clearSelection() }
+    }
+    #else
+    func collectTexts() {
+        selection.collect(texts, in: self)
     }
 
     /// Shows what stays selected of the texts once they changed.
@@ -165,14 +173,9 @@ final class ProgramRowView: RowView, ProgramHost {
 
     override func clearSelection() {
         guard selection.range != nil else { return }
-        #if os(iOS)
-        textInput.clear()
-        #else
         selection.select(nil)
-        #endif
     }
 
-    #if os(macOS)
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { false }
 
@@ -226,42 +229,16 @@ final class ProgramRowView: RowView, ProgramHost {
         guard selection.hasSelection else { return super.menu(for: event) }
         return NSMenu([MenuAction(title: "Copy", symbol: .copy) { [weak self] in self?.copy(nil) }])
     }
-    #else
-    override func layoutNow() {
-        super.layoutNow()
-        textInput.frame = bounds
-    }
-
-    /// The text interaction only takes touches on its own view, so the row hands it those on its
-    /// texts. A control, a link and what scrolls sideways keep theirs, and accessibility still
-    /// finds each text.
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        let hit = super.hitTest(point, with: event)
-        guard event?.type == .touches, let hit, !hit.isDescendant(of: textInput) else { return hit }
-        if onSelectionEnd(point) { return textInput }
-        guard !Self.isControl(hit, below: self) else { return hit }
-        if let text = hit as? RowTextView, text.textGeometry?.link(at: convert(point, to: text)) != nil { return hit }
-        collectTexts()
-        return selection.piece(under: point) != nil ? textInput : hit
-    }
-
-    /// Whether the point is on a handle at either end of the selection, which reaches past the text.
-    private func onSelectionEnd(_ point: CGPoint) -> Bool {
-        guard selection.hasSelection, let range = selection.range else { return false }
-        return [range.location, NSMaxRange(range)].contains { selection.caret(at: $0).insetBy(dx: -22, dy: -22).contains(point) }
-    }
-
-    private static func isControl(_ view: UIView?, below row: UIView) -> Bool {
-        var current = view
-        while let view = current, view !== row {
-            if view is UIControl || (view as? UITextView)?.isEditable == true { return true }
-            if let scroll = view as? UIScrollView, scroll.contentSize.width > scroll.bounds.width { return true }
-            if let flipped = view as? FlippedView, flipped.onPress != nil || flipped.onDrag != nil { return true }
-            current = view.superview
-        }
-        return false
-    }
     #endif
+}
+
+extension PlatformView {
+    /// The program row the view is in, if it is in one.
+    var programRow: ProgramRowView? {
+        var view = superview
+        while let current = view, !(current is ProgramRowView) { view = current.superview }
+        return view as? ProgramRowView
+    }
 }
 
 #if os(macOS)
