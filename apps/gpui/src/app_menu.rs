@@ -241,7 +241,7 @@ fn follow(store: &Entity<Store>, shown: &mut Option<State>, cx: &mut App) {
             }
             _ => None,
         }),
-        read_only: store.open_thread_removed(),
+        read_only: store.open_thread_removed() || store.selected_thread().is_some_and(|thread| thread.deleting),
         busy: store.activity.busy(),
         jumps: store.has_jump_threads(),
         can_go_back: store.can_go(true),

@@ -203,7 +203,7 @@ struct SearchResultRow: View {
                     .foregroundStyle(Color.themeForeground)
             } else if readOnly {
                 ThreadStatus(thread: thread, readOnly: true)
-            } else if thread.isArchived {
+            } else if thread.isArchived && !thread.deleting {
                 Text(Time.ago(thread.archivedAt ?? thread.updatedAt, now: AgoClock.shared.now))
                     .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedStrongerForeground)

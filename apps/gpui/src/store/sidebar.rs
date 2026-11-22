@@ -341,6 +341,7 @@ mod tests {
             unread: false,
             woke: false,
             section: Section::Active,
+            deleting: false,
             children: None,
         }
     }

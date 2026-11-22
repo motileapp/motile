@@ -27,6 +27,7 @@ struct MenuState: Equatable {
     var snoozes = false
     var openThreadIDs: [String] = []
     var removedServer = false
+    var threadDeleting = false
     var busy = false
     var hasJumps = false
     var canGoBack = false
@@ -58,6 +59,7 @@ struct MenuState: Equatable {
         snoozes = store.selectedThread.map(store.snoozes) == true
         openThreadIDs = store.selectedThread.map { [$0.id] } ?? []
         removedServer = store.openThreadRemovedServer != nil
+        threadDeleting = store.selectedThread?.deleting == true
         busy = store.activity.busy
         hasJumps = !store.jumpThreads.isEmpty
         canGoBack = store.canGo(back: true)

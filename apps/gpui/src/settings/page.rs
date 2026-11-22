@@ -402,7 +402,11 @@ impl SettingsPage {
             let sync = server.sync.as_ref().map(|sync| sync_line(sync, cx));
             let leading =
                 footed_label(server.name.clone(), Some(description(server)), Some("server"), Cut::Wraps, sync, cx);
-            let trailing = div().flex().items_center().child(status).child(menu).into_any_element();
+            let trailing = if server.deleting {
+                deleting_button(("server-deleting", index), ControlSize::Large).into_any_element()
+            } else {
+                div().flex().items_center().child(status).child(menu).into_any_element()
+            };
             if index > 0 {
                 rows.push(divider_on(Surface::Card, cx).into_any_element());
             }
@@ -521,7 +525,12 @@ impl SettingsPage {
                 let delete = delete.clone();
                 Menu::new().danger_symbol_item("Delete", "trash-2", move |window, cx| delete(window, cx))
             });
-            rows.push(row(vec![server_label(server, cx)], vec![menu.into_any_element()]).into_any_element());
+            let trailing = if server.deleting {
+                deleting_button(("removed-server-deleting", index), ControlSize::Regular).into_any_element()
+            } else {
+                menu.into_any_element()
+            };
+            rows.push(row(vec![server_label(server, cx)], vec![trailing]).into_any_element());
             if index + 1 < removed.len() {
                 rows.push(divider_on(Surface::Card, cx).into_any_element());
             }
@@ -1260,6 +1269,9 @@ fn sync_line(sync: &SyncView, cx: &App) -> AnyElement {
 }
 
 fn description(server: &Server) -> String {
+    if server.deleting {
+        return "Deleting".into();
+    }
     if server.state != State::Connected {
         return state_label(server);
     }
@@ -1280,7 +1292,13 @@ fn accounts_unavailable(server: &Server) -> Option<String> {
 }
 
 fn server_label(server: &Server, cx: &App) -> AnyElement {
-    label(server.name.clone(), None, Some("server"), Cut::Wraps, cx)
+    let deleting = server.deleting.then(|| "Deleting".to_string());
+    label(server.name.clone(), deleting, Some("server"), Cut::Wraps, cx)
+}
+
+/// Stands in for a server's menu while it is deleted completely.
+fn deleting_button(id: impl Into<ElementId>, size: ControlSize) -> ActionButton {
+    ActionButton::new(id, "Delete").variant(Variant::Outline).size(size).pending(true).pending_title("Deleting")
 }
 
 /// How a server's writer is told to name the branches it makes, to change and to put back.

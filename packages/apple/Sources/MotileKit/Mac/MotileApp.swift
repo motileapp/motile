@@ -141,9 +141,10 @@ struct MotileApp: App {
             CommandMenu("Thread") {
                 Button(menu.threadArchived ? "Unarchive" : "Archive") { store.toggleArchived() }
                     .shortcut("thread.done", in: keys)
-                    .disabled(!menu.threadOpen || menu.removedServer)
+                    .disabled(!menu.threadOpen || menu.removedServer || menu.threadDeleting)
                 if menu.threadSnoozed {
                     Button("Wake") { store.wake(menu.openThreadIDs) }
+                        .disabled(menu.threadDeleting)
                 } else {
                     Menu("Snooze") { SnoozeItems(store: store, threadIDs: menu.openThreadIDs) }
                         .disabled(!menu.snoozes)

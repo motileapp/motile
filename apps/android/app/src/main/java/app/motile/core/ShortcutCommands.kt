@@ -88,7 +88,7 @@ fun AppStore.perform(command: String): Boolean {
         "thread.next" -> return showThreadOffset(1)
         "thread.done" -> {
             val thread = selectedThread ?: return false
-            if (onRemovedServer(thread)) return false
+            if (onRemovedServer(thread) || thread.deleting) return false
             toggleArchived()
         }
         "thread.undo" -> {

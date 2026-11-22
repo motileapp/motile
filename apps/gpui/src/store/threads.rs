@@ -592,7 +592,7 @@ impl Store {
 
     /// The open thread, unless it is a removed server's, which nothing can be asked of.
     pub fn changeable_thread(&self) -> Option<&ThreadInfo> {
-        self.selected_thread().filter(|thread| !self.on_removed_server(thread))
+        self.selected_thread().filter(|thread| !self.on_removed_server(thread) && !thread.deleting)
     }
 
     pub fn stop_thread(&mut self, cx: &mut Context<Self>) {
@@ -876,7 +876,9 @@ impl Store {
     }
 
     pub fn snoozes(&self, thread: &ThreadInfo) -> bool {
-        !self.on_removed_server(thread) && self.server(Some(&thread.server_id)).is_some_and(Server::snoozes)
+        !self.on_removed_server(thread)
+            && !thread.deleting
+            && self.server(Some(&thread.server_id)).is_some_and(Server::snoozes)
     }
 
     /// Opens the modal that snoozes threads until a day and a time the user picks.

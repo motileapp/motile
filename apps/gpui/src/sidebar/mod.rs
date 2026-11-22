@@ -94,10 +94,10 @@ fn snooze_menu(store: &Entity<Store>, thread_id: &str) -> Menu {
 }
 
 /// What a thread's menu offers: archiving it or bringing it back, snoozing or waking it and
-/// renaming it, then deleting it. A removed server's thread has none.
+/// renaming it, then deleting it. A removed server's thread has none, nor one being deleted.
 pub fn thread_menu(store: &Entity<Store>, prompts: &Entity<ThreadPrompts>, thread_id: &str, cx: &App) -> Option<Menu> {
     let state = store.read(cx);
-    let thread = state.threads.get(thread_id).filter(|thread| !state.on_removed_server(thread))?;
+    let thread = state.threads.get(thread_id).filter(|thread| !state.on_removed_server(thread) && !thread.deleting)?;
     let (archived, unfinished, snoozed) =
         (thread.is_archived(), thread.unfinished(), thread.section == Section::Snoozed);
     let snoozes = state.snoozes(thread);

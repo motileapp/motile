@@ -12,6 +12,7 @@ import app.motile.platform.Platform
 
 val Server.settingsDescription: String
     get() {
+        if (deleting) return "Deleting"
         if (state != Server.State.Connected) return stateLabel
         return "Connected · version $version · $installedAgents"
     }

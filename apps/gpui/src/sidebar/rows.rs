@@ -126,7 +126,7 @@ impl Sidebar {
                 .text_color(c.foreground)
                 .child(KeyCaps::new([jump]))
                 .into_any_element()
-        } else if hovering && (!thread.unfinished() || store.snoozes(thread)) && !read_only {
+        } else if hovering && (!thread.unfinished() || store.snoozes(thread)) && !read_only && !thread.deleting {
             div().mr(px(button_inset() - ROW_PADDING)).child(self.row_buttons(thread, selected, cx)).into_any_element()
         } else {
             thread_status(thread, read_only, cx)
@@ -450,8 +450,9 @@ impl Sidebar {
         let (select, menu_id, id) = (self.store.clone(), thread.id.clone(), thread.id.clone());
         let margin = row_margin();
         let layer = row_layer(selected).unwrap_or(crate::theme::Layer::Row);
-        let back = self.bring_back_button(thread, layer);
+        let back = self.bring_back_button(thread, layer).filter(|_| !thread.deleting);
         let trailing = match (thread.section, thread.snoozed_until) {
+            _ if thread.deleting => thread_status(thread, removed, cx),
             (Section::Working, _) => thread_status(thread, removed, cx),
             (Section::Snoozed, Some(until)) => div()
                 .id(SharedString::from(format!("wakes-{}", thread.id)))
@@ -700,6 +701,10 @@ pub fn thread_status(thread: &ThreadInfo, read_only: bool, cx: &App) -> AnyEleme
         )
     };
     let symbol = |name: &'static str| icons::symbol(name, IconSize::Sm).into_any_element();
+    if thread.deleting {
+        return label("Deleting".into(), c.destructive, Spinner::new(IconSize::Sm).render(cx).into_any_element())
+            .into_any_element();
+    }
     if read_only {
         return label("Read-only".into(), c.warning, symbol("unlink"))
             .id(SharedString::from(format!("read-only-{}", thread.id)))

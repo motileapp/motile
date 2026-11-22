@@ -84,7 +84,7 @@ impl Sidebar {
                     div().text_color(c.foreground).child(KeyCaps::new([jump])).into_any_element()
                 } else if read_only {
                     thread_status(thread, true, cx)
-                } else if done {
+                } else if done && !thread.deleting {
                     div()
                         .text_size(TextSize::Xs)
                         .text_color(c.muted_stronger_foreground)

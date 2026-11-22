@@ -2994,7 +2994,7 @@ final class AppStore {
     }
 
     func snoozes(_ thread: ThreadInfo) -> Bool {
-        !onRemovedServer(thread) && server(thread.serverID)?.snoozes == true
+        !onRemovedServer(thread) && !thread.deleting && server(thread.serverID)?.snoozes == true
     }
 
     /// Leaves the open thread when it is put away, for the next one the sidebar lists.
@@ -3045,7 +3045,7 @@ final class AppStore {
     }
 
     func toggleArchived() {
-        guard let thread = selectedThread, !onRemovedServer(thread) else { return }
+        guard let thread = selectedThread, !onRemovedServer(thread), !thread.deleting else { return }
         setArchived([thread.id], archived: !thread.isArchived)
     }
 

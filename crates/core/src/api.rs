@@ -977,6 +977,9 @@ pub struct ServerView {
     /// The server was removed from the account: its threads are copies, which can be read and
     /// searched and go on only on another server.
     pub removed: bool,
+    /// It is being deleted completely.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub deleting: bool,
     pub state: State,
     pub error: Option<String>,
     pub path: Option<PathKind>,
@@ -1062,6 +1065,9 @@ pub struct ThreadView {
     pub woke: bool,
     /// Where the sidebar lists it.
     pub section: Section,
+    /// Its server was asked to delete it and hasn't yet.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub deleting: bool,
     /// How the agents its agent started are doing, theirs too, when it started any.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<Children>,
@@ -1176,6 +1182,7 @@ mod tests {
                 unread: false,
                 woke: false,
                 section: Section::Active,
+                deleting: false,
                 children: None,
             }),
         };
