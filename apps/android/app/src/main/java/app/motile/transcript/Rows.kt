@@ -591,18 +591,28 @@ class MediaContent(json: JSON) {
     /** The image the box shows: the image itself, or a video's poster. */
     val picture: String? get() = if (video) poster else id
 
-    /** The box it is shown in, in a column `width` wide, in dp: its own size, or smaller to fit. */
+    /**
+     * The box it is shown in, in a column `width` wide, in dp: the picture's size, and at least
+     * `SMALLEST_BOX`, so that a small picture lies on a tile that can be made out and pressed.
+     */
     fun box(width: Float): Pair<Float, Float> {
-        val pixels = pixels ?: run {
+        val (pictureWidth, pictureHeight) = drawn(width) ?: run {
             val boxWidth = minOf(width, 640f)
             return boxWidth to Math.round(boxWidth * 9 / 16).toFloat()
         }
+        return minOf(width, maxOf(pictureWidth, SMALLEST_BOX)) to maxOf(pictureHeight, SMALLEST_BOX)
+    }
+
+    /** How large the picture is drawn in a column `width` wide, in dp: its own size, or smaller to fit. */
+    fun drawn(width: Float): Pair<Float, Float>? {
+        val pixels = pixels ?: return null
         val scale = minOf(1f, width / pixels.first, MAX_HEIGHT / pixels.second)
         return maxOf(1f, Math.round(pixels.first * scale).toFloat()) to maxOf(1f, Math.round(pixels.second * scale).toFloat())
     }
 
     companion object {
         const val MAX_HEIGHT = 480f
+        const val SMALLEST_BOX = 96f
     }
 }
 

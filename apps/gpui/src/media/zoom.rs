@@ -40,7 +40,8 @@ pub struct ZoomableImage {
     radius: f32,
     /// The most it is enlarged to fit, as a multiple of its real size.
     largest_fit: f32,
-    /// It lies over a picture's darkness, as in the viewer.
+    /// It lies over a picture's darkness, as in the viewer, where a picture with see-through parts
+    /// lies on its checkerboard, framed.
     over_picture: bool,
     clicked_beside: Option<ClickedBeside>,
     /// A right click on the picture, where it fell.
@@ -314,6 +315,7 @@ impl Render for ZoomableImage {
         )
         .absolute()
         .size_full();
+        let mut checker = None;
         let content: AnyElement = match picture {
             Picture::Ready(shown) => {
                 self.refit(points);
@@ -328,6 +330,7 @@ impl Render for ZoomableImage {
                 let top = (room.size.height - px(height)) / 2. + offset.y;
                 self.picture_bounds.set(Bounds::new(room.origin + point(left, top), size(px(width), px(height))));
                 let radius = px(self.radius);
+                checker = (self.over_picture && shown.ink.is_some()).then(|| shown.checker(c));
                 let marks = self.markup.as_ref().and_then(|markup| markup.read(cx).scene.clone()).map(|scene| {
                     let palette = Palette::new(&DARK, Surface::Background);
                     canvas(|_, _, _| {}, move |bounds, _, window, _| paint_stretched(&scene, bounds, &palette, window))
@@ -346,6 +349,10 @@ impl Render for ZoomableImage {
                     .child(
                         img(ImageSource::Render(shown.image)).size_full().rounded(radius).object_fit(ObjectFit::Fill),
                     )
+                    .when_some(checker, |picture, checker| {
+                        picture
+                            .child(div().absolute().inset_0().rounded(radius).border_1().border_color(checker.frame(c)))
+                    })
                     .children(marks)
                     .into_any_element()
             }
@@ -375,6 +382,7 @@ impl Render for ZoomableImage {
             .relative()
             .overflow_hidden()
             .when(self.markup.is_some(), |zoomable| zoomable.cursor(CursorStyle::Crosshair))
+            .when_some(checker, |zoomable, checker| zoomable.child(checker.board(0., c)))
             .child(tracked)
             // A press anywhere drags the picture, or draws while it is marked up; a double click on
             // it zooms, and a click beside it that didn't drag says so.

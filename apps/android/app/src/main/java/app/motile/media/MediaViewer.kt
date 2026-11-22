@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.input.pointer.PointerEvent
 import app.motile.theme.Surface
@@ -61,6 +62,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -105,6 +107,8 @@ import app.motile.theme.Palette
 import app.motile.theme.TextSize
 import app.motile.theme.value
 import app.motile.transcript.MediaFiles
+import app.motile.transcript.Checker
+import app.motile.transcript.PictureCache
 import app.motile.transcript.mediaFile
 import app.motile.ui.ActionButton
 import app.motile.ui.Answer
@@ -181,6 +185,8 @@ private fun Viewer(viewing: Viewing) {
     var copied by remember { mutableStateOf(false) }
     val files = remember { mutableStateMapOf<Int, File>() }
     val pictures = remember { mutableStateMapOf<Int, ImageBitmap>() }
+    /** The checkerboard each page's picture lies on: on the light one, the viewer's chrome is light. */
+    val checkers = remember { mutableStateMapOf<Int, Checker>() }
     var markup by remember { mutableStateOf<MarkupSession?>(null) }
     /** The image before the marks of a composer attachment marked up again, shown in its place. */
     var original by remember { mutableStateOf<ImageBitmap?>(null) }
@@ -191,6 +197,7 @@ private fun Viewer(viewing: Viewing) {
     val markable = !item.video && files[page] != null && pictures[page] != null
     /** The system's player draws its own controls, so a video keeps the buttons. */
     val buttonsShown = (chrome || item.video || markup != null) && pulled.value == 0f
+    val lightChrome = !item.video && checkers[page] == Checker.Light
 
     fun endMarkup() {
         markup?.close()
@@ -261,7 +268,7 @@ private fun Viewer(viewing: Viewing) {
         delay(1200)
         copied = false
     }
-    StatusBarShown(buttonsShown)
+    StatusBarShown(buttonsShown, dark = !lightChrome)
 
     val closeAt = with(density) { 110.dp.toPx() }
     val fling = with(density) { 1200.dp.toPx() }
@@ -294,87 +301,91 @@ private fun Viewer(viewing: Viewing) {
                 onZoom = { zoomed = it },
                 onFile = { files[shown] = it },
                 onPicture = { pictures[shown] = it },
+                onChecker = { checker -> if (checker == null) checkers.remove(shown) else checkers[shown] = checker },
                 tapped = { chrome = !chrome },
             )
         }
-        AnimatedVisibility(
-            buttonsShown, Modifier.align(Alignment.TopCenter),
-            enter = fadeIn(tween(300)) + slideInVertically(spring()) { -it * 2 },
-            exit = fadeOut(tween(300)) + slideOutVertically(spring()) { -it * 2 },
-        ) {
-            Box(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing).padding(start = 16.dp, end = 16.dp, top = Viewer.barGap)) {
-                val session = markup
-                if (session == null) {
-                    Column(
-                        Modifier.align(Alignment.Center).padding(horizontal = GlassButton.side + 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(item.name, size = TextSize.Sm, weight = FontWeight.SemiBold, color = OverPicture.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
-                        if (viewing.items.size > 1) {
-                            Text("${viewing.index + 1} of ${viewing.items.size}", size = TextSize.Xs, color = OverPicture.mutedForeground)
+        ViewerChrome(dark = !lightChrome) {
+            val chromePalette = LocalPalette.current
+            AnimatedVisibility(
+                buttonsShown, Modifier.align(Alignment.TopCenter),
+                enter = fadeIn(tween(300)) + slideInVertically(spring()) { -it * 2 },
+                exit = fadeOut(tween(300)) + slideOutVertically(spring()) { -it * 2 },
+            ) {
+                Box(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.safeDrawing).padding(start = 16.dp, end = 16.dp, top = Viewer.barGap)) {
+                    val session = markup
+                    if (session == null) {
+                        Column(
+                            Modifier.align(Alignment.Center).padding(horizontal = GlassButton.side + 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text(item.name, size = TextSize.Sm, weight = FontWeight.SemiBold, color = chromePalette.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                            if (viewing.items.size > 1) {
+                                Text("${viewing.index + 1} of ${viewing.items.size}", size = TextSize.Xs, color = chromePalette.mutedForeground)
+                            }
                         }
+                        GlassButton(Symbol.X, "Close", onClick = { store.closeViewer() }, symbolSize = IconSize.Xl)
+                    } else {
+                        GlassButton(Symbol.X, "Cancel", onClick = { cancelMarkup() }, symbolSize = IconSize.Xl)
+                        ActionButton(
+                            if (session.attachment == null) "Add to Message" else "Done",
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                            variant = ButtonVariant.Primary,
+                            size = ControlSize.Large,
+                            pending = session.finishing,
+                            round = true,
+                            disabled = !session.changed && session.attachment != null,
+                        ) { finishMarkup() }
                     }
-                    GlassButton(Symbol.X, "Close", onClick = { store.closeViewer() }, symbolSize = IconSize.Xl)
-                } else {
-                    GlassButton(Symbol.X, "Cancel", onClick = { cancelMarkup() }, symbolSize = IconSize.Xl)
-                    ActionButton(
-                        if (session.attachment == null) "Add to Message" else "Done",
-                        modifier = Modifier.align(Alignment.CenterEnd),
-                        variant = ButtonVariant.Primary,
-                        size = ControlSize.Large,
-                        pending = session.finishing,
-                        round = true,
-                        disabled = !session.changed && session.attachment != null,
-                    ) { finishMarkup() }
                 }
             }
-        }
-        val file = files[page]
-        AnimatedVisibility(
-            buttonsShown && file != null && markup == null, Modifier.align(Alignment.BottomEnd),
-            enter = fadeIn(tween(300)) + slideInVertically(spring()) { it },
-            exit = fadeOut(tween(300)) + slideOutVertically(spring()) { it },
-        ) {
-            val shown = file ?: return@AnimatedVisibility
-            Row(
-                Modifier
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(end = 16.dp, bottom = Viewer.barGap)
-                    .glassButton(CircleShape)
-                    .padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(0.dp),
-                verticalAlignment = Alignment.CenterVertically,
+            val file = files[page]
+            AnimatedVisibility(
+                buttonsShown && file != null && markup == null, Modifier.align(Alignment.BottomEnd),
+                enter = fadeIn(tween(300)) + slideInVertically(spring()) { it },
+                exit = fadeOut(tween(300)) + slideOutVertically(spring()) { it },
             ) {
-                if (markable) GlassButton(Symbol.PencilLine, "Mark Up", onClick = { startMarkup() }, symbolSize = IconSize.Xl, bare = true)
-                GlassButton(if (copied) Symbol.Check else Symbol.Copy, if (item.video) "Copy Video" else "Copy Image", onClick = {
-                    MediaFiles.copy(shown, item.name)
-                    copied = true
-                }, symbolSize = IconSize.Xl, bare = true)
-                GlassButton(Symbol.Share, "Share", onClick = { MediaFiles.share(shown, item.name) }, symbolSize = IconSize.Xl, bare = true)
-            }
-        }
-        AnimatedVisibility(
-            markup != null, Modifier.align(Alignment.BottomCenter),
-            enter = fadeIn(tween(250)) + slideInVertically(spring()) { it },
-            exit = fadeOut(tween(250)) + slideOutVertically(spring()) { it },
-        ) {
-            val session = markup ?: return@AnimatedVisibility
-            Column(
-                Modifier
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(start = 16.dp, end = 16.dp, bottom = Viewer.barGap)
-                    .widthIn(max = Viewer.markupWidth),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                if (markupFailed) {
-                    Text(
-                        "This image couldn't be marked up.",
-                        Modifier.background(palette.popover, CircleShape).padding(horizontal = 10.dp, vertical = 4.dp),
-                        size = TextSize.Sm, color = OverPicture.foreground,
-                    )
+                val shown = file ?: return@AnimatedVisibility
+                Row(
+                    Modifier
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .padding(end = 16.dp, bottom = Viewer.barGap)
+                        .glassButton(CircleShape)
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(0.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (markable) GlassButton(Symbol.PencilLine, "Mark Up", onClick = { startMarkup() }, symbolSize = IconSize.Xl, bare = true)
+                    GlassButton(if (copied) Symbol.Check else Symbol.Copy, if (item.video) "Copy Video" else "Copy Image", onClick = {
+                        MediaFiles.copy(shown, item.name)
+                        copied = true
+                    }, symbolSize = IconSize.Xl, bare = true)
+                    GlassButton(Symbol.Share, "Share", onClick = { MediaFiles.share(shown, item.name) }, symbolSize = IconSize.Xl, bare = true)
                 }
-                MarkupBar(session)
+            }
+            AnimatedVisibility(
+                markup != null, Modifier.align(Alignment.BottomCenter),
+                enter = fadeIn(tween(250)) + slideInVertically(spring()) { it },
+                exit = fadeOut(tween(250)) + slideOutVertically(spring()) { it },
+            ) {
+                val session = markup ?: return@AnimatedVisibility
+                Column(
+                    Modifier
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .padding(start = 16.dp, end = 16.dp, bottom = Viewer.barGap)
+                        .widthIn(max = Viewer.markupWidth),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    if (markupFailed) {
+                        Text(
+                            "This image couldn't be marked up.",
+                            Modifier.background(chromePalette.popover, CircleShape).padding(horizontal = 10.dp, vertical = 4.dp),
+                            size = TextSize.Sm, color = chromePalette.foreground,
+                        )
+                    }
+                    MarkupBar(session)
+                }
             }
         }
         Asking(if (discarding) Unit else null, { discarding = false }) {
@@ -411,20 +422,29 @@ private fun drive(step: String, session: MarkupSession?, start: () -> Unit, canc
     }
 }
 
-/** Hides the status bar with the buttons, as the viewer's window is its own. */
+/** Hides the status bar with the buttons, as the viewer's window is its own; its icons are light over a `dark` backdrop. */
 @Composable
-private fun StatusBarShown(shown: Boolean) {
+private fun StatusBarShown(shown: Boolean, dark: Boolean) {
     val view = LocalView.current
-    DisposableEffect(shown) {
+    DisposableEffect(shown, dark) {
         val window = (view.parent as? DialogWindowProvider)?.window
         val bars = window?.let { WindowCompat.getInsetsController(it, view) }
+        bars?.isAppearanceLightStatusBars = !dark
         if (shown) bars?.show(WindowInsetsCompat.Type.statusBars()) else bars?.hide(WindowInsetsCompat.Type.statusBars())
         onDispose {}
     }
 }
 
+/** The viewer's title and buttons, in the dark appearance, or the light one over the light checkerboard. */
+@Composable
+private fun ViewerChrome(dark: Boolean, content: @Composable () -> Unit) {
+    val palette = if (dark) Palette.dark else Palette.light
+    CompositionLocalProvider(LocalPalette provides palette, LocalDark provides dark, LocalForeground provides palette.foreground, content = content)
+}
+
 private sealed interface Loaded {
-    class Picture(val image: ImageBitmap) : Loaded
+    /** `ink`: how light what its see-through parts draw is, for the checkerboard behind it. */
+    class Picture(val image: ImageBitmap, val ink: Double?) : Loaded
     class Video(val file: File) : Loaded
     /** A video the player can't play. */
     class Other(val file: File) : Loaded
@@ -442,10 +462,15 @@ private fun MediaPage(
     onZoom: (Boolean) -> Unit,
     onFile: (File) -> Unit,
     onPicture: (ImageBitmap) -> Unit,
+    /** Called with the checkerboard the picture lies on, or nothing. */
+    onChecker: (Checker?) -> Unit,
     tapped: () -> Unit,
 ) {
     val store = LocalStore.current
     var loaded by remember(item) { mutableStateOf<Loaded?>(null) }
+    val palette = LocalPalette.current
+    val checker = (loaded as? Loaded.Picture)?.ink?.let { PictureCache.checker(it, palette) }
+    LaunchedEffect(checker) { onChecker(checker) }
     var failed by remember(item) { mutableStateOf(false) }
     LaunchedEffect(item) {
         val file = when (val source = item.source) {
@@ -461,14 +486,16 @@ private fun MediaPage(
             loaded = Loaded.Video(file)
             return@LaunchedEffect
         }
-        val image = withContext(Dispatchers.IO) { Pictures.decode(file, 6144)?.asImageBitmap() }
-        loaded = image?.let(Loaded::Picture)
-        failed = image == null
-        image?.let(onPicture)
+        val picture = withContext(Dispatchers.IO) {
+            Pictures.decode(file, 6144)?.let { Loaded.Picture(it.asImageBitmap(), Pictures.inkLuminance(it)) }
+        }
+        loaded = picture
+        failed = picture == null
+        picture?.image?.let(onPicture)
     }
     val tapping = Modifier.fillMaxSize().pointerInput(tapped) { detectTapGestures(onTap = { tapped() }) }
     when (val shownNow = loaded) {
-        is Loaded.Picture -> ZoomableImage(original ?: shownNow.image, markup, controls, onZoom, tapped)
+        is Loaded.Picture -> ZoomableImage(original ?: shownNow.image, checker, markup, controls, onZoom, tapped)
         is Loaded.Video -> VideoPlayer(shownNow.file, playing = shown, Modifier.fillMaxSize().padding(vertical = Viewer.room)) {
             loaded = Loaded.Other(shownNow.file)
         }
@@ -641,7 +668,7 @@ private class Framing {
  * zoom it. It fits between the `controls` over it and keeps the pin whose note is written in sight.
  */
 @Composable
-private fun ZoomableImage(image: ImageBitmap, markup: MarkupSession?, controls: PaddingValues?, onZoom: (Boolean) -> Unit, tapped: () -> Unit) {
+private fun ZoomableImage(image: ImageBitmap, checker: Checker?, markup: MarkupSession?, controls: PaddingValues?, onZoom: (Boolean) -> Unit, tapped: () -> Unit) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val framing = remember { Framing() }
@@ -713,14 +740,27 @@ private fun ZoomableImage(image: ImageBitmap, markup: MarkupSession?, controls: 
             }
         }
     }
+    val palette = LocalPalette.current
+    val squares = checker?.brush(palette, with(density) { Checker.square.roundToPx() }.coerceAtLeast(1))
+    val frame = checker?.frame(palette)
     Box(Modifier.fillMaxSize().onSizeChanged { framing.resize(it) }.then(gestures)) {
         Canvas(Modifier.fillMaxSize()) {
             val zoom = framing.zoom
             if (zoom == 0f) return@Canvas
+            // A see-through picture lies on a checkerboard that fills the viewer and stays put while it zooms and pans.
+            squares?.let { drawRect(it) }
             withTransform({
                 translate(framing.origin.x, framing.origin.y)
                 scale(zoom, zoom, Offset.Zero)
             }) { drawImage(image) }
+            frame ?: return@Canvas
+            val line = 1.dp.toPx()
+            drawRect(
+                frame,
+                topLeft = framing.origin - Offset(line / 2, line / 2),
+                size = Size(image.width * zoom + line, image.height * zoom + line),
+                style = Stroke(line),
+            )
         }
         if (markup != null) MarkupCanvas(markup, image, framing, Modifier.fillMaxSize())
     }

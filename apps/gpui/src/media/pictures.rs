@@ -10,6 +10,7 @@ use gpui_kit::*;
 
 use super::MediaFiles;
 use crate::store::Store;
+use crate::theme::{Colors, colors, is_dark};
 
 /// What the decoded images may take before the least recently shown ones go.
 const KEPT_BYTES: usize = 256 * 1024 * 1024;
@@ -36,6 +37,130 @@ pub struct Shown {
     pub image: Arc<RenderImage>,
     pub width: u32,
     pub height: u32,
+    /// How light what it draws is on average, weighed by how opaque it is: `None` when nothing in
+    /// it is seen through.
+    pub ink: Option<f32>,
+}
+
+impl Shown {
+    /// The checkerboard that lies behind it: the dark one under what draws in light colours, the
+    /// light one under anything else.
+    pub fn checker(&self, c: &Colors) -> Checker {
+        let Some(ink) = self.ink else { return Checker::Light };
+        let (dark, light) = (Checker::Dark.luminance(c), Checker::Light.luminance(c));
+        if contrast(ink, dark) > contrast(ink, light) { Checker::Dark } else { Checker::Light }
+    }
+}
+
+/// What a picture's see-through parts show, as image editors do.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Checker {
+    Light,
+    Dark,
+}
+
+impl Checker {
+    /// How large a square is on screen.
+    const SQUARE: f32 = 8.;
+    /// How tall the strips a square is cut into where a rounded corner clips it are.
+    const STRIP: f32 = 0.5;
+
+    pub fn colors(self, c: &Colors) -> (Hsla, Hsla) {
+        match self {
+            Checker::Light => (c.checker_light, c.checker_light_alternate),
+            Checker::Dark => (c.checker_dark, c.checker_dark_alternate),
+        }
+    }
+
+    /// The line around a picture that lies on it.
+    pub fn frame(self, c: &Colors) -> Hsla {
+        match self {
+            Checker::Light => c.checker_light_frame,
+            Checker::Dark => c.checker_dark_frame,
+        }
+    }
+
+    /// How light it is on average.
+    fn luminance(self, c: &Colors) -> f32 {
+        let (one, other) = self.colors(c);
+        (luminance(one) + luminance(other)) / 2.
+    }
+
+    /// The checkerboard over `bounds`, rounded by `radius`, as an element that fills its parent.
+    pub fn board(self, radius: f32, c: &Colors) -> impl IntoElement {
+        let colors = self.colors(c);
+        canvas(|_, _, _| {}, move |bounds, _, window, _| paint_board(bounds, radius, colors, window))
+            .absolute()
+            .inset_0()
+    }
+}
+
+/// Fills the bounds with the first colour and lays squares of the second over it, from the top
+/// left corner, only where they can be seen and inside the rounded corners.
+fn paint_board(bounds: Bounds<Pixels>, radius: f32, (one, other): (Hsla, Hsla), window: &mut Window) {
+    window.paint_quad(fill(bounds, one).corner_radii(px(radius)));
+    let visible = bounds.intersect(&window.content_mask().bounds);
+    if visible.size.width <= px(0.) || visible.size.height <= px(0.) {
+        return;
+    }
+    let side = Checker::SQUARE;
+    let (left, top) = (f32::from(bounds.left()), f32::from(bounds.top()));
+    let squares = |from: Pixels, to: Pixels, start: f32| {
+        ((f32::from(from) - start) / side).floor() as i64..((f32::from(to) - start) / side).ceil() as i64
+    };
+    for row in squares(visible.top(), visible.bottom(), top) {
+        for column in squares(visible.left(), visible.right(), left) {
+            if (row + column).rem_euclid(2) == 0 {
+                continue;
+            }
+            let square = Bounds::new(
+                point(px(left + column as f32 * side), px(top + row as f32 * side)),
+                size(px(side), px(side)),
+            )
+            .intersect(&bounds);
+            paint_rounded_square(square, bounds, radius, other, window);
+        }
+    }
+}
+
+/// Paints the square, cut into strips where one of the bounds' rounded corners clips it.
+fn paint_rounded_square(square: Bounds<Pixels>, bounds: Bounds<Pixels>, radius: f32, color: Hsla, window: &mut Window) {
+    let (left, right) = (f32::from(bounds.left()), f32::from(bounds.right()));
+    let (top, bottom) = (f32::from(bounds.top()), f32::from(bounds.bottom()));
+    let (square_left, square_right) = (f32::from(square.left()), f32::from(square.right()));
+    let (square_top, square_bottom) = (f32::from(square.top()), f32::from(square.bottom()));
+    let beside_corner = square_left < left + radius || square_right > right - radius;
+    let at_corner = beside_corner && (square_top < top + radius || square_bottom > bottom - radius);
+    if !at_corner {
+        return window.paint_quad(fill(square, color));
+    }
+    let mut y = square_top;
+    while y < square_bottom {
+        let height = Checker::STRIP.min(square_bottom - y);
+        let middle = y + height / 2.;
+        let into = (top + radius - middle).max(middle - (bottom - radius)).max(0.);
+        let inset = radius - (radius * radius - into * into).max(0.).sqrt();
+        let (from, to) = (square_left.max(left + inset), square_right.min(right - inset));
+        if from < to {
+            window.paint_quad(fill(Bounds::new(point(px(from), px(y)), size(px(to - from), px(height))), color));
+        }
+        y += height;
+    }
+}
+
+/// An SVG is kept for the appearance it was drawn in, since its `currentColor` is the text's.
+fn keyed(key: &str, cx: &App) -> String {
+    if !key.to_ascii_lowercase().ends_with(".svg") {
+        return key.to_string();
+    }
+    format!("{key}#{}", if is_dark(cx) { "dark" } else { "light" })
+}
+
+/// The text's colour as `#rrggbb`, which an SVG's `currentColor` is drawn in.
+fn ink_color(cx: &App) -> String {
+    let color = Rgba::from(colors(cx).foreground);
+    let byte = |value: f32| (value.clamp(0., 1.) * 255.).round() as u8;
+    format!("#{:02x}{:02x}{:02x}", byte(color.r), byte(color.g), byte(color.b))
 }
 
 struct Kept {
@@ -63,8 +188,8 @@ impl Pictures {
         if let Some(known) = Self::known(key, cx) {
             return known;
         }
-        let generation = Self::start(key, cx);
-        let key = key.to_string();
+        let key = keyed(key, cx);
+        let generation = Self::start(&key, cx);
         MediaFiles::fetch(store, media, cx, move |result, cx| match result {
             Ok(file) => Self::decode(key, generation, file, max_pixels, cx),
             Err(error) => Self::finish(&key, generation, Err(Failure::Fetch(error.into())), cx),
@@ -77,8 +202,9 @@ impl Pictures {
         if let Some(known) = Self::known(key, cx) {
             return known;
         }
-        let generation = Self::start(key, cx);
-        Self::decode(key.to_string(), generation, file.to_path_buf(), max_pixels, cx);
+        let key = keyed(key, cx);
+        let generation = Self::start(&key, cx);
+        Self::decode(key, generation, file.to_path_buf(), max_pixels, cx);
         Picture::Loading
     }
 
@@ -88,12 +214,13 @@ impl Pictures {
         if let Some(known) = Self::known(key, cx) {
             return known;
         }
-        let generation = Self::start(key, cx);
-        let (key, url, file) = (key.to_string(), url.to_string(), file.to_path_buf());
+        let key = keyed(key, cx);
+        let generation = Self::start(&key, cx);
+        let (url, file, color) = (url.to_string(), file.to_path_buf(), ink_color(cx));
         let svg = cx.svg_renderer();
         let reading = cx.background_executor().spawn(async move {
             let fetched = file.exists() || download(&url, &file);
-            fetched.then(|| read(&file, max_pixels, &svg)).flatten()
+            fetched.then(|| read(&file, max_pixels, &svg, &color)).flatten()
         });
         cx.spawn(async move |cx| {
             let read = reading.await;
@@ -124,11 +251,14 @@ impl Pictures {
 
     /// Forgets that the image failed, so that the next `load` tries again.
     pub fn retry(key: &str, cx: &mut App) {
-        cx.default_global::<Pictures>().failed.remove(key);
+        let key = keyed(key, cx);
+        cx.default_global::<Pictures>().failed.remove(&key);
     }
 
     /// The image kept under `key`, or its failure or its load under way, without starting one.
     pub fn known(key: &str, cx: &mut App) -> Option<Picture> {
+        let key = keyed(key, cx);
+        let key = key.as_str();
         let pictures = cx.default_global::<Pictures>();
         pictures.clock += 1;
         let clock = pictures.clock;
@@ -150,8 +280,8 @@ impl Pictures {
     }
 
     fn decode(key: String, generation: u64, file: PathBuf, max_pixels: u32, cx: &mut App) {
-        let svg = cx.svg_renderer();
-        let decoding = cx.background_executor().spawn(async move { read(&file, max_pixels, &svg) });
+        let (svg, color) = (cx.svg_renderer(), ink_color(cx));
+        let decoding = cx.background_executor().spawn(async move { read(&file, max_pixels, &svg, &color) });
         cx.spawn(async move |cx| {
             let decoded = decoding.await;
             cx.update(|cx| Self::finish(&key, generation, decoded.ok_or(Failure::Decode), cx));
@@ -202,13 +332,20 @@ impl Pictures {
 /// How large an SVG is drawn at most, on its longer side.
 const SVG_MAX_PIXELS: u32 = 4096;
 
-/// The image of the file, no larger than `max_pixels` on a side; an SVG drawn that large.
-fn read(file: &Path, max_pixels: u32, svg: &SvgRenderer) -> Option<Shown> {
+/// The image of the file, no larger than `max_pixels` on a side; an SVG drawn that large, with its
+/// `currentColor` in `color`.
+fn read(file: &Path, max_pixels: u32, svg: &SvgRenderer, color: &str) -> Option<Shown> {
+    let mut shown = read_image(file, max_pixels, svg, color)?;
+    shown.ink = ink(&shown.image);
+    Some(shown)
+}
+
+fn read_image(file: &Path, max_pixels: u32, svg: &SvgRenderer, color: &str) -> Option<Shown> {
     let is_svg = file.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("svg"));
     if !is_svg {
         return decode(file, max_pixels);
     }
-    let parsed = svg.parse_svg(&std::fs::read(file).ok()?).ok()?;
+    let parsed = svg.parse_svg(&inked(&std::fs::read(file).ok()?, color)).ok()?;
     let side = max_pixels.min(SVG_MAX_PIXELS) as i32;
     let draw = |width: i32| {
         let image =
@@ -220,7 +357,65 @@ fn read(file: &Path, max_pixels: u32, svg: &SvgRenderer) -> Option<Shown> {
     if height > side {
         (image, width, height) = draw(side * width / height)?;
     }
-    Some(Shown { image, width: width as u32, height: height as u32 })
+    Some(Shown { image, width: width as u32, height: height as u32, ink: None })
+}
+
+/// The SVG with its `currentColor` in `color`, as a web page gives it the text's colour, unless its
+/// root says a colour of its own.
+pub fn inked(svg: &[u8], color: &str) -> Vec<u8> {
+    let Ok(text) = std::str::from_utf8(svg) else { return svg.to_vec() };
+    let Some(root) = text.find("<svg").map(|start| start + 4) else { return svg.to_vec() };
+    let tag = &text[root..text[root..].find('>').map_or(text.len(), |end| root + end)];
+    let has_color = tag
+        .match_indices("color")
+        .any(|(at, _)| tag[..at].ends_with(char::is_whitespace) && tag[at + 5..].trim_start().starts_with('='));
+    if has_color {
+        return svg.to_vec();
+    }
+    format!("{} color=\"{color}\"{}", &text[..root], &text[root..]).into_bytes()
+}
+
+/// How light what the picture draws is on average, weighed by how opaque it is, from a grid of
+/// its pixels: `None` when nothing in it is seen through.
+fn ink(image: &RenderImage) -> Option<f32> {
+    const GRID: usize = 64;
+    let bytes = image.as_bytes(0)?;
+    let drawn = image.size(0);
+    let (width, height) = (i32::from(drawn.width) as usize, i32::from(drawn.height) as usize);
+    if width == 0 || height == 0 || bytes.len() < width * height * 4 {
+        return None;
+    }
+    let (mut sum, mut weight, mut seen_through) = (0f32, 0f32, false);
+    for row in 0..GRID.min(height) {
+        for column in 0..GRID.min(width) {
+            let (x, y) = (column * width / GRID.min(width), row * height / GRID.min(height));
+            let pixel = &bytes[(y * width + x) * 4..][..4];
+            let alpha = f32::from(pixel[3]) / 255.;
+            seen_through |= alpha < 0.98;
+            if alpha <= 0.02 {
+                continue;
+            }
+            let channel = |index: usize| f32::from(pixel[index]) / 255.;
+            sum += relative_luminance(channel(2), channel(1), channel(0)) * alpha;
+            weight += alpha;
+        }
+    }
+    (seen_through && weight > 0.).then(|| sum / weight)
+}
+
+fn relative_luminance(red: f32, green: f32, blue: f32) -> f32 {
+    let linear = |value: f32| if value <= 0.04045 { value / 12.92 } else { ((value + 0.055) / 1.055).powf(2.4) };
+    0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+}
+
+fn luminance(color: Hsla) -> f32 {
+    let color = Rgba::from(color);
+    relative_luminance(color.r, color.g, color.b)
+}
+
+/// WCAG's contrast ratio between two relative luminances.
+fn contrast(one: f32, other: f32) -> f32 {
+    (one.max(other) + 0.05) / (one.min(other) + 0.05)
 }
 
 /// Reads the image, no larger than `max_pixels` on a side, the right way round, in the BGRA GPUI
@@ -383,7 +578,7 @@ fn shown(mut pixels: image::RgbaImage) -> Shown {
     }
     let (width, height) = pixels.dimensions();
     let frame = image::Frame::new(pixels);
-    Shown { image: Arc::new(RenderImage::new(vec![frame])), width, height }
+    Shown { image: Arc::new(RenderImage::new(vec![frame])), width, height, ink: None }
 }
 
 /// Fetches the file at `url` into `file`. Whether it did.
@@ -409,12 +604,49 @@ mod tests {
 
     use gpui_kit::SvgRenderer;
 
-    use super::{SVG_MAX_PIXELS, read};
+    use super::{Checker, SVG_MAX_PIXELS, Shown, inked, read};
+    use crate::theme::{DARK, LIGHT};
+
+    fn read_svg(svg: &str, color: &str) -> Shown {
+        let file = std::env::temp_dir().join(format!("motile-picture-{}.svg", uuid::Uuid::new_v4()));
+        std::fs::write(&file, svg).unwrap();
+        let shown = read(&file, 64, &SvgRenderer::new(Arc::new(())), color);
+        let _ = std::fs::remove_file(&file);
+        shown.expect("the SVG is drawn")
+    }
+
+    #[test]
+    fn current_color_is_the_text_colour_unless_the_svg_sets_one() {
+        let plain = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2"><rect width="2" height="1" fill="currentColor"/></svg>"#;
+        let red = plain.replace("<svg ", r#"<svg color="red" "#);
+        assert!(
+            String::from_utf8(inked(plain.as_bytes(), "#d0d2d9"))
+                .unwrap()
+                .starts_with(r##"<svg color="#d0d2d9" xmlns"##)
+        );
+        assert_eq!(inked(red.as_bytes(), "#d0d2d9"), red.as_bytes());
+        let top_left = |shown: &Shown| shown.image.as_bytes(0).unwrap()[..4].to_vec();
+        assert_eq!(top_left(&read_svg(plain, "#ffffff")), [255, 255, 255, 255]);
+        assert_eq!(top_left(&read_svg(&red, "#ffffff")), [0, 0, 255, 255]);
+    }
+
+    #[test]
+    fn light_ink_seen_through_lies_on_the_dark_checkerboard_and_anything_else_on_the_light_one() {
+        let half = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2"><rect width="2" height="1" fill="currentColor"/></svg>"#;
+        let opaque = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 2"><rect width="2" height="2" fill="white"/></svg>"#;
+        for colors in [&*DARK, &*LIGHT] {
+            assert_eq!(read_svg(half, "#ffffff").checker(colors), Checker::Dark);
+            assert_eq!(read_svg(half, "#d0d2d9").checker(colors), Checker::Dark);
+            assert_eq!(read_svg(half, "#000000").checker(colors), Checker::Light);
+            assert_eq!(read_svg(half, "#22242b").checker(colors), Checker::Light);
+            assert_eq!(read_svg(opaque, "#000000").checker(colors), Checker::Light);
+        }
+    }
 
     fn drawn(svg: &str, max_pixels: u32) -> (u32, u32) {
         let file = std::env::temp_dir().join(format!("motile-picture-{}.svg", uuid::Uuid::new_v4()));
         std::fs::write(&file, svg).unwrap();
-        let shown = read(&file, max_pixels, &SvgRenderer::new(Arc::new(())));
+        let shown = read(&file, max_pixels, &SvgRenderer::new(Arc::new(())), "#000000");
         let _ = std::fs::remove_file(&file);
         let shown = shown.expect("the SVG is drawn");
         (shown.width, shown.height)

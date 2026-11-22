@@ -362,6 +362,7 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "run greet.py" | Under supervised access, asks before each tool call |
 | "show the screenshot" | Makes an image, reads it (the Read row shows it when opened) and shows it |
 | "show the logo" | Writes an SVG and shows it |
+| "show the icons" | Writes three 24-point SVG icons drawn in `currentColor`, a black one and a white one, and shows them on lines of their own |
 | "show the recording" | Shows a video with its preview image |
 | "send the report" | Sends a file to download |
 | "use the calculator" | Works out 12 × 7 in Calculator through the computer use driver's tools, one of which shows a screenshot (Claude Code) |

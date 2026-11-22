@@ -37,12 +37,21 @@ struct MediaContent {
     /// The image the box shows: the image itself, or a video's poster.
     var picture: String? { video ? poster : id }
 
-    /// The box it is shown in, in a column `width` wide: its own size, or smaller to fit.
+    /// The box it is shown in, in a column `width` wide: the picture's size, and at least
+    /// `smallestBox`, so that a small picture lies on a checkerboard that can be made out and pressed.
     func box(width: CGFloat) -> CGSize {
-        guard let pixels else {
+        guard let picture = drawn(width: width) else {
             let boxWidth = min(width, 640)
             return CGSize(width: boxWidth, height: (boxWidth * 9 / 16).rounded())
         }
+        return CGSize(width: min(width, max(picture.width, Self.smallestBox)), height: max(picture.height, Self.smallestBox))
+    }
+
+    static let smallestBox: CGFloat = 96
+
+    /// How large the picture is drawn in a column `width` wide: its own size, or smaller to fit.
+    func drawn(width: CGFloat) -> CGSize? {
+        guard let pixels else { return nil }
         let scale = min(1, width / pixels.width, Self.maxHeight / pixels.height)
         return CGSize(width: max(1, (pixels.width * scale).rounded()), height: max(1, (pixels.height * scale).rounded()))
     }
@@ -60,24 +69,115 @@ enum Pictures {
         cache.totalCostLimit = 256 * 1024 * 1024
         return cache
     }()
+    /// How light what each picture with see-through parts draws is, by the picture's key.
+    private static let inks = NSCache<NSString, NSNumber>()
     private static let decoding = DispatchQueue(label: "app.motile.pictures", qos: .userInitiated, attributes: .concurrent)
 
+    /// An SVG is kept for the appearance it was drawn in, since its `currentColor` is the text's.
+    private static func svgKey(_ id: String, dark: Bool) -> NSString {
+        "\(id)#\(dark ? "dark" : "light")" as NSString
+    }
+
     static func cached(_ id: String) -> CGImage? {
-        cache.object(forKey: id as NSString)
+        cache.object(forKey: id as NSString) ?? cache.object(forKey: svgKey(id, dark: Platform.isDark))
+    }
+
+    /// The checkerboard that lies behind the picture: the dark one under what draws in light colours,
+    /// the light one under anything else.
+    static func checker(behind id: String) -> Checker {
+        guard let ink = ink(id) else { return .light }
+        return contrast(ink, Checker.dark.luminance) > contrast(ink, Checker.light.luminance) ? .dark : .light
+    }
+
+    /// Whether the picture has parts that are seen through.
+    static func isSeenThrough(_ id: String) -> Bool {
+        ink(id) != nil
+    }
+
+    private static func ink(_ id: String) -> Double? {
+        (inks.object(forKey: id as NSString) ?? inks.object(forKey: svgKey(id, dark: Platform.isDark)))?.doubleValue
+    }
+
+    /// What a picture's see-through parts show, as image editors do.
+    enum Checker {
+        case light, dark
+
+        static let square: CGFloat = 8
+
+        private var colors: (PlatformColor, PlatformColor) {
+            switch self {
+            case .light: (Theme.checkerLight, Theme.checkerLightAlternate)
+            case .dark: (Theme.checkerDark, Theme.checkerDarkAlternate)
+            }
+        }
+
+        /// The line around a picture that lies on it, which shows where the picture ends.
+        var frame: PlatformColor {
+            switch self {
+            case .light: Theme.checkerLightFrame
+            case .dark: Theme.checkerDarkFrame
+            }
+        }
+
+        /// How light it is on average.
+        var luminance: Double {
+            let (one, other) = colors
+            return (one.luminance + other.luminance) / 2
+        }
+
+        private static var patterns: [String: PlatformColor] = [:]
+
+        /// The checkerboard as a colour to fill with.
+        func pattern() -> PlatformColor {
+            let scale = Platform.pixelsPerPoint
+            let side = max(1, Int((Checker.square * scale).rounded()))
+            let key = "\(self)\(side)"
+            if let made = Self.patterns[key] { return made }
+            let made = draw(side: side, scale: scale)
+            Self.patterns[key] = made
+            return made
+        }
+
+        private func draw(side: Int, scale: CGFloat) -> PlatformColor {
+            let (one, other) = colors
+            guard let canvas = CGContext(
+                data: nil, width: side * 2, height: side * 2, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return one }
+            canvas.setFillColor(Theme.resolved(one, dark: false).cgColor)
+            canvas.fill(CGRect(x: 0, y: 0, width: side * 2, height: side * 2))
+            canvas.setFillColor(Theme.resolved(other, dark: false).cgColor)
+            canvas.fill([CGRect(x: side, y: 0, width: side, height: side), CGRect(x: 0, y: side, width: side, height: side)])
+            guard let image = canvas.makeImage() else { return one }
+            #if os(macOS)
+            let points = CGFloat(side * 2) / scale
+            return NSColor(patternImage: NSImage(cgImage: image, size: CGSize(width: points, height: points)))
+            #else
+            return UIColor(patternImage: UIImage(cgImage: image, scale: scale, orientation: .up))
+            #endif
+        }
     }
 
     /// Calls `done` on the main thread with the image, no larger than `maxPixels` on a side. An SVG
-    /// is drawn that large, up to `svgMaxPixels`.
+    /// is drawn that large, up to `svgMaxPixels`, with `currentColor` in the text's colour.
     static func decode(_ file: URL, id: String, maxPixels: CGFloat, done: @escaping (CGImage?) -> Void) {
+        let svg = file.pathExtension.lowercased() == "svg"
+        let dark = Platform.isDark
+        let key = svg ? svgKey(id, dark: dark) : id as NSString
+        let color = Theme.resolved(Theme.foreground, dark: dark).hex
         let finish = { (image: CGImage?) in
-            if let image {
-                cache.setObject(image, forKey: id as NSString, cost: image.bytesPerRow * image.height)
+            decoding.async {
+                if let image {
+                    cache.setObject(image, forKey: key, cost: image.bytesPerRow * image.height)
+                    if let ink = inkLuminance(image) { inks.setObject(NSNumber(value: ink), forKey: key) }
+                }
+                DispatchQueue.main.async { done(image) }
             }
-            DispatchQueue.main.async { done(image) }
         }
         decoding.async {
-            guard file.pathExtension.lowercased() != "svg" else {
-                return drawSVG(file, side: min(maxPixels, svgMaxPixels), done: finish)
+            guard !svg else {
+                guard let data = try? Data(contentsOf: file) else { return finish(nil) }
+                return drawSVG(inked(data, color: color), side: min(maxPixels, svgMaxPixels), done: finish)
             }
             let options: [CFString: Any] = [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -93,10 +193,19 @@ enum Pictures {
     /// How large an SVG is drawn at most, on its longer side.
     private static let svgMaxPixels: CGFloat = 4096
 
+    /// The SVG with its `currentColor` in `color`, as a web page gives it the text's colour, unless
+    /// its root says a colour of its own.
+    static func inked(_ data: Data, color: String) -> Data {
+        guard let text = String(data: data, encoding: .utf8), let root = text.range(of: "<svg") else { return data }
+        let tag = text[root.upperBound...].prefix { $0 != ">" }
+        guard tag.range(of: #"\scolor\s*="#, options: .regularExpression) == nil else { return data }
+        return Data((text[..<root.upperBound] + " color=\"\(color)\"" + text[root.upperBound...]).utf8)
+    }
+
     /// The SVG drawn `side` pixels on its longer side.
-    private static func drawSVG(_ file: URL, side: CGFloat, done: @escaping (CGImage?) -> Void) {
+    static func drawSVG(_ data: Data, side: CGFloat, done: @escaping (CGImage?) -> Void) {
         #if os(macOS)
-        guard let svg = NSImage(contentsOf: file), svg.size.width > 0, svg.size.height > 0 else { return done(nil) }
+        guard let svg = NSImage(data: data), svg.size.width > 0, svg.size.height > 0 else { return done(nil) }
         let scale = side / max(svg.size.width, svg.size.height)
         let (width, height) = (max(1, Int((svg.size.width * scale).rounded())), max(1, Int((svg.size.height * scale).rounded())))
         guard let canvas = CGContext(
@@ -110,9 +219,45 @@ enum Pictures {
         NSGraphicsContext.restoreGraphicsState()
         done(canvas.makeImage())
         #else
-        guard let data = try? Data(contentsOf: file) else { return done(nil) }
         Task { @MainActor in done(await SVGImage.image(of: data, side: side)?.cgImage) }
         #endif
+    }
+
+    /// How light what the picture draws is on average, weighed by how opaque it is: nil when
+    /// nothing in it is seen through.
+    private static func inkLuminance(_ image: CGImage) -> Double? {
+        switch image.alphaInfo {
+        case .none, .noneSkipFirst, .noneSkipLast: return nil
+        default: break
+        }
+        let side = 32
+        guard let canvas = CGContext(
+            data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let data = canvas.data else { return nil }
+        canvas.interpolationQuality = .medium
+        canvas.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+        let pixels = data.bindMemory(to: UInt8.self, capacity: side * side * 4)
+        var (sum, weight, seenThrough) = (0.0, 0.0, false)
+        for index in stride(from: 0, to: side * side * 4, by: 4) {
+            let alpha = Double(pixels[index + 3]) / 255
+            seenThrough = seenThrough || alpha < 0.98
+            guard alpha > 0.02 else { continue }
+            let channel = { (offset: Int) in Double(pixels[index + offset]) / 255 / alpha }
+            sum += relativeLuminance(channel(0), channel(1), channel(2)) * alpha
+            weight += alpha
+        }
+        return seenThrough && weight > 0 ? sum / weight : nil
+    }
+
+    static func relativeLuminance(_ red: Double, _ green: Double, _ blue: Double) -> Double {
+        let linear = { (value: Double) in value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4) }
+        return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+    }
+
+    /// WCAG's contrast ratio between two relative luminances.
+    static func contrast(_ one: Double, _ other: Double) -> Double {
+        (max(one, other) + 0.05) / (min(one, other) + 0.05)
     }
 
     /// Calls `done` on the main thread with the first frame of a video, no larger than `maxPixels`
@@ -155,11 +300,39 @@ extension MediaFiles {
     }
 
     static func copy(_ file: URL, video: Bool, named name: String) {
-        guard video else { return copyImage(at: file) }
+        guard video else { return isSVG(file, named: name) ? copySVG(file, named: name) : copyImage(at: file) }
         DispatchQueue.global(qos: .userInitiated).async {
             let named = namedCopy(of: file, name: name)
             DispatchQueue.main.async { copyFile(named) }
         }
+    }
+
+    static func isSVG(_ file: URL, named name: String) -> Bool {
+        file.pathExtension.lowercased() == "svg" || name.lowercased().hasSuffix(".svg")
+    }
+
+    /// How large the picture an SVG is copied with is drawn, for what only takes pictures.
+    private static let copiedSVGPixels: CGFloat = 1024
+
+    /// Hands over an SVG's file under its name, its text, and a picture of it, as `copySVG` puts
+    /// them on the pasteboard: the file for where files go, the SVG for what reads it, the picture
+    /// for the rest.
+    static func svgParts(_ file: URL, named name: String, done: @escaping (_ named: URL, _ svg: Data, _ png: Data?) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let svg = try? Data(contentsOf: file) else { return }
+            let named = namedCopy(of: file, name: name)
+            Pictures.drawSVG(svg, side: copiedSVGPixels) { image in
+                let png = image.flatMap(pngData)
+                DispatchQueue.main.async { done(named, svg, png) }
+            }
+        }
+    }
+
+    private static func pngData(_ image: CGImage) -> Data? {
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(data as CFMutableData, UTType.png.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, nil)
+        return CGImageDestinationFinalize(destination) ? data as Data : nil
     }
 
     /// A copy of the file under its name, in a temporary folder, for what takes it to know it by it.
@@ -268,6 +441,9 @@ final class MediaBox: FlippedView {
                 }
             }
         }
+        #if os(iOS)
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (box: Self, _: UITraitCollection) in box.appearanceChanged() }
+        #endif
         progressWatch = NotificationCenter.default.addObserver(forName: .mediaProgress, object: nil, queue: .main) { [weak self] note in
             guard let self, let id = self.content?.id, note.userInfo?["id"] as? String == id else { return }
             guard case .loading = self.state, let fraction = note.userInfo?["fraction"] as? Double else { return }
@@ -290,10 +466,28 @@ final class MediaBox: FlippedView {
         describe(media.alt.isEmpty ? media.name : media.alt)
         playButton.isHidden = !media.video
         picture.picture = media.picture.flatMap(Pictures.cached)
+        picture.tile = Pictures.checker(behind: media.picture ?? media.id).pattern()
+        relayout()
         let unpictured = media.video && media.poster == nil
         caption.string = unpictured ? "\(media.name) · \(ByteCountFormatter.string(fromByteCount: media.bytes, countStyle: .file))" : ""
         state = .shown
         guard media.picture != nil, picture.picture == nil else { return }
+        loadPicture(media)
+    }
+
+    #if os(macOS)
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        appearanceChanged()
+    }
+    #endif
+
+    /// Draws an SVG again in the other appearance, which its `currentColor` follows.
+    private func appearanceChanged() {
+        guard let media = content, !media.video, media.id.lowercased().hasSuffix(".svg") else { return }
+        picture.picture = Pictures.cached(media.id)
+        picture.tile = Pictures.checker(behind: media.id).pattern()
+        guard picture.picture == nil else { return }
         loadPicture(media)
     }
 
@@ -309,6 +503,7 @@ final class MediaBox: FlippedView {
             Pictures.decode(file, id: pictureID, maxPixels: maxPixels) { image in
                 guard self.content?.id == media.id else { return }
                 self.picture.picture = image
+                self.picture.tile = Pictures.checker(behind: pictureID).pattern()
                 self.state = image == nil && !media.video ? .failed("This image couldn't be shown.") : .shown
             }
         }
@@ -365,6 +560,7 @@ final class MediaBox: FlippedView {
 
     override func layoutNow() {
         picture.frame = bounds
+        picture.drawn = content?.drawn(width: bounds.width)
         let side = playButton.size.height
         playButton.frame = CGRect(x: (bounds.midX - side / 2).rounded(), y: (bounds.midY - side / 2).rounded(), width: side, height: side)
         caption.frame = CGRect(x: 12, y: bounds.maxY - 10 - scaled(16), width: max(0, bounds.width - 24), height: scaled(16))

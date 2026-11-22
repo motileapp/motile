@@ -73,6 +73,46 @@ pub fn copy_file(file: &Path, cx: &mut App) {
     cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(file.to_string_lossy().into_owned()));
 }
 
+/// Puts an SVG on the pasteboard as its file, its text and a picture of it.
+#[cfg(target_os = "macos")]
+pub fn copy_svg(file: &Path, svg: &[u8], png: Option<Vec<u8>>, _: &mut App) {
+    use objc2::runtime::ProtocolObject;
+    use objc2_app_kit::{
+        NSPasteboard, NSPasteboardItem, NSPasteboardTypeFileURL, NSPasteboardTypePNG, NSPasteboardTypeString,
+        NSPasteboardWriting,
+    };
+    use objc2_foundation::{NSArray, NSData, NSString, NSURL};
+
+    let url = NSURL::fileURLWithPath(&NSString::from_str(&file.to_string_lossy()));
+    let item = NSPasteboardItem::new();
+    unsafe {
+        if let Some(url) = url.absoluteString() {
+            item.setString_forType(&url, NSPasteboardTypeFileURL);
+        }
+        item.setData_forType(&NSData::with_bytes(svg), &NSString::from_str("public.svg-image"));
+        if let Some(png) = png {
+            item.setData_forType(&NSData::with_bytes(&png), NSPasteboardTypePNG);
+        }
+        item.setString_forType(&NSString::from_str(&String::from_utf8_lossy(svg)), NSPasteboardTypeString);
+    }
+    let object: &ProtocolObject<dyn NSPasteboardWriting> = ProtocolObject::from_ref(&*item);
+    let pasteboard = NSPasteboard::generalPasteboard();
+    pasteboard.clearContents();
+    pasteboard.writeObjects(&NSArray::from_slice(&[object]));
+}
+
+/// Puts an SVG on the clipboard as its text and a picture of it.
+#[cfg(not(target_os = "macos"))]
+pub fn copy_svg(_: &Path, svg: &[u8], png: Option<Vec<u8>>, cx: &mut App) {
+    use gpui_kit::{ClipboardEntry, ClipboardItem, ClipboardString, Image, ImageFormat};
+
+    let mut entries = vec![ClipboardEntry::String(ClipboardString::new(String::from_utf8_lossy(svg).into_owned()))];
+    if let Some(png) = png {
+        entries.push(ClipboardEntry::Image(Image::from_bytes(ImageFormat::Png, png)));
+    }
+    cx.write_to_clipboard(ClipboardItem { entries });
+}
+
 /// Has the Downloads stack in the Dock bounce, as it does for a browser's download.
 #[cfg(target_os = "macos")]
 pub fn download_finished(file: &Path) {

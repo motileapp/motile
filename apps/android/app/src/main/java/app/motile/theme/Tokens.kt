@@ -15,6 +15,12 @@ class Palette(
     val backgroundSecondary: Color,
     val backgroundSecondaryAccent: Color,
     val backgroundSecondaryAccentStronger: Color,
+    val checkerLight: Color,
+    val checkerLightAlternate: Color,
+    val checkerDark: Color,
+    val checkerDarkAlternate: Color,
+    val checkerLightFrame: Color,
+    val checkerDarkFrame: Color,
     val card: Color,
     val cardAccent: Color,
     val popover: Color,
@@ -123,6 +129,12 @@ class Palette(
             backgroundSecondary = Color(0xFFEAECF0),
             backgroundSecondaryAccent = Color(0xFFDFE2E8),
             backgroundSecondaryAccentStronger = Color(0xFFD4D8E0),
+            checkerLight = Color(0xFFF6F7F9),
+            checkerLightAlternate = Color(0xFFE2E3E5),
+            checkerDark = Color(0xFF191A1E),
+            checkerDarkAlternate = Color(0xFF0A0B0F),
+            checkerLightFrame = Color(0xFFADB1BC),
+            checkerDarkFrame = Color(0xFF4A4E5A),
             card = Color(0xFFFFFFFF),
             cardAccent = Color(0xFFE6E8EC),
             popover = Color(0xFFFFFFFF),
@@ -231,6 +243,12 @@ class Palette(
             backgroundSecondary = Color(0xFF111217),
             backgroundSecondaryAccent = Color(0xFF191A1F),
             backgroundSecondaryAccentStronger = Color(0xFF212227),
+            checkerLight = Color(0xFFF6F7F9),
+            checkerLightAlternate = Color(0xFFE2E3E5),
+            checkerDark = Color(0xFF191A1E),
+            checkerDarkAlternate = Color(0xFF0A0B0F),
+            checkerLightFrame = Color(0xFFADB1BC),
+            checkerDarkFrame = Color(0xFF4A4E5A),
             card = Color(0xFF15161B),
             cardAccent = Color(0xFF1E1F26),
             popover = Color(0xFF191A1F),
@@ -341,6 +359,12 @@ class Palette(
         "background-secondary" -> backgroundSecondary
         "background-secondary-accent" -> backgroundSecondaryAccent
         "background-secondary-accent-stronger" -> backgroundSecondaryAccentStronger
+        "checker-light" -> checkerLight
+        "checker-light-alternate" -> checkerLightAlternate
+        "checker-dark" -> checkerDark
+        "checker-dark-alternate" -> checkerDarkAlternate
+        "checker-light-frame" -> checkerLightFrame
+        "checker-dark-frame" -> checkerDarkFrame
         "card" -> card
         "card-accent" -> cardAccent
         "popover" -> popover

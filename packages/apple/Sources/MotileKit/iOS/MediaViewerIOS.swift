@@ -26,6 +26,8 @@ struct MediaViewer: View {
     @State private var markupPicture: CGImage?
     @State private var discarding = false
     @State private var markupFailed = false
+    /// The checkerboard behind the picture shown: on the light one, the viewer's chrome is light.
+    @State private var checker: Pictures.Checker?
 
     var body: some View {
         let item = viewing.item
@@ -38,7 +40,8 @@ struct MediaViewer: View {
                     let current = position == viewing.index
                     MediaPage(
                         item: item, shown: current, zoomed: $zoomed,
-                        file: current ? $shared : .constant(nil), picture: current ? $picture : .constant(nil), room: room,
+                        file: current ? $shared : .constant(nil), picture: current ? $picture : .constant(nil),
+                        shownChecker: current ? $checker : .constant(nil), room: room,
                         markup: current ? markup : nil, markupPicture: current ? markupPicture : nil,
                         controls: current && markup != nil ? Self.markupControls : EdgeInsets(), tapped: toggleChrome
                     )
@@ -86,7 +89,7 @@ struct MediaViewer: View {
         .onChange(of: store.markupStep) { follow(store.markupStep) }
         .onDisappear { markup?.close() }
         .simultaneousGesture(pull)
-        .environment(\.colorScheme, .dark)
+        .preferredColorScheme(checker == .light ? .light : .dark)
         .statusBarHidden(!buttonsShown(item))
         .persistentSystemOverlays(.hidden)
         .task(id: copied) {
@@ -276,10 +279,10 @@ struct MediaViewer: View {
             if viewing.items.count > 1 {
                 Text("\(viewing.index + 1) of \(viewing.items.count)")
                     .font(.ui(.xxs))
-                    .foregroundStyle(Color.themeMutedForegroundOverPicture)
+                    .foregroundStyle(Color.themeMutedForeground)
             }
         }
-        .foregroundStyle(Color.themeForegroundOverPicture)
+        .foregroundStyle(Color.themeForeground)
     }
 }
 
@@ -310,6 +313,8 @@ private struct MediaPage: View {
     @Binding var file: URL?
     /// The image, once it is decoded, for the viewer to mark up.
     @Binding var picture: CGImage?
+    /// Its checkerboard, for the viewer's chrome to stand out from.
+    @Binding var shownChecker: Pictures.Checker?
     /// What the viewer's buttons take above and below, for a video to stay clear of.
     let room: CGFloat
     let markup: MarkupSession?
@@ -321,6 +326,8 @@ private struct MediaPage: View {
     @State private var loaded: Loaded?
     @State private var failed = false
     @State private var fraction: Double?
+    /// The checkerboard behind a picture with see-through parts.
+    @State private var checker: Pictures.Checker?
 
     private enum Loaded {
         case image(CGImage, scale: CGFloat)
@@ -335,6 +342,7 @@ private struct MediaPage: View {
             .task(id: shown) {
                 guard shown else { return pause() }
                 guard loaded == nil else {
+                    shownChecker = checker
                     if case .image(let image, _) = loaded { picture = image }
                     return play()
                 }
@@ -359,7 +367,8 @@ private struct MediaPage: View {
                 onZoom: { zoomed = $0 },
                 tapped: tapped,
                 markup: markup,
-                controls: controls
+                controls: controls,
+                checker: checker
             )
             .ignoresSafeArea()
         case .video(let player):
@@ -403,13 +412,16 @@ private struct MediaPage: View {
     }
 
     private func load() {
-        (failed, fraction) = (false, nil)
+        (failed, fraction, shownChecker) = (false, nil, nil)
         let show = { (url: URL?) in
             guard let url else { return failed = true }
             file = url
             guard item.video else {
                 let scale = Platform.pixelsPerPoint
                 return Pictures.decode(url, id: "view:\(url.path)", maxPixels: 6144) { image in
+                    let id = "view:\(url.path)"
+                    checker = Pictures.isSeenThrough(id) ? Pictures.checker(behind: id) : nil
+                    if shown { shownChecker = checker }
                     loaded = image.map { .image($0, scale: scale) }
                     failed = image == nil
                     if shown { picture = image }
@@ -444,6 +456,8 @@ struct ZoomableImage: UIViewRepresentable {
     /// The room the viewer's buttons take inside the safe area, and above the keyboard at the
     /// bottom, which the picture keeps clear of.
     var controls = EdgeInsets()
+    /// The checkerboard all of the view shows behind it, with a frame at its edges.
+    var checker: Pictures.Checker?
 
     func makeUIView(context: Context) -> ZoomingScrollView {
         ZoomingScrollView(margin: margin, radius: radius, largestFit: largestFit)
@@ -455,6 +469,7 @@ struct ZoomableImage: UIViewRepresentable {
         view.show(image, size: size)
         view.markup = markup
         view.controls = UIEdgeInsets(top: controls.top, left: controls.leading, bottom: controls.bottom, right: controls.trailing)
+        view.checker = checker
     }
 }
 
@@ -483,6 +498,20 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
 
     var controls = UIEdgeInsets.zero {
         didSet { measureClear() }
+    }
+    var checker: Pictures.Checker? {
+        didSet {
+            guard checker != oldValue else { return }
+            paintChecker()
+        }
+    }
+
+    /// Fills the view with the checkerboard, which stays put while the picture zooms over it, and
+    /// frames the picture as thinly however far it is zoomed.
+    private func paintChecker() {
+        backgroundColor = checker?.pattern()
+        picture.layer.borderColor = checker?.frame.cgColor
+        picture.layer.borderWidth = checker == nil ? 0 : 1 / max(zoomScale, 0.01)
     }
     private var keyboard: CGFloat = 0
 
@@ -594,6 +623,11 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
         center()
     }
 
+    /// Zooms to `times` its fitted size, as a pinch would.
+    func zoom(times: CGFloat) {
+        setZoomScale(fitted * times, animated: true)
+    }
+
     private func refit(reset: Bool) {
         guard bounds.width > 0 else { return }
         fitted = fit
@@ -643,6 +677,7 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
 
     func scrollViewDidZoom(_ scrollView: UIScrollView) {
         center()
+        paintChecker()
         onZoom(zoomScale > fitted + 0.001)
     }
 

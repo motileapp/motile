@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -40,6 +41,7 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.isSpecified
 import app.motile.core.FoundSpan
@@ -51,6 +53,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
+import app.motile.platform.scaled
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -110,17 +118,74 @@ fun OverlayButton(symbol: Symbol, help: String, size: ControlSize, modifier: Mod
 
 /** The box an image or a video is shown in: empty until the picture is there. */
 @Composable
-fun PictureBox(picture: ImageBitmap?, modifier: Modifier = Modifier, radius: Dp = PictureBox.radius, content: @Composable BoxScope.() -> Unit = {}) {
+fun PictureBox(
+    picture: ImageBitmap?,
+    modifier: Modifier = Modifier,
+    radius: Dp = PictureBox.radius,
+    checker: Checker? = null,
+    drawn: DpSize? = null,
+    content: @Composable BoxScope.() -> Unit = {},
+) {
     val palette = LocalPalette.current
     val shape = RoundedCornerShape(radius)
-    Box(modifier.clip(shape).background(palette.backgroundSecondary, shape).border(1.dp, palette.border, shape)) {
-        if (picture != null) Image(picture, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+    val behind = if (picture != null && checker != null) Modifier.checkerboard(checker) else Modifier.background(palette.backgroundSecondary, shape)
+    Box(modifier.clip(shape).then(behind).border(1.dp, palette.border, shape)) {
+        val fill = drawn?.let { Modifier.align(Alignment.Center).sizeIn(maxWidth = it.width, maxHeight = it.height).fillMaxSize() } ?: Modifier.fillMaxSize()
+        if (picture != null) Image(picture, null, fill, contentScale = ContentScale.Fit)
         content()
     }
 }
 
 object PictureBox {
     val radius = Radius.lg
+}
+
+/** What a picture's see-through parts show, as image editors do. */
+enum class Checker {
+    Light, Dark;
+
+    private fun colors(palette: Palette) = when (this) {
+        Light -> palette.checkerLight to palette.checkerLightAlternate
+        Dark -> palette.checkerDark to palette.checkerDarkAlternate
+    }
+
+    /** The line around a picture lying on it, in the viewer. */
+    fun frame(palette: Palette): Color = when (this) {
+        Light -> palette.checkerLightFrame
+        Dark -> palette.checkerDarkFrame
+    }
+
+    /** How light it is on average. */
+    fun luminance(palette: Palette): Double = colors(palette).let { (one, other) -> (one.luminance() + other.luminance()) / 2.0 }
+
+    /** The checkerboard as a brush of squares `side` pixels wide, from the drawing's origin. */
+    fun brush(palette: Palette, side: Int): Brush = brushes.getOrPut(this to side) {
+        val (one, other) = colors(palette)
+        val tile = ImageBitmap(side * 2, side * 2)
+        val canvas = androidx.compose.ui.graphics.Canvas(tile)
+        val paint = Paint()
+        paint.color = one
+        canvas.drawRect(0f, 0f, side * 2f, side * 2f, paint)
+        paint.color = other
+        canvas.drawRect(side.toFloat(), 0f, side * 2f, side.toFloat(), paint)
+        canvas.drawRect(0f, side.toFloat(), side.toFloat(), side * 2f, paint)
+        ShaderBrush(ImageShader(tile, TileMode.Repeated, TileMode.Repeated))
+    }
+
+    companion object {
+        /** How large a square is when the picture isn't zoomed. */
+        val square = scaled(8f).dp
+        private val brushes = HashMap<Pair<Checker, Int>, Brush>()
+    }
+}
+
+/** Lays the checkerboard behind what is drawn, its squares `Checker.square` wide on screen. */
+@Composable
+fun Modifier.checkerboard(checker: Checker): Modifier {
+    val palette = LocalPalette.current
+    val side = with(LocalDensity.current) { Checker.square.roundToPx() }.coerceAtLeast(1)
+    val brush = checker.brush(palette, side)
+    return drawBehind { drawRect(brush) }
 }
 
 /** How much of something has arrived, as a ring that fills clockwise from the top. It grows smoothly but goes back at once. */
