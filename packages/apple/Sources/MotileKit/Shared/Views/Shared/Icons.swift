@@ -313,6 +313,7 @@ struct PullRequestLabel: View {
                 .underline(hovering)
         }
         .foregroundStyle(colored ? pullRequest.state.color : Color.themeMutedStrongerForeground)
+        .fixedSize()
         .tooltip(pullRequest.title)
     }
 }
