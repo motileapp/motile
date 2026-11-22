@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -95,9 +96,9 @@ fun DrawScope.drawSymbol(symbol: Symbol, side: Float, color: Color, trimmed: Boo
         Symbol.GitHub -> drawPath(logo(githubLogo, side, share = 20f / 24), drawn)
         Symbol.Linear -> drawPath(logo(linearLogo, side, share = 0.88f), drawn)
         Symbol.Ricrac -> drawPath(logo(ricracLogo, side, share = 20f / 24), drawn)
-        Symbol.EffortLow -> level(5f, side, drawn)
-        Symbol.EffortMedium -> level(9f, side, drawn)
-        Symbol.EffortHigh -> level(14f, side, drawn)
+        Symbol.EffortLow -> level(1, side, drawn)
+        Symbol.EffortMedium -> level(2, side, drawn)
+        Symbol.EffortHigh -> level(3, side, drawn)
         else -> {
             val character = symbol.character ?: return
             val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -143,11 +144,22 @@ private fun logo(mark: Path, side: Float, share: Float): Path {
     return placed
 }
 
-/** A ring as Lucide draws a circle, round a pie that fills `share` of it clockwise from the top, in a square of 24. */
-private fun DrawScope.level(height: Float, side: Float, color: Color) {
+/**
+ * A rounded frame with Lucide's stroke, filled from its bottom with `parts` of three blocks cut by 2, in a square of 24.
+ * The fill's corners are concentric with the frame's.
+ */
+private fun DrawScope.level(parts: Int, side: Float, color: Color) {
+    val gap = 2f
+    val part = (14f - gap * 2) / 3
+    val round = CornerRadius(1f)
     scale(side / 24, side / 24, pivot = Offset.Zero) {
-        drawRoundRect(color, topLeft = Offset(5f, 2f), size = Size(14f, 20f), cornerRadius = CornerRadius(5f), style = Stroke(width = 2f))
-        drawRoundRect(color, topLeft = Offset(8f, 19f - height), size = Size(8f, height), cornerRadius = CornerRadius(2f))
+        drawRoundRect(color, topLeft = Offset(5f, 2f), size = Size(14f, 20f), cornerRadius = CornerRadius(4f), style = Stroke(width = 2f))
+        for (index in 0 until parts) {
+            val bottom = 19f - index * (part + gap)
+            val top = if (index == parts - 1) round else CornerRadius.Zero
+            val base = if (index == 0) round else CornerRadius.Zero
+            drawPath(Path().apply { addRoundRect(RoundRect(8f, bottom - part, 16f, bottom, top, top, base, base)) }, color)
+        }
     }
 }
 

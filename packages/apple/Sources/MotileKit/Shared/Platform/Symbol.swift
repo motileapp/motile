@@ -56,8 +56,8 @@ enum Symbol: String {
     case cornerLeftUp = "\u{e0a4}"
     case diff = "\u{e30c}"
     case download = "\u{e0b2}"
-    /// The reasoning efforts up to high: a rounded frame filled from the bottom a third, two thirds or
-    /// all the way, which Lucide doesn't have.
+    /// The reasoning efforts up to high: a rounded frame filled from the bottom in one, two or three
+    /// parts, which Lucide doesn't have.
     case effortLow = "effortLow"
     case effortMedium = "effortMedium"
     case effortHigh = "effortHigh"
@@ -254,12 +254,22 @@ extension PlatformImage {
         return path.copy(using: &placed) ?? path
     }
 
-    /// A rounded frame with Lucide's stroke, filled `height` from its bottom, in a square of 24.
-    private static func level(_ height: CGFloat, side: CGFloat) -> CGPath {
-        let frame = CGPath(roundedRect: CGRect(x: 5, y: 2, width: 14, height: 20), cornerWidth: 5, cornerHeight: 5, transform: nil)
+    /// A rounded frame with Lucide's stroke, filled from its bottom with `parts` of three blocks cut
+    /// by 2, in a square of 24. The fill's corners are concentric with the frame's.
+    private static func level(_ parts: Int, side: CGFloat) -> CGPath {
+        let gap: CGFloat = 2
+        let part: CGFloat = (14 - gap * 2) / 3
+        let height = part * CGFloat(parts) + gap * CGFloat(parts - 1)
+        let top = 19 - height
+        let frame = CGPath(roundedRect: CGRect(x: 5, y: 2, width: 14, height: 20), cornerWidth: 4, cornerHeight: 4, transform: nil)
+        let gaps = CGMutablePath()
+        for index in 1..<max(parts, 1) {
+            gaps.addRect(CGRect(x: 8, y: top + CGFloat(index) * part + CGFloat(index - 1) * gap, width: 8, height: gap))
+        }
+        let fill = CGPath(roundedRect: CGRect(x: 8, y: top, width: 8, height: height), cornerWidth: 1, cornerHeight: 1, transform: nil)
         let path = CGMutablePath()
         path.addPath(frame.copy(strokingWithWidth: 2, lineCap: .butt, lineJoin: .miter, miterLimit: 10))
-        path.addPath(CGPath(roundedRect: CGRect(x: 8, y: 19 - height, width: 8, height: height), cornerWidth: 2, cornerHeight: 2, transform: nil))
+        path.addPath(fill.subtracting(gaps))
         var placed = CGAffineTransform(translationX: 0, y: side).scaledBy(x: side / 24, y: -side / 24)
         return path.copy(using: &placed) ?? path
     }
@@ -271,9 +281,9 @@ extension PlatformImage {
         case .github: logo(githubLogo, side: side, share: 20 / 24)
         case .linear: logo(linearLogo, side: side, share: 0.88)
         case .ricrac: logo(ricracLogo, side: side, share: 20 / 24)
-        case .effortLow: level(5, side: side)
-        case .effortMedium: level(9, side: side)
-        case .effortHigh: level(14, side: side)
+        case .effortLow: level(1, side: side)
+        case .effortMedium: level(2, side: side)
+        case .effortHigh: level(3, side: side)
         default: glyph(symbol, side: side)
         }
     }
