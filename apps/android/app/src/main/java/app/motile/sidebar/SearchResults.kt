@@ -187,7 +187,7 @@ private fun ResultStatus(result: SearchResult, jump: String?) {
             when {
                 jump != null -> CompositionLocalProvider(LocalForeground provides palette.foreground) { KeyCaps(listOf(jump)) }
                 readOnly -> ThreadStatus(thread, readOnly = true)
-                thread.isArchived -> Text(Time.ago(thread.archivedAt ?: thread.updatedAt, AgoClock.now), size = TextSize.Xs, color = palette.mutedStrongerForeground)
+                thread.isArchived && !thread.deleting -> Text(Time.ago(thread.archivedAt ?: thread.updatedAt, AgoClock.now), size = TextSize.Xs, color = palette.mutedStrongerForeground)
                 else -> ThreadStatus(thread)
             }
         }

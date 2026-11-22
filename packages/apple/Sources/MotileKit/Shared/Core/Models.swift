@@ -270,6 +270,8 @@ struct Server: Equatable, Identifiable {
     /// The server was removed from the account. Its threads are the copies the account's other
     /// servers keep, to read and to go on with on another server.
     let removed: Bool
+    /// It is being deleted completely.
+    let deleting: Bool
     let state: State
     let error: String?
     /// "relay" or "direct".
@@ -322,6 +324,7 @@ struct Server: Equatable, Identifiable {
         shortName = json.string("short_name")
         platform = json.string("platform")
         removed = json.bool("removed")
+        deleting = json.bool("deleting")
         state = State(rawValue: json.string("state")) ?? .connecting
         error = json.optionalString("error")
         path = json.optionalString("path")
@@ -886,6 +889,8 @@ struct ThreadInfo: Equatable, Identifiable {
     let watching: Bool
     /// What a commit, a push or the like that was started from it is at.
     let gitStage: GitStage?
+    /// Its server was asked to delete it and hasn't yet.
+    let deleting: Bool
     /// Why the agent stopped before it finished, until it works again.
     var interruption: Interruption?
     let unread: Bool
@@ -924,6 +929,7 @@ struct ThreadInfo: Equatable, Identifiable {
         pullRequest = json.object("pull_request").map { PullRequest(json: $0) }
         watching = json.bool("watching")
         gitStage = json.optionalString("git_stage").map { GitStage(rawValue: $0) ?? .unknown }
+        deleting = json.bool("deleting")
         interruption = json.object("interruption").flatMap { Interruption(json: $0) }
         unread = json.bool("unread")
         parentID = json.object("parent")?.optionalString("thread_id")

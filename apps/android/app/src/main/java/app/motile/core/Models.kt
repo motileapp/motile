@@ -183,6 +183,8 @@ data class Server(
     val platform: String,
     /** The server was removed from the account. Its threads are the copies the account's other servers keep, to read and to go on with on another server. */
     val removed: Boolean,
+    /** It is being deleted completely. */
+    val deleting: Boolean = false,
     val state: State,
     val error: String?,
     /** "relay" or "direct". */
@@ -314,6 +316,7 @@ data class Server(
                 shortName = json.string("short_name"),
                 platform = json.string("platform"),
                 removed = json.bool("removed"),
+                deleting = json.bool("deleting"),
                 state = State.of(json.string("state")),
                 error = json.optionalString("error"),
                 path = json.optionalString("path"),
@@ -837,6 +840,8 @@ data class ThreadInfo(
     val watching: Boolean,
     /** What a commit, a push or the like that was started from it is at. */
     val gitStage: GitStage?,
+    /** Its server was asked to delete it and hasn't yet. */
+    val deleting: Boolean = false,
     /** Why the agent stopped before it finished, until it works again. */
     val interruption: Interruption?,
     val unread: Boolean,
@@ -910,6 +915,7 @@ data class ThreadInfo(
                 pullRequest = json.obj("pull_request")?.let(::PullRequest),
                 watching = json.bool("watching"),
                 gitStage = json.optionalString("git_stage")?.let(GitStage::of),
+                deleting = json.bool("deleting"),
                 interruption = json.obj("interruption")?.let(Interruption::of),
                 unread = json.bool("unread"),
                 parentID = json.obj("parent")?.optionalString("thread_id"),

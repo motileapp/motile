@@ -34,6 +34,8 @@ pub struct Server {
     /// The server was removed from the account: its threads are copies, read from the other
     /// servers, which go on only on another server.
     pub removed: bool,
+    /// It is being deleted completely.
+    pub deleting: bool,
     pub state: State,
     pub error: Option<String>,
     /// "relay" or "direct".
@@ -95,6 +97,7 @@ impl From<ServerView> for Server {
             short_name: view.short_name,
             platform: view.platform,
             removed: view.removed,
+            deleting: view.deleting,
             state: view.state,
             error: view.error,
             path,
@@ -572,6 +575,8 @@ pub struct ThreadInfo {
     pub woke: bool,
     /// The part of the sidebar it is listed in.
     pub section: Section,
+    /// Its server was asked to delete it and hasn't yet.
+    pub deleting: bool,
     /// How the agents its agent started are doing, theirs too.
     pub children: Option<Children>,
 }
@@ -584,6 +589,7 @@ impl From<ThreadView> for ThreadInfo {
             unread: view.unread,
             woke: view.woke,
             section: view.section,
+            deleting: view.deleting,
             children: view.children,
         }
     }
@@ -1269,6 +1275,7 @@ mod tests {
             short_name: "studio".into(),
             platform: "macos".into(),
             removed: false,
+            deleting: false,
             state: State::Connected,
             error: None,
             path: None,
@@ -1347,6 +1354,7 @@ mod tests {
             short_name: "build-box".into(),
             platform: "linux".into(),
             removed: true,
+            deleting: false,
             state: State::Disconnected,
             error: None,
             path: None,

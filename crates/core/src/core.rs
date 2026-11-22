@@ -170,6 +170,15 @@ enum Input {
     IconFetched {
         server_id: String,
     },
+    /// The server refused to delete the threads, or couldn't be asked.
+    DeleteFailed {
+        server_id: String,
+        thread_ids: Vec<String>,
+    },
+    /// The auth server didn't delete the server completely.
+    ServerDeleteFailed {
+        server_id: String,
+    },
     /// The server took the model that writes its titles and commit messages.
     TextModelSet {
         server_id: String,
@@ -439,6 +448,10 @@ struct Core {
     ticks: u64,
     /// The icon files that have been asked for, so none is asked for twice.
     icons_asked: HashSet<String>,
+    /// The threads asked to be deleted, until their servers say they are.
+    deleting: HashSet<String>,
+    /// The servers being deleted completely, until they leave the account's.
+    deleting_servers: HashSet<String>,
     media: Arc<MediaCache>,
     /// How many bytes the fetched images and videos may take.
     media_limit: u64,
@@ -601,6 +614,8 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         render_scheduled: false,
         ticks: 0,
         icons_asked: HashSet::new(),
+        deleting: HashSet::new(),
+        deleting_servers: HashSet::new(),
         search: Search::default(),
         relay: Relay::default(),
         gateway: Gateway::default(),
@@ -801,6 +816,11 @@ impl Core {
             Input::IconFetched { server_id } => {
                 let projects = self.cache.projects(&server_id);
                 self.emit_projects(&server_id, projects);
+            }
+            Input::DeleteFailed { server_id, thread_ids } => self.set_deleting(&server_id, &thread_ids, false),
+            Input::ServerDeleteFailed { server_id } => {
+                self.deleting_servers.remove(&server_id);
+                self.emit_servers();
             }
             Input::MediaFetched { id, result } => {
                 let answer = result.map(|path| json!({ "path": path }));
@@ -1268,6 +1288,7 @@ impl Core {
         self.servers = kept;
         for server in gone {
             let server_id = server.device.public_key;
+            self.deleting_servers.remove(&server_id);
             if let Some(link) = server.link {
                 link.shutdown();
             }
@@ -1666,6 +1687,7 @@ impl Core {
             short_name: short_name(&server.device.name),
             platform: server.device.platform.clone(),
             removed: server.removed,
+            deleting: self.deleting_servers.contains(&server.device.public_key),
             state: server.status.state,
             error: server.status.error.clone(),
             path: server.status.path,
@@ -1946,7 +1968,36 @@ impl Core {
     fn thread_view(&self, server_id: &str, thread: &Thread) -> ThreadView {
         let threads = self.servers.iter().find(|server| server.device.public_key == server_id);
         let children = threads.and_then(|server| children_of(&server.threads, &thread.id));
-        view_of(server_id, thread, self.cache.seen_at(&thread.id), children)
+        let view = view_of(server_id, thread, self.cache.seen_at(&thread.id), children);
+        ThreadView { deleting: self.deleting.contains(&thread.id), ..view }
+    }
+
+    /// Shows the thread and the threads its agent started as deleting, which its server deletes
+    /// with it, and answers with their ids.
+    fn start_deleting(&mut self, server_id: &str, thread_id: &str) -> Vec<String> {
+        let Some(server) = self.servers.iter().find(|server| server.device.public_key == server_id) else {
+            return Vec::new();
+        };
+        let mut ids = descendants_of(&server.threads, thread_id);
+        ids.push(thread_id.to_string());
+        self.set_deleting(server_id, &ids, true);
+        ids
+    }
+
+    fn set_deleting(&mut self, server_id: &str, thread_ids: &[String], deleting: bool) {
+        for id in thread_ids {
+            if deleting {
+                self.deleting.insert(id.clone());
+            } else {
+                self.deleting.remove(id);
+            }
+        }
+        let Some(server) = self.servers.iter().find(|server| server.device.public_key == server_id) else { return };
+        let threads: Vec<Thread> = thread_ids.iter().filter_map(|id| server.threads.get(id).cloned()).collect();
+        for thread in threads {
+            let view = self.thread_view(server_id, &thread);
+            self.emit(Event::ThreadUpsert { thread: Box::new(view) });
+        }
     }
 
     /// Shows the open thread's agents again once a thread one of them works in changed how it is
@@ -2446,6 +2497,7 @@ impl Core {
                 self.schedule_relay(RELAY_AFTER_CHANGE);
             }
             Message::ThreadDeleted { thread_id } => {
+                self.deleting.remove(&thread_id);
                 self.media.remove(&self.cache.remove_thread(&thread_id));
                 self.open.remove(&thread_id);
                 self.followed.remove(&thread_id);
@@ -3336,10 +3388,15 @@ impl Core {
                 });
             }
             Command::DeleteServerCompletely { server_id } => {
+                self.deleting_servers.insert(server_id.clone());
+                self.emit_servers();
                 let (auth, key, sink, inputs) =
                     (self.auth.clone(), self.key.clone(), self.sink.clone(), self.inputs.clone());
                 tokio::spawn(async move {
                     let deleted = auth.delete_server_completely(&key, &server_id).await.map_err(error_text);
+                    if deleted.is_err() {
+                        let _ = inputs.send(Input::ServerDeleteFailed { server_id });
+                    }
                     let result = auth.me(&key).await.map_err(error_text);
                     let _ = inputs.send(Input::AccountChecked { key: key.public(), result });
                     reply(&sink, id, deleted.map(|_| json!({})));
@@ -3486,9 +3543,19 @@ impl Core {
                     Ok(link) => link,
                     Err(error) => return self.reply(id, Err(error)),
                 };
-                let sink = self.sink.clone();
+                let deleting = match &request {
+                    Request::Delete { .. } if link.status().state != State::Connected => {
+                        return self.reply(id, Err(NOT_CONNECTED.to_string()));
+                    }
+                    Request::Delete { thread_id } => self.start_deleting(&server_id, thread_id),
+                    _ => Vec::new(),
+                };
+                let (sink, inputs) = (self.sink.clone(), self.inputs.clone());
                 tokio::spawn(async move {
                     let answer = link.request(&request).await.map_err(error_text);
+                    if answer.is_err() && !deleting.is_empty() {
+                        let _ = inputs.send(Input::DeleteFailed { server_id, thread_ids: deleting });
+                    }
                     reply(&sink, id, answer.map(|message| serde_json::to_value(message).unwrap_or_default()));
                 });
             }
@@ -4800,6 +4867,22 @@ fn save_icon(folder: &std::path::Path, project_id: &str, name: &str, bytes: &[u8
 
 /// How the agents the thread's agent started are doing, theirs too: those that work in threads of
 /// their own and those that work in its session. `None` when it started none.
+/// The threads the thread's agent started, and theirs.
+fn descendants_of(threads: &HashMap<String, Thread>, thread_id: &str) -> Vec<String> {
+    let mut found: Vec<String> = Vec::new();
+    let mut parents = vec![thread_id.to_string()];
+    while let Some(parent) = parents.pop() {
+        for child in threads.values().filter(|thread| thread.parent.as_ref().is_some_and(|of| of.thread_id == parent)) {
+            if child.id == thread_id || found.contains(&child.id) {
+                continue;
+            }
+            parents.push(child.id.clone());
+            found.push(child.id.clone());
+        }
+    }
+    found
+}
+
 fn children_of(threads: &HashMap<String, Thread>, thread_id: &str) -> Option<Children> {
     let own = threads.get(thread_id).filter(|thread| thread.agents > 0);
     let mut descendants = Vec::new();
@@ -4996,6 +5079,7 @@ fn view_of(server_id: &str, thread: &Thread, seen_at: Option<f64>, children: Opt
         unread: is_unread(thread, seen_at, children.as_ref()),
         woke: thread.woke_at.is_some() && (seen_at.is_none() || after_seen(thread.woke_at, seen_at)),
         section: section_of(thread, children.as_ref()),
+        deleting: false,
         thread: thread.clone(),
         server_id: server_id.to_string(),
         children,
@@ -5205,6 +5289,28 @@ mod tests {
         assert_eq!(children_of(&alone, "lead").unwrap().running_text.as_deref(), Some("2 agents working"));
         let rested = Thread { agents: 0, ..thread(false, false, false) };
         assert_eq!(children_of(&[("t".to_string(), rested)].into_iter().collect(), "t"), None);
+    }
+
+    #[test]
+    fn deleting_a_thread_deletes_the_threads_its_agents_started_and_theirs() {
+        use motile_protocol::wire::ThreadParent;
+        let started_by = |id: &str, parent: &str| Thread {
+            id: id.into(),
+            parent: Some(ThreadParent { thread_id: parent.into(), tool_id: None }),
+            ..thread(false, false, false)
+        };
+        let lead = Thread { id: "lead".into(), ..thread(false, false, false) };
+        let other = Thread { id: "other".into(), ..thread(false, false, false) };
+        let threads: HashMap<String, Thread> =
+            [lead, other, started_by("a", "lead"), started_by("b", "a"), started_by("c", "other")]
+                .into_iter()
+                .map(|thread| (thread.id.clone(), thread))
+                .collect();
+
+        let mut found = descendants_of(&threads, "lead");
+        found.sort();
+        assert_eq!(found, vec!["a", "b"]);
+        assert!(descendants_of(&threads, "b").is_empty());
     }
 
     fn approval() -> motile_protocol::wire::Approval {

@@ -185,7 +185,7 @@ fun AppStore.offersNewThread(drafts: List<ListedDraft>, active: List<ThreadInfo>
 
 /** What a thread's menu offers, in groups a line divides. */
 fun MenuBuilder.threadMenu(store: AppStore, thread: ThreadInfo, rename: (ThreadInfo) -> Unit, delete: (ThreadInfo) -> Unit) {
-    if (store.onRemovedServer(thread)) return
+    if (store.onRemovedServer(thread) || thread.deleting) return
     if (thread.isArchived) {
         item("Unarchive") { store.setArchived(listOf(thread.id), false) }
     } else {
@@ -507,7 +507,7 @@ fun SlimThreadRow(
                 project?.pullRequest(thread)?.let { ThreadPullRequestLabel(thread, it, colored = false, open = open) }
                 val until = thread.snoozedUntil
                 when {
-                    thread.section == ThreadSection.Working -> ThreadStatus(thread, store.onRemovedServer(thread))
+                    thread.section == ThreadSection.Working || thread.deleting -> ThreadStatus(thread, store.onRemovedServer(thread))
                     thread.section == ThreadSection.Snoozed && until != null -> StatusLabel(
                         Time.left(until, AgoClock.now), palette.mutedStrongerForeground, Modifier.alpha(if (hovering) 0f else 1f),
                     ) { Icon(Symbol.AlarmClock, statusSymbol) }
@@ -518,7 +518,7 @@ fun SlimThreadRow(
                 }
             }
         }
-        if (hovering && !store.onRemovedServer(thread) && thread.section != ThreadSection.Working) {
+        if (hovering && !store.onRemovedServer(thread) && thread.section != ThreadSection.Working && !thread.deleting) {
             OnRowSurface(Modifier.align(Alignment.CenterEnd).padding(end = sidebarRowInset + ControlSize.insetMargin)) {
                 if (thread.section == ThreadSection.Snoozed) {
                     ActionButton(icon = Symbol.AlarmClockOff, help = "Wake", size = ControlSize.Inset) { store.wake(listOf(thread.id)) }
@@ -558,6 +558,7 @@ fun ThreadStatus(thread: ThreadInfo, readOnly: Boolean = false) {
     val stage = thread.gitStage
     val interruption = thread.interruption
     when {
+        thread.deleting -> StatusLabel("Deleting", palette.destructive) { Spinner(statusSymbol) }
         readOnly -> StatusLabel("Read-only", palette.warning, Modifier.semantics { contentDescription = readOnlyHelp }) { Icon(Symbol.Unlink, statusSymbol) }
         asking != null -> {
             val help = thread.children?.waitingText?.takeIf { thread.asking == null }

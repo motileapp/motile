@@ -2845,7 +2845,7 @@ class AppStore(private val context: Context) {
         }
     }
 
-    fun snoozes(thread: ThreadInfo): Boolean = !onRemovedServer(thread) && server(thread.serverID)?.snoozes == true
+    fun snoozes(thread: ThreadInfo): Boolean = !onRemovedServer(thread) && !thread.deleting && server(thread.serverID)?.snoozes == true
 
     /** Leaves the open thread when it is put away, for the next one the sidebar lists. */
     private fun leave(threads: List<ThreadInfo>) {
@@ -2891,7 +2891,7 @@ class AppStore(private val context: Context) {
 
     fun toggleArchived() {
         val thread = selectedThread ?: return
-        if (onRemovedServer(thread)) return
+        if (onRemovedServer(thread) || thread.deleting) return
         setArchived(listOf(thread.id), !thread.isArchived)
     }
 

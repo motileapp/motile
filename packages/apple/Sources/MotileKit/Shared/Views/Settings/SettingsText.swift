@@ -3,6 +3,7 @@ import Foundation
 /// What the settings say of a server, an account and the images kept here, on either client.
 extension Server {
     var settingsDescription: String {
+        guard !deleting else { return "Deleting" }
         guard state == .connected else { return stateLabel }
         return "Connected · version \(version) · \(installedAgents)"
     }

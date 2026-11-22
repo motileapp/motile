@@ -62,6 +62,7 @@ import app.motile.ui.Icon
 import app.motile.ui.Modal
 import app.motile.ui.MenuPopup
 import app.motile.ui.ProjectIcon
+import app.motile.ui.Spinner
 import app.motile.ui.Switch
 import app.motile.ui.Text
 import app.motile.ui.pressPosition
@@ -173,7 +174,7 @@ private fun SettingsGroups.servers(store: AppStore, navigator: SettingsNavigator
     group("removed-servers", header = "Unlinked") {
         for (server in store.removedServers) row {
             SettingsLink({ navigator.push(SettingsRoute.ServerPage(server.id, removed = true)) }) {
-                SettingsItem(server.name, "Its threads stay readable from the copies") { SettingsTile(Symbol.Server) }
+                SettingsItem(server.name, if (server.deleting) "Deleting" else "Its threads stay readable from the copies") { SettingsTile(Symbol.Server) }
             }
         }
     }
@@ -461,7 +462,9 @@ internal fun ServerSettingsPage(serverID: String, removed: Boolean) {
         SettingsList {
             if (server == null) return@SettingsList
             if (removed) {
-                group { row { SettingsButton("Delete", destructive = true) { removal = Removal.OfServerCompletely(server) } } }
+                group {
+                    if (server.deleting) row { DeletingRow() } else row { SettingsButton("Delete", destructive = true) { removal = Removal.OfServerCompletely(server) } }
+                }
                 return@SettingsList
             }
             group {
@@ -481,12 +484,22 @@ internal fun ServerSettingsPage(serverID: String, removed: Boolean) {
                 }
             }
             group {
-                row { SettingsButton("Unlink Server", destructive = true) { removal = Removal.OfServer(server) } }
-                row { SettingsButton("Delete", destructive = true) { removal = Removal.OfServerCompletely(server) } }
+                if (server.deleting) {
+                    row { DeletingRow() }
+                } else {
+                    row { SettingsButton("Unlink Server", destructive = true) { removal = Removal.OfServer(server) } }
+                    row { SettingsButton("Delete", destructive = true) { removal = Removal.OfServerCompletely(server) } }
+                }
             }
         }
     }
     ConfirmsRemoval(removal) { removal = null }
+}
+
+/** Stands in for a server's Delete while it is deleted completely. */
+@Composable
+private fun DeletingRow() {
+    SettingsLabeled("Deleting") { Spinner(IconSize.Sm, color = LocalPalette.current.mutedForeground) }
 }
 
 /** The command that links a new server, until that server shows up. */

@@ -258,8 +258,9 @@ fun SidebarScreen(underThread: Boolean) {
 
     val palette = Theme.colors
 
-    /** What a swipe offers on a thread's row: an active one is archived, its tick first, or snoozed; a working one only snoozed; a snoozed one woken and an archived one brought back. */
+    /** What a swipe offers on a thread's row: an active one is archived, its tick first, or snoozed; a working one only snoozed; a snoozed one woken and an archived one brought back. One being deleted offers nothing. */
     fun swipeActions(thread: ThreadInfo): List<SwipeAction> {
+        if (thread.deleting) return emptyList()
         val snooze = if (store.snoozes(thread)) {
             listOf(SwipeAction(Symbol.AlarmClock, "Snooze", palette.warning, menu = { snoozeItems(store, listOf(thread.id), fromSidebar = true) }))
         } else {
@@ -391,7 +392,7 @@ fun SidebarScreen(underThread: Boolean) {
                         is SidebarItem.Result -> {
                             val result = item.result
                             val thread = result.threadInfo
-                            val menu: (MenuBuilder.() -> Unit)? = thread?.takeIf { !store.onRemovedServer(it) }?.let { found -> { threadMenu(store, found, ::beginRename) { deleting = it } } }
+                            val menu: (MenuBuilder.() -> Unit)? = thread?.takeIf { !store.onRemovedServer(it) && !it.deleting }?.let { found -> { threadMenu(store, found, ::beginRename) { deleting = it } } }
                             WithMenu(menu) { modifier, openMenu ->
                                 SearchResultRow(
                                     result, highlighted = result.id == highlightedID, modifier = modifier.peeks(thread?.id, peek),
@@ -419,9 +420,9 @@ fun SidebarScreen(underThread: Boolean) {
                         }
                         is SidebarItem.Slim -> {
                             val thread = item.thread
-                            val readOnly = store.onRemovedServer(thread)
+                            val menuless = store.onRemovedServer(thread) || thread.deleting
                             val row = @Composable {
-                                WithMenu(if (readOnly) null else ({ threadMenu(store, thread, ::beginRename) { deleting = it } })) { modifier, openMenu ->
+                                WithMenu(if (menuless) null else ({ threadMenu(store, thread, ::beginRename) { deleting = it } })) { modifier, openMenu ->
                                     SlimThreadRow(
                                         thread, store.projectsByID[thread.projectID], selected = store.selection == Selection.Thread(thread.id),
                                         modifier = modifier.fillMaxWidth().height(lineHeight).peeks(thread.id, peek), onLongClick = openMenu, open = ::open,
@@ -429,7 +430,7 @@ fun SidebarScreen(underThread: Boolean) {
                                 }
                             }
                             val actions = swipeActions(thread)
-                            if (readOnly || actions.isEmpty()) {
+                            if (menuless || actions.isEmpty()) {
                                 row()
                             } else {
                                 RowSwipe(actions, isOpen = swiped == item.id, onOpenChange = swipe(item.id).onOpenChange, content = row)
@@ -563,7 +564,7 @@ private fun ThreadRowWithMenu(
     open: (Selection) -> Unit,
 ) {
     val menu = rememberMenuState()
-    val readOnly = store.onRemovedServer(thread)
+    val menuless = store.onRemovedServer(thread) || thread.deleting
     Box {
         if (lifted) {
             val shape = RoundedCornerShape(Radius.md)
@@ -583,12 +584,12 @@ private fun ThreadRowWithMenu(
             // A hold on a row that moves lifts it, and its menu comes up from there.
             onLongClick = when {
                 movable -> ({})
-                readOnly -> null
+                menuless -> null
                 else -> ({ menu.openAtPress() })
             },
             open = open,
         )
-        if (!readOnly) MenuPopup(menu) { threadMenu(store, thread, rename, delete) }
+        if (!menuless) MenuPopup(menu) { threadMenu(store, thread, rename, delete) }
     }
 }
 

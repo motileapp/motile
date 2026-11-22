@@ -176,11 +176,15 @@ struct SettingsPage: View {
                         if let sync = server.sync { ServerSyncLine(sync: sync).padding(.top, 2) }
                     }
                 } controls: { half in
-                    HStack(spacing: 0) {
-                        ServerUpdateStatus(server: server, variant: .outline, size: .large, margin: .beside(trailing: half)) { EmptyView() }
-                        more("What to do with \(server.name)", margin: .beside(leading: half)) {
-                            MenuItem("Unlink Server", symbol: .unlink, role: .destructive) { removal = .server(server) }
-                            MenuItem("Delete", symbol: .trash2, role: .destructive) { removal = .serverCompletely(server) }
+                    if server.deleting {
+                        DeletingButton(size: .large)
+                    } else {
+                        HStack(spacing: 0) {
+                            ServerUpdateStatus(server: server, variant: .outline, size: .large, margin: .beside(trailing: half)) { EmptyView() }
+                            more("What to do with \(server.name)", margin: .beside(leading: half)) {
+                                MenuItem("Unlink Server", symbol: .unlink, role: .destructive) { removal = .server(server) }
+                                MenuItem("Delete", symbol: .trash2, role: .destructive) { removal = .serverCompletely(server) }
+                            }
                         }
                     }
                 }
@@ -241,8 +245,12 @@ struct SettingsPage: View {
                     SettingsRow {
                         serverName(server)
                     } trailing: {
-                        more("What to do with \(server.name)") {
-                            MenuItem("Delete", symbol: .trash2, role: .destructive) { removal = .serverCompletely(server) }
+                        if server.deleting {
+                            DeletingButton(size: .regular)
+                        } else {
+                            more("What to do with \(server.name)") {
+                                MenuItem("Delete", symbol: .trash2, role: .destructive) { removal = .serverCompletely(server) }
+                            }
                         }
                     }
                     if server.id != removed.last?.id { ThemeDivider() }
@@ -483,7 +491,7 @@ struct SettingsPage: View {
     }
 
     private func serverName(_ server: Server) -> some View {
-        SettingsLabel(server.name, icon: .server)
+        SettingsLabel(server.name, description: server.deleting ? "Deleting" : nil, icon: .server)
     }
 
     @ViewBuilder private var projects: some View {
@@ -780,6 +788,15 @@ struct SettingsNote: View {
             .padding(settingsInset)
             .frame(maxWidth: .infinity, alignment: .leading)
             .card()
+    }
+}
+
+/// Stands in for a server's menu while it is deleted completely.
+private struct DeletingButton: View {
+    let size: ControlSize
+
+    var body: some View {
+        ActionButton("Delete", variant: .outline, size: size, pending: true, pendingTitle: "Deleting") {}
     }
 }
 #endif

@@ -636,7 +636,7 @@ struct CommandPanel: View {
 
     /// What can be done with the open thread.
     private var threadCommands: [PanelItem] {
-        guard let thread = store.selectedThread, !store.onRemovedServer(thread) else { return [] }
+        guard let thread = store.selectedThread, !store.onRemovedServer(thread), !thread.deleting else { return [] }
         var items = findItem.map { [$0] } ?? []
         if thread.busy {
             var stop = PanelItem(id: "stop", title: "Stop the agent", detail: thread.title, icon: .symbol(.circleStop)) { store.stop() }

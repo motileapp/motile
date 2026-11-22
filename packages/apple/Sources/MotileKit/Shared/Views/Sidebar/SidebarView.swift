@@ -412,7 +412,7 @@ struct RowAction {
 extension AppStore {
     /// What a thread's menu offers, in groups a line divides.
     func rowActions(for thread: ThreadInfo, rename: @escaping (ThreadInfo) -> Void, delete: @escaping (ThreadInfo) -> Void) -> [[RowAction]] {
-        guard !onRemovedServer(thread) else { return [] }
+        guard !onRemovedServer(thread), !thread.deleting else { return [] }
         let archive = thread.isArchived
             ? RowAction(title: "Unarchive") { self.setArchived([thread.id], archived: false) }
             : RowAction(title: "Archive", disabled: thread.unfinished) { self.setArchived([thread.id], archived: true, fromSidebar: true) }
@@ -545,7 +545,7 @@ struct ThreadRow: View, Equatable {
                     KeyCaps([jump])
                         .foregroundStyle(Color.themeForeground)
                         .padding(.trailing, Self.buttonInset - Self.sidePadding)
-                } else if hovering && (!thread.unfinished || store.snoozes(thread)) && !store.onRemovedServer(thread) {
+                } else if hovering && (!thread.unfinished || store.snoozes(thread)) && !store.onRemovedServer(thread) && !thread.deleting {
                     RowButtons(thread: thread)
                         .padding(.trailing, Self.buttonInset - Self.sidePadding)
                 } else {
@@ -987,7 +987,7 @@ struct SlimThreadRow: View, Equatable {
             if let pullRequest {
                 ThreadPullRequestLabel(thread: thread, pullRequest: pullRequest, colored: false, open: open)
             }
-            if thread.section == .working {
+            if thread.section == .working || thread.deleting {
                 ThreadStatus(thread: thread, readOnly: store.onRemovedServer(thread))
             } else {
                 trailing
@@ -996,7 +996,7 @@ struct SlimThreadRow: View, Equatable {
         .padding(.horizontal, Self.sidePadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .overlay(alignment: .trailing) {
-            if !store.onRemovedServer(thread) && thread.section != .working {
+            if !store.onRemovedServer(thread) && thread.section != .working && !thread.deleting {
                 OnRowSurface {
                     if thread.section == .snoozed {
                         ActionButton(icon: .alarmClockOff, help: "Wake", size: .inset) { store.wake([thread.id]) }
@@ -1103,7 +1103,11 @@ struct ThreadStatus: View {
     var readOnly = false
 
     var body: some View {
-        if readOnly {
+        if thread.deleting {
+            label("Deleting", Color.themeDestructive) {
+                Spinner(size: .sm)
+            }
+        } else if readOnly {
             label("Read-only", Color.themeWarning) {
                 symbol(.unlink)
             }

@@ -133,7 +133,7 @@ struct MotileCommands: Commands {
         CommandMenu("Thread") {
             Button(store.selectedThread?.isArchived == true ? "Unarchive" : "Archive") { store.toggleArchived() }
                 .shortcut("thread.done", in: keys)
-                .disabled(store.selectedThread == nil || store.openThreadRemovedServer != nil)
+                .disabled(store.selectedThread == nil || store.openThreadRemovedServer != nil || store.selectedThread?.deleting == true)
             Button("Stop") { store.stop() }
                 .shortcut("thread.stop", in: keys)
                 .disabled(!store.activity.busy || store.openThreadRemovedServer != nil)

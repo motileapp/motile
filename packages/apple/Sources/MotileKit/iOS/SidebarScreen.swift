@@ -249,7 +249,9 @@ struct SidebarScreen: View {
 
     /// What a swipe offers on a thread's row: an active one is archived, its tick first, or
     /// snoozed; a working one only snoozed; a snoozed one woken and an archived one brought back.
+    /// One being deleted offers nothing.
     private func swipeActions(_ thread: ThreadInfo) -> [SwipeAction] {
+        guard !thread.deleting else { return [] }
         let snooze = store.snoozes(thread)
             ? [SwipeAction.menu(.alarmClock, "Snooze", tint: .themeWarning) { SnoozeItems(store: store, threadIDs: [thread.id], fromSidebar: true) }]
             : []

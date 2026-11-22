@@ -283,7 +283,7 @@ struct SettingsPage: View {
                     NavigationLink {
                         ServerSettingsPage(serverID: server.id, removed: true).glassBackButton()
                     } label: {
-                        SettingsItem(server.name, description: "Its threads stay readable from the copies") {
+                        SettingsItem(server.name, description: server.deleting ? "Deleting" : "Its threads stay readable from the copies") {
                             SettingsTile(symbol: .server)
                         }
                     }
@@ -574,8 +574,12 @@ private struct ServerSettingsPage: View {
         SettingsList {
             if let server = store.server(serverID), removed {
                 Section {
-                    Button("Delete", role: .destructive) { removal = .serverCompletely(server) }
-                        .foregroundStyle(Color.themeDestructive)
+                    if server.deleting {
+                        DeletingRow()
+                    } else {
+                        Button("Delete", role: .destructive) { removal = .serverCompletely(server) }
+                            .foregroundStyle(Color.themeDestructive)
+                    }
                 }
             } else if let server = store.server(serverID) {
                 Section {
@@ -595,10 +599,14 @@ private struct ServerSettingsPage: View {
                     }
                 }
                 Section {
-                    Button("Unlink Server", role: .destructive) { removal = .server(server) }
-                        .foregroundStyle(Color.themeDestructive)
-                    Button("Delete", role: .destructive) { removal = .serverCompletely(server) }
-                        .foregroundStyle(Color.themeDestructive)
+                    if server.deleting {
+                        DeletingRow()
+                    } else {
+                        Button("Unlink Server", role: .destructive) { removal = .server(server) }
+                            .foregroundStyle(Color.themeDestructive)
+                        Button("Delete", role: .destructive) { removal = .serverCompletely(server) }
+                            .foregroundStyle(Color.themeDestructive)
+                    }
                 }
             }
         }
@@ -945,6 +953,18 @@ private struct SettingsNote: View {
             Text(text)
                 .foregroundStyle(Color.themeMutedForeground)
         }
+    }
+}
+
+/// Stands in for a server's Delete while it is deleted completely.
+private struct DeletingRow: View {
+    var body: some View {
+        HStack {
+            Text("Deleting")
+            Spacer()
+            Spinner(size: .sm)
+        }
+        .foregroundStyle(Color.themeMutedForeground)
     }
 }
 #endif
