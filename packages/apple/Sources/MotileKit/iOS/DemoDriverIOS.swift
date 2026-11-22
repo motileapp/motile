@@ -27,7 +27,8 @@ import UIKit
 ///     answer <allow|refuse>             answers the first approval
 ///     gateway sign-in claude|codex        starts signing an account in on the gateway
 ///     gateway code <code>                 finishes Claude's sign-in with the code
-///     view                              opens the thread's images in the viewer
+///     view [n]|close                    opens the thread's images in the viewer, at the nth, or closes it
+///     zoom <times>                      zooms the viewer's picture to that many times its fitted size
 ///     branches                          opens the branch picker in the thread's settings
 ///     top                               scrolls the transcript to its start
 ///     focus | blur                      gives the composer the keyboard, or takes it away
@@ -254,12 +255,16 @@ enum DemoDriver {
         case "access": store.setAccess(Access(rawValue: rest) ?? .full)
         case "view" where rest == "composer":
             store.view(store.attachments.compactMap(\.viewed), at: 0)
+        case "view" where rest == "close": store.closeViewer()
+        case "zoom":
+            guard let times = Double(rest) else { return }
+            views(ZoomingScrollView.self).last?.zoom(times: CGFloat(times))
         case "view":
             let shown = store.transcript.rows.compactMap { row -> ViewedMedia? in
                 guard case .media(let media) = row.kind else { return nil }
                 return ViewedMedia(name: media.name, video: media.video, source: .media(media.id))
             }
-            store.view(shown, at: 0)
+            store.view(shown, at: min(Int(rest) ?? 0, max(shown.count - 1, 0)))
         case "slide":
             let words = rest.split(separator: " ").map(String.init)
             guard let share = words.last.flatMap(Double.init),

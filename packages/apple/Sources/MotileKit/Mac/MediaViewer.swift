@@ -18,6 +18,8 @@ struct MediaViewer: View {
     @State private var playerReady = false
     @State private var fullScreen = false
     @State private var file: URL?
+    /// The checkerboard behind a picture with see-through parts.
+    @State private var checker: Pictures.Checker?
     @State private var copies = 0
     @State private var markup: MarkupSession?
     @State private var discarding: Discarding?
@@ -269,7 +271,8 @@ struct MediaViewer: View {
                 largestFit: ZoomingScrollView.viewerLargestFit,
                 menu: menu,
                 clickedBeside: { if markup == nil { store.closeViewer() } },
-                markup: markup
+                markup: markup,
+                checker: checker
             )
             .ignoresSafeArea()
         case .video(let player):
@@ -374,7 +377,7 @@ struct MediaViewer: View {
 
     private func load(_ item: ViewedMedia) {
         pause()
-        (loaded, failed, fraction, playerReady, file) = (nil, false, nil, false, nil)
+        (loaded, failed, fraction, playerReady, file, checker) = (nil, false, nil, false, nil, nil)
         let show = { (file: URL?) in
             guard viewing.item == item else { return }
             guard let file else { return failed = true }
@@ -383,6 +386,8 @@ struct MediaViewer: View {
                 let scale = NSScreen.main?.backingScaleFactor ?? 2
                 return Pictures.decode(file, id: "view:\(file.path)", maxPixels: 8192) { image in
                     guard viewing.item == item else { return }
+                    let id = "view:\(file.path)"
+                    checker = Pictures.isSeenThrough(id) ? Pictures.checker(behind: id) : nil
                     loaded = image.map { .image($0, scale: scale) }
                     failed = image == nil
                 }
@@ -473,6 +478,8 @@ struct ZoomableImage: NSViewRepresentable {
     var clickedBeside: () -> Void = {}
     /// Takes the pointer to draw marks while it is set.
     var markup: MarkupSession?
+    /// The checkerboard all of the view shows behind it, with a frame at its edges.
+    var checker: Pictures.Checker?
 
     func makeNSView(context: Context) -> ZoomingScrollView {
         ZoomingScrollView(margin: margin, radius: radius, largestFit: largestFit)
@@ -486,6 +493,7 @@ struct ZoomableImage: NSViewRepresentable {
         view.show(image, size: size)
         view.markup = markup
         view.margin = margin
+        view.checker = checker
     }
 }
 
@@ -517,6 +525,8 @@ final class ZoomingScrollView: NSScrollView {
     private let radius: CGFloat
     private let largestFit: CGFloat
     private let picture = FlippedView()
+    /// The checkerboard behind the picture, which stays put while the picture zooms and scrolls.
+    private let grid = NSView()
     private var dragged = false
     private var canvas: MarkupCanvas?
 
@@ -533,6 +543,21 @@ final class ZoomingScrollView: NSScrollView {
             }
             window?.invalidateCursorRects(for: self)
         }
+    }
+
+    var checker: Pictures.Checker? {
+        didSet {
+            guard checker != oldValue else { return }
+            paintChecker()
+        }
+    }
+
+    /// Fills the view with the checkerboard, which stays put while the picture zooms over it, and
+    /// frames the picture as thinly however far it is zoomed.
+    private func paintChecker() {
+        grid.layer?.backgroundColor = checker?.pattern().cgColor
+        picture.layer?.borderColor = checker?.frame.cgColor
+        picture.layer?.borderWidth = checker == nil ? 0 : 1 / magnification
     }
 
     private var fit: CGFloat { fitFor(margin) }
@@ -557,6 +582,8 @@ final class ZoomingScrollView: NSScrollView {
         self.largestFit = largestFit
         super.init(frame: .zero)
         contentView = CenteringClipView()
+        grid.wantsLayer = true
+        addSubview(grid, positioned: .below, relativeTo: contentView)
         documentView = picture
         picture.wantsLayer = true
         picture.layer?.masksToBounds = true
@@ -582,6 +609,7 @@ final class ZoomingScrollView: NSScrollView {
     override func setFrameSize(_ size: NSSize) {
         let wasFitted = fitted
         super.setFrameSize(size)
+        grid.frame = bounds
         minMagnification = smallest
         guard wasFitted || magnification < smallest else { return }
         magnification = fit
@@ -590,6 +618,7 @@ final class ZoomingScrollView: NSScrollView {
     override func reflectScrolledClipView(_ clipView: NSClipView) {
         super.reflectScrolledClipView(clipView)
         picture.layer?.cornerRadius = radius / magnification
+        paintChecker()
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {

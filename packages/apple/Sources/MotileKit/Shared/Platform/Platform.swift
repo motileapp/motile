@@ -97,6 +97,16 @@ enum Platform {
         #endif
     }
 
+    /// Whether the client is in its dark appearance.
+    static var isDark: Bool {
+        #if os(macOS)
+        NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        #else
+        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
+        return (windows.first?.traitCollection ?? UITraitCollection.current).userInterfaceStyle == .dark
+        #endif
+    }
+
     /// Whether the client is in front, which is when a reply counts as seen.
     static var isActive: Bool {
         #if os(macOS)
@@ -209,6 +219,30 @@ extension PlatformColor {
         #else
         UIColor { traits in traits.userInterfaceStyle == .dark ? dark : light }
         #endif
+    }
+
+    /// Its red, green and blue in sRGB, from 0 to 1.
+    private var srgb: (red: Double, green: Double, blue: Double) {
+        #if os(macOS)
+        let color = usingColorSpace(.sRGB) ?? self
+        return (Double(color.redComponent), Double(color.greenComponent), Double(color.blueComponent))
+        #else
+        var (red, green, blue, alpha): (CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0)
+        getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return (Double(red), Double(green), Double(blue))
+        #endif
+    }
+
+    var luminance: Double {
+        let (red, green, blue) = srgb
+        return Pictures.relativeLuminance(red, green, blue)
+    }
+
+    /// As `#rrggbb`.
+    var hex: String {
+        let (red, green, blue) = srgb
+        let byte = { (value: Double) in Int((min(max(value, 0), 1) * 255).rounded()) }
+        return String(format: "#%02x%02x%02x", byte(red), byte(green), byte(blue))
     }
 }
 

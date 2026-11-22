@@ -37,6 +37,9 @@ const LINE_HEIGHT: f32 = 16.;
 /// The room between the lines of a message's files.
 const LINE_GAP: f32 = 4.;
 const TILE: f32 = 96.;
+/// The smallest box a picture is shown in, so that a small one lies on a checkerboard that can be
+/// made out and pressed.
+const SMALLEST_BOX: f32 = 96.;
 const TILE_GAP: f32 = 6.;
 const PLAYED_HERE: [&str; 3] = ["mp4", "mov", "m4v"];
 pub const SAVE_TITLE: &str = "Save As";
@@ -200,6 +203,9 @@ pub fn copy(file: PathBuf, video: bool, name: String, cx: &mut App) {
             })
             .detach();
     }
+    if is_svg(&file, &name) {
+        return copy_svg(file, name, cx);
+    }
     let format = image_format(&file);
     let reading = cx.background_executor().spawn(async move { std::fs::read(&file).ok() });
     cx.spawn(async move |cx| {
@@ -207,6 +213,49 @@ pub fn copy(file: PathBuf, video: bool, name: String, cx: &mut App) {
         cx.update(|cx| cx.write_to_clipboard(ClipboardItem::new_image(&Image::from_bytes(format, bytes))));
     })
     .detach();
+}
+
+fn is_svg(file: &Path, name: &str) -> bool {
+    image_format(file) == ImageFormat::Svg || name.to_ascii_lowercase().ends_with(".svg")
+}
+
+/// How large the picture an SVG is copied with is drawn, for what only takes pictures.
+const COPIED_SVG_PIXELS: i32 = 1024;
+
+/// Copies an SVG as its file under its name, its text, and a picture of it: the file for where
+/// files go, the SVG for what reads it, the picture for the rest.
+fn copy_svg(file: PathBuf, name: String, cx: &mut App) {
+    let renderer = cx.svg_renderer();
+    let copying = cx.background_executor().spawn(async move {
+        let svg = std::fs::read(&file).ok()?;
+        let png = renderer
+            .parse_svg(&svg)
+            .ok()
+            .and_then(|parsed| {
+                let side = DevicePixels(COPIED_SVG_PIXELS);
+                renderer.render_parsed(&parsed, SvgSize::Size(size(side, DevicePixels(0)))).ok()
+            })
+            .and_then(|image| png_of(&image));
+        Some((named_copy(&file, &name), svg, png))
+    });
+    cx.spawn(async move |cx| {
+        let Some((named, svg, png)) = copying.await else { return };
+        cx.update(|cx| native::copy_svg(&named, &svg, png, cx))
+    })
+    .detach();
+}
+
+/// The picture GPUI draws, in BGRA, as a PNG.
+fn png_of(image: &RenderImage) -> Option<Vec<u8>> {
+    let drawn = image.size(0);
+    let mut pixels = image.as_bytes(0)?.to_vec();
+    for pixel in pixels.as_chunks_mut::<4>().0 {
+        pixel.swap(0, 2);
+    }
+    let pixels = image::RgbaImage::from_raw(i32::from(drawn.width) as u32, i32::from(drawn.height) as u32, pixels)?;
+    let mut png = std::io::Cursor::new(Vec::new());
+    pixels.write_to(&mut png, image::ImageFormat::Png).ok()?;
+    Some(png.into_inner())
 }
 
 /// A copy of the file under its name, in a temporary folder, for what takes it to know it by it.
@@ -315,9 +364,9 @@ pub fn attached_files(
         .into_any_element()
 }
 
-/// The box an image or a video is shown in, in a column: its own size, or smaller to fit, at most
-/// `MAX_HEIGHT` tall. A video's size isn't known, so it is 16 by 9.
-fn boxed(width: Option<u32>, height: Option<u32>) -> (f32, f32) {
+/// How large a picture is drawn in a column: its own size, or smaller to fit, at most `MAX_HEIGHT`
+/// tall. A video's size isn't known, so it is 16 by 9.
+fn drawn(width: Option<u32>, height: Option<u32>) -> (f32, f32) {
     match (width, height) {
         (Some(width), Some(height)) if width > 0 && height > 0 => {
             let (width, height) = (width as f32, height as f32);
@@ -376,16 +425,19 @@ pub fn picture_box(shown: Shown, ctx: &RowContext, window: &mut Window, cx: &mut
     let Shown { key, media, video, width, height, size, alt, name, poster, radius } = shown;
     let (media, alt, name) = (media.to_string(), alt.to_string(), name.to_string());
     let poster = poster.map(str::to_string);
-    let (box_width, box_height) = boxed(width, height);
+    let (drawn_width, drawn_height) = drawn(width, height);
+    let box_width = drawn_width.clamp(SMALLEST_BOX, crate::theme::CONTENT_WIDTH);
+    let box_height = drawn_height.max(SMALLEST_BOX);
+    let fills = drawn_width >= box_width && drawn_height >= box_height;
     let picture_id = if video { poster.clone() } else { Some(media.clone()) };
     let max_pixels = (box_width.max(box_height) * window.scale_factor()).ceil() as u32;
     let picture = picture_id.as_ref().map(|id| Pictures::load(&ctx.store, id, id, max_pixels, cx));
     let fraction = (!video).then(|| ctx.store.read(cx).media_progress.get(&media).copied()).flatten();
     let c = colors(cx);
     let row_id = key.to_string();
-    let shown = match &picture {
-        Some(Picture::Ready(shown)) => Some(shown.image.clone()),
-        _ => None,
+    let (shown, checker) = match &picture {
+        Some(Picture::Ready(shown)) => (Some(shown.image.clone()), Some(shown.checker(c))),
+        _ => (None, None),
     };
     let failure = match &picture {
         Some(Picture::Failed(failure)) if !video => Some(failure.clone()),
@@ -492,13 +544,16 @@ pub fn picture_box(shown: Shown, ctx: &RowContext, window: &mut Window, cx: &mut
         .bg(c.background_secondary)
         .border_1()
         .border_color(c.border)
+        .when_some(checker, |frame, checker| frame.child(checker.board(radius - 1., c)))
         .when_some(shown, |frame, image| {
             frame.child(
-                img(ImageSource::Render(image))
-                    .size_full()
-                    .aspect_ratio(box_width / box_height)
-                    .rounded(px(radius - 1.))
-                    .object_fit(ObjectFit::Contain),
+                div().absolute().inset_0().flex().items_center().justify_center().child(
+                    img(ImageSource::Render(image))
+                        .w(relative(drawn_width / box_width))
+                        .h(relative(drawn_height / box_height))
+                        .when(fills, |image| image.rounded(px(radius - 1.)))
+                        .object_fit(ObjectFit::Contain),
+                ),
             )
         })
         .child(states)

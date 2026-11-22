@@ -2,6 +2,7 @@ package app.motile.transcript
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,12 +25,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.AppStore
 import app.motile.core.ViewedMedia
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
+import app.motile.theme.LocalDark
 import app.motile.theme.LocalPalette
 import app.motile.theme.TextSize
 import app.motile.theme.Theme
@@ -60,14 +63,15 @@ fun MediaBox(media: MediaContent, radius: Dp = PictureBox.radius) {
     val store = LocalStore.current
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
-    var picture by remember(media.id) { mutableStateOf(PictureCache.cached(media.picture)) }
+    val dark = LocalDark.current
+    var picture by remember(media.id, dark) { mutableStateOf(PictureCache.cached(media.picture)) }
     var state by remember(media.id) { mutableStateOf<MediaState>(MediaState.Shown) }
     var attempt by remember(media.id) { mutableIntStateOf(0) }
     val maxPixels = with(LocalDensity.current) {
         val (width, height) = media.box(Theme.contentWidth.value)
         (max(width, height).dp).roundToPx()
     }
-    LaunchedEffect(media.id, attempt) {
+    LaunchedEffect(media.id, attempt, dark) {
         val pictureID = media.picture ?: return@LaunchedEffect
         if (picture != null) return@LaunchedEffect
         state = MediaState.Loading
@@ -89,35 +93,38 @@ fun MediaBox(media: MediaContent, radius: Dp = PictureBox.radius) {
         modifier = Modifier.boxed(media).semantics { contentDescription = media.alt.ifEmpty { media.name } },
         onClick = open,
     ) {
-        PictureBox(picture, Modifier.fillMaxSize(), radius) {
-            if (media.video) OverlayButton(Symbol.Play, "Play", ControlSize.Large, Modifier.align(Alignment.Center), onClick = open)
-            if (media.video && media.poster == null) {
-                Text(
-                    "${media.name} · ${byteCount(media.bytes)}",
-                    Modifier.align(Alignment.BottomStart).padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
-                    style = Theme.smallFont, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
-                )
-            }
-            when (val shown = state) {
-                MediaState.Loading -> Column(
-                    Modifier.align(Alignment.Center),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Spinner(ControlSize.Large.symbol, color = palette.mutedForeground)
-                    store.mediaProgress[media.id]?.let { fraction ->
-                        Text("${(fraction * 100).toInt()}%", style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground)
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val drawn = media.drawn(maxWidth.value)?.let { (width, height) -> DpSize(width.dp, height.dp) }
+            PictureBox(picture, Modifier.fillMaxSize(), radius, PictureCache.checker(media.picture, palette), drawn) {
+                if (media.video) OverlayButton(Symbol.Play, "Play", ControlSize.Large, Modifier.align(Alignment.Center), onClick = open)
+                if (media.video && media.poster == null) {
+                    Text(
+                        "${media.name} · ${byteCount(media.bytes)}",
+                        Modifier.align(Alignment.BottomStart).padding(start = 12.dp, end = 12.dp, bottom = 10.dp),
+                        style = Theme.smallFont, color = palette.mutedForeground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis,
+                    )
+                }
+                when (val shown = state) {
+                    MediaState.Loading -> Column(
+                        Modifier.align(Alignment.Center),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Spinner(ControlSize.Large.symbol, color = palette.mutedForeground)
+                        store.mediaProgress[media.id]?.let { fraction ->
+                            Text("${(fraction * 100).toInt()}%", style = Theme.uiDigits(TextSize.Xs), color = palette.mutedForeground)
+                        }
                     }
+                    is MediaState.Failed -> Column(
+                        Modifier.align(Alignment.Center).padding(horizontal = 12.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(shown.why, style = Theme.smallFont, color = palette.mutedForeground, align = TextAlign.Center, maxLines = 1)
+                        if (store.fetchesAgain) RowButton("Try again", "Load the image again", bordered = true) { attempt += 1 }
+                    }
+                    MediaState.Shown -> Unit
                 }
-                is MediaState.Failed -> Column(
-                    Modifier.align(Alignment.Center).padding(horizontal = 12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Text(shown.why, style = Theme.smallFont, color = palette.mutedForeground, align = TextAlign.Center, maxLines = 1)
-                    if (store.fetchesAgain) RowButton("Try again", "Load the image again", bordered = true) { attempt += 1 }
-                }
-                MediaState.Shown -> Unit
             }
         }
     }

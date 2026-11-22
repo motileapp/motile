@@ -2,6 +2,7 @@
 import QuartzCore
 import QuickLook
 import UIKit
+import UniformTypeIdentifiers
 
 /// An entry of the menu a view opens when it is held.
 struct MenuAction {
@@ -794,6 +795,17 @@ enum MediaFiles {
         DispatchQueue.global(qos: .userInitiated).async {
             guard let image = UIImage(contentsOfFile: file.path) else { return }
             DispatchQueue.main.async { UIPasteboard.general.image = image }
+        }
+    }
+
+    static func copySVG(_ file: URL, named name: String) {
+        svgParts(file, named: name) { _, svg, png in
+            var item: [String: Any] = [
+                UTType.svg.identifier: svg,
+                UTType.utf8PlainText.identifier: String(decoding: svg, as: UTF8.self),
+            ]
+            if let png { item[UTType.png.identifier] = png }
+            UIPasteboard.general.items = [item]
         }
     }
 

@@ -522,11 +522,26 @@ impl ToolImage {
         Self {
             media: media.id.clone(),
             name: file_name(&media.src).to_string(),
-            width: media.width,
-            height: media.height,
+            width: shown_size(media).map(|size| size.0),
+            height: shown_size(media).map(|size| size.1),
             size: media.size,
         }
     }
+}
+
+/// How large an SVG is drawn at least, on its longer side: it is sharp at any size, and an icon
+/// drawn at its own 24 points is too small to make out.
+const SVG_SMALLEST_SIDE: u32 = 64;
+
+/// The image's size in pixels as it is shown: an SVG's enlarged to `SVG_SMALLEST_SIDE`.
+fn shown_size(media: &Media) -> Option<(u32, u32)> {
+    let (width, height) = (media.width?, media.height?);
+    let longer = width.max(height);
+    if !media.id.to_ascii_lowercase().ends_with(".svg") || longer == 0 || longer >= SVG_SMALLEST_SIDE {
+        return Some((width, height));
+    }
+    let scale = |side: u32| ((side * SVG_SMALLEST_SIDE) as f64 / longer as f64).round().max(1.0) as u32;
+    Some((scale(width), scale(height)))
 }
 
 /// A question the agent asked the user, with their answer: `None` until they give one, or when
@@ -1581,8 +1596,8 @@ fn render_markdown(item: &Item, text: &str, mut streaming: Option<&mut HashMap<S
                     RowKind::Media {
                         media: media.id.clone(),
                         video: media.video,
-                        width: media.width,
-                        height: media.height,
+                        width: shown_size(media).map(|size| size.0),
+                        height: shown_size(media).map(|size| size.1),
                         size: media.size,
                         alt,
                         name,
@@ -1993,6 +2008,40 @@ mod tests {
             matches!(&rows[2].kind, RowKind::Prose { prose, .. } if prose.text == "Gone" && prose.links.len() == 1)
         );
         assert_eq!(serde_json::to_value(&rows[1]).unwrap()["kind"], "media");
+    }
+
+    #[test]
+    fn a_small_svg_is_shown_enlarged_and_a_small_picture_at_its_size() {
+        use motile_protocol::wire::Media;
+        let media = |id: &str, width, height| Media {
+            id: id.into(),
+            src: id.into(),
+            video: false,
+            file: false,
+            size: 300,
+            width: Some(width),
+            height: Some(height),
+            poster: None,
+        };
+        let mut reply = assistant("a", 0, "![](icon.svg)\n\n![](wide.svg)\n\n![](large.svg)\n\n![](tiny.png)");
+        reply.media = vec![
+            media("icon.svg", 24, 24),
+            media("wide.svg", 32, 8),
+            media("large.svg", 300, 100),
+            media("tiny.png", 16, 16),
+        ];
+        let mut transcript = Transcript::new("/srv/api");
+        transcript.load(vec![reply]);
+
+        let sizes: Vec<_> = transcript
+            .rows()
+            .iter()
+            .filter_map(|row| match &row.kind {
+                RowKind::Media { width, height, .. } => Some((width.unwrap(), height.unwrap())),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(sizes, [(64, 64), (64, 16), (300, 100), (16, 16)]);
     }
 
     #[test]

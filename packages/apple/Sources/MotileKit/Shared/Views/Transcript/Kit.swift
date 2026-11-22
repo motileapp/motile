@@ -283,17 +283,39 @@ final class OverlayButton: FlippedView {
     }
 }
 
-/// The box an image or a video is shown in: empty until the picture is there.
+/// The box an image or a video is shown in: empty until the picture is there. A picture smaller
+/// than the box is drawn at its size in the middle of it, and a shown picture lies on a checkerboard.
 final class PictureView: LayerView {
     static let radius = Radius.lg
 
     var picture: CGImage? { didSet { repaint() } }
     var radius = PictureView.radius { didSet { repaint() } }
+    /// How large the picture is drawn; all of the box when not set.
+    var drawn: CGSize? { didSet { relayout() } }
+    /// What lies behind a shown picture: `Pictures.checker(behind:)`.
+    var tile = Theme.backgroundSecondary { didSet { repaint() } }
+
+    private let image = CALayer()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        image.contentsGravity = .resizeAspect
+        image.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func layoutNow() {
+        let size = drawn.map { CGSize(width: min($0.width, bounds.width), height: min($0.height, bounds.height)) } ?? bounds.size
+        image.frame = CGRect(
+            x: ((bounds.width - size.width) / 2).rounded(), y: ((bounds.height - size.height) / 2).rounded(),
+            width: size.width, height: size.height)
+    }
 
     override func paint(_ layer: CALayer) {
-        layer.contents = picture
-        layer.contentsGravity = .resizeAspect
-        layer.backgroundColor = resolved(Theme.backgroundSecondary)
+        if image.superlayer !== layer { layer.addSublayer(image) }
+        image.contents = picture
+        layer.backgroundColor = resolved(picture == nil ? Theme.backgroundSecondary : tile)
         layer.cornerRadius = radius
         layer.cornerCurve = .continuous
         layer.masksToBounds = true

@@ -30,6 +30,8 @@ reply made up on the spot instead:
 - "plan the hello": a turn that presents a plan and, once that is approved, carries it out.
 - "show the screenshot": a turn that writes `screenshot.png` in its folder, reads it, and shows it in the reply.
 - "show the logo": a turn that writes `logo.svg` in its folder and shows it in the reply.
+- "show the icons": a turn that writes three 24-point SVG icons drawn in `currentColor`, a black
+  one and a white one, and shows them in the reply, on lines of their own.
 - "send the report": a turn that writes `signups.csv` in its folder and sends it in the reply.
 - "use the calculator": a turn that works out 12 × 7 in Calculator through the computer use
   driver's tools, the second of which shows a screenshot.
@@ -536,6 +538,8 @@ def title_answer():
         title = "Screenshot of the Landing Page"
     if "show the logo" in message:
         title = "The New Logo"
+    if "show the icons" in message:
+        title = "Effort Level Icons"
     if "show the ui html" in message:
         title = "Catch the Dot"
     if "show the ui map" in message:
@@ -1318,6 +1322,44 @@ LOGO = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 160">
 """
 
 
+def effort_icon(blocks):
+    shapes = [
+        '<path d="M8 15.6667H16V18A1 1 0 0 1 15 19H9A1 1 0 0 1 8 18Z"/>',
+        '<rect x="8" y="10.3333" width="8" height="3.3334"/>',
+        '<path d="M8 8.3333V6A1 1 0 0 1 9 5H15A1 1 0 0 1 16 6V8.3333Z"/>',
+    ]
+    return (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">'
+        '<rect x="5" y="2" width="14" height="20" rx="4" fill="none" stroke="currentColor" stroke-width="2"/>'
+        + "".join(shapes[:blocks])
+        + "</svg>"
+    )
+
+
+def mark(color):
+    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 2 22 20H2Z" fill="{color}"/></svg>'
+
+
+def show_the_icons():
+    turn = Turn("00000000-0000-4000-8000-0000000005ca")
+    files = {f"effort-{name}.svg": effort_icon(blocks) for blocks, name in [(1, "low"), (2, "medium"), (3, "high")]}
+    files["mark-black.svg"] = mark("#000")
+    files["mark-white.svg"] = mark("#fff")
+    paths = {}
+    for name, svg in files.items():
+        paths[name] = os.path.join(os.getcwd(), name)
+        with open(paths[name], "w") as f:
+            f.write(svg)
+    turn.tool("Bash", {"command": "ls *.svg"}, "\n".join(files), seconds=0.1)
+    icons = "\n".join(f"![{name}]({paths[name]})" for name in list(files)[:3])
+    turn.text(
+        f"Here are the three icons as SVGs, drawn in `currentColor`:\n\n{icons}\n\n"
+        f"And the mark, in black and in white:\n\n![The black mark]({paths['mark-black.svg']})\n"
+        f"![The white mark]({paths['mark-white.svg']})"
+    )
+    turn.done()
+
+
 def show_the_logo():
     turn = Turn("00000000-0000-4000-8000-0000000005c9")
     path = os.path.join(os.getcwd(), "logo.svg")
@@ -1850,6 +1892,7 @@ SCRIPTED = {
     "change the settings": change_the_settings,
     "show the screenshot": show_screenshot,
     "show the logo": show_the_logo,
+    "show the icons": show_the_icons,
     "send the report": send_the_report,
     "use the calculator": use_the_calculator,
     "show the recording": show_the_recording,

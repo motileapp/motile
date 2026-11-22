@@ -2,6 +2,7 @@ package app.motile.transcript
 
 import android.content.ActivityNotFoundException
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Intent
 import android.util.LruCache
@@ -14,6 +15,8 @@ import app.motile.core.AppStore
 import app.motile.core.Pictures
 import app.motile.core.Preferences
 import app.motile.platform.Platform
+import app.motile.theme.Palette
+import app.motile.theme.Theme
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -36,8 +39,13 @@ object PictureCache {
     private val cache = object : LruCache<String, ImageBitmap>(256 * 1024 * 1024) {
         override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
     }
+    /** How light what each picture with see-through parts draws is, by the picture's key. */
+    private val inks = LruCache<String, Double>(1024)
 
-    fun cached(key: String?): ImageBitmap? = key?.let { cache.get(it) }
+    /** An SVG is kept for the appearance it was drawn in, since its `currentColor` is the text's. */
+    private fun svgKey(key: String, dark: Boolean) = "$key#${if (dark) "dark" else "light"}"
+
+    fun cached(key: String?): ImageBitmap? = key?.let { cache.get(it) ?: cache.get(svgKey(it, Theme.dark)) }
 
     fun put(key: String, picture: ImageBitmap) {
         cache.put(key, picture)
@@ -45,7 +53,24 @@ object PictureCache {
 
     /** The image, no larger than `maxPixels` on a side, kept under `key`. */
     suspend fun decode(file: File, key: String, maxPixels: Int): ImageBitmap? = withContext(Dispatchers.IO) {
-        Pictures.decode(file, maxPixels)?.asImageBitmap()?.also { cache.put(key, it) }
+        val kept = if (file.extension.equals("svg", ignoreCase = true)) svgKey(key, Theme.dark) else key
+        val bitmap = Pictures.decode(file, maxPixels) ?: return@withContext null
+        Pictures.inkLuminance(bitmap)?.let { inks.put(kept, it) }
+        bitmap.asImageBitmap().also { cache.put(kept, it) }
+    }
+
+    /** The checkerboard behind the picture kept under `key`: `checker(ink)` of what it draws. */
+    fun checker(key: String?, palette: Palette): Checker =
+        checker(key?.let { inks.get(it) ?: inks.get(svgKey(it, Theme.dark)) }, palette)
+
+    /**
+     * The checkerboard behind a picture: the dark one under what draws in light colours, `ink`, the
+     * light one under anything else.
+     */
+    fun checker(ink: Double?, palette: Palette): Checker {
+        ink ?: return Checker.Light
+        val onDark = Pictures.onDark(ink, Checker.Dark.luminance(palette), Checker.Light.luminance(palette))
+        return if (onDark) Checker.Dark else Checker.Light
     }
 }
 
@@ -79,10 +104,20 @@ object MediaFiles {
         }
     }
 
-    /** Puts the file on the clipboard, which apps that take images and videos paste. */
+    /**
+     * Puts the file on the clipboard, which apps that take images and videos paste. An SVG goes with
+     * its text, for what reads it.
+     */
     fun copy(file: File, name: String) = named(file, name) { copy ->
         val clipboard = context.getSystemService(ClipboardManager::class.java)
-        clipboard.setPrimaryClip(ClipData.newUri(context.contentResolver, name, uri(copy)))
+        if (!copy.extension.equals("svg", ignoreCase = true)) {
+            return@named clipboard.setPrimaryClip(ClipData.newUri(context.contentResolver, name, uri(copy)))
+        }
+        scope.launch {
+            val text = withContext(Dispatchers.IO) { runCatching { copy.readText() }.getOrNull() }
+            val description = ClipDescription(name, arrayOf("image/svg+xml", ClipDescription.MIMETYPE_TEXT_PLAIN))
+            clipboard.setPrimaryClip(ClipData(description, ClipData.Item(text, null, uri(copy))))
+        }
     }
 
     /** Opens the share sheet on a copy of the file that has its name, which is where it can be saved too. */

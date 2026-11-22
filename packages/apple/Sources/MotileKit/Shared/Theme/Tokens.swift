@@ -11,6 +11,12 @@ extension Theme {
     static let backgroundSecondary = tone(0xeaecf0, 0x111217)
     static let backgroundSecondaryAccent = tone(0xdfe2e8, 0x191a1f)
     static let backgroundSecondaryAccentStronger = tone(0xd4d8e0, 0x212227)
+    static let checkerLight = tone(0xf6f7f9, 0xf6f7f9)
+    static let checkerLightAlternate = tone(0xe2e3e5, 0xe2e3e5)
+    static let checkerDark = tone(0x191a1e, 0x191a1e)
+    static let checkerDarkAlternate = tone(0x0a0b0f, 0x0a0b0f)
+    static let checkerLightFrame = tone(0xadb1bc, 0xadb1bc)
+    static let checkerDarkFrame = tone(0x4a4e5a, 0x4a4e5a)
     static let card = tone(0xffffff, 0x15161b)
     static let cardAccent = tone(0xe6e8ec, 0x1e1f26)
     static let popover = tone(0xffffff, 0x191a1f)
@@ -122,6 +128,12 @@ extension Theme {
         case "background-secondary": backgroundSecondary
         case "background-secondary-accent": backgroundSecondaryAccent
         case "background-secondary-accent-stronger": backgroundSecondaryAccentStronger
+        case "checker-light": checkerLight
+        case "checker-light-alternate": checkerLightAlternate
+        case "checker-dark": checkerDark
+        case "checker-dark-alternate": checkerDarkAlternate
+        case "checker-light-frame": checkerLightFrame
+        case "checker-dark-frame": checkerDarkFrame
         case "card": card
         case "card-accent": cardAccent
         case "popover": popover
@@ -233,6 +245,12 @@ extension Color {
     static let themeBackgroundSecondary = Color(platform: Theme.backgroundSecondary)
     static let themeBackgroundSecondaryAccent = Color(platform: Theme.backgroundSecondaryAccent)
     static let themeBackgroundSecondaryAccentStronger = Color(platform: Theme.backgroundSecondaryAccentStronger)
+    static let themeCheckerLight = Color(platform: Theme.checkerLight)
+    static let themeCheckerLightAlternate = Color(platform: Theme.checkerLightAlternate)
+    static let themeCheckerDark = Color(platform: Theme.checkerDark)
+    static let themeCheckerDarkAlternate = Color(platform: Theme.checkerDarkAlternate)
+    static let themeCheckerLightFrame = Color(platform: Theme.checkerLightFrame)
+    static let themeCheckerDarkFrame = Color(platform: Theme.checkerDarkFrame)
     static let themeCard = Color(platform: Theme.card)
     static let themeCardAccent = Color(platform: Theme.cardAccent)
     static let themePopover = Color(platform: Theme.popover)

@@ -308,6 +308,9 @@ impl Builder<'_> {
 
     fn close(&mut self) {
         let Some((start, kind)) = self.open_para.take() else { return };
+        if !self.images.is_empty() {
+            self.trim_breaks(start);
+        }
         // A paragraph that only held shown images leaves no empty line behind.
         let only_images = self.length == start && !self.images.is_empty() && self.table.is_none();
         if !only_images {
@@ -315,6 +318,24 @@ impl Builder<'_> {
             self.prose.paras.push(Para { start, len: self.length - start, kind });
         }
         self.place_images();
+    }
+
+    /// Takes off the line breaks and spaces the paragraph ends with, which only stood between
+    /// images that are taken out of it.
+    fn trim_breaks(&mut self, start: u32) {
+        while self.length > start {
+            let Some(last) = self.prose.text.chars().next_back() else { return };
+            if !matches!(last, ' ' | '\u{2028}') {
+                return;
+            }
+            self.prose.text.pop();
+            self.length -= last.len_utf16() as u32;
+        }
+        let length = self.length;
+        self.prose.runs.retain_mut(|run| {
+            run[1] = run[1].min(length.saturating_sub(run[0]));
+            run[1] > 0
+        });
     }
 
     /// Ends the prose here and puts the shown images after it. A table is finished first.
@@ -390,6 +411,12 @@ impl Builder<'_> {
             // A single line break in a chat message is meant as one.
             Event::SoftBreak | Event::HardBreak => {
                 self.ensure_open();
+                // A line that only held a shown image doesn't stay behind empty.
+                let at_line_start = self.open_para.as_ref().is_some_and(|(start, _)| *start == self.length)
+                    || self.prose.text.ends_with('\u{2028}');
+                if at_line_start && !self.images.is_empty() {
+                    return;
+                }
                 self.push_plain("\u{2028}");
             }
             Event::Rule => {
@@ -805,6 +832,19 @@ mod tests {
         assert_eq!(blocks[7], image("b.png", "cell"));
         assert_eq!(prose(&blocks, 8).text, "End");
         assert_eq!(blocks.len(), 9);
+    }
+
+    #[test]
+    fn images_on_lines_of_their_own_leave_no_empty_lines() {
+        let image = |src: &str| Block::Image { src: src.into(), alt: String::new() };
+        let markdown = "Here they are:\n\n![](a.svg)\n![](b.svg) ![](c.svg)\n\nLook:\n![](a.svg)\nDone";
+        let blocks = parse_showing(markdown, &["a.svg", "b.svg", "c.svg"]);
+
+        assert_eq!(prose(&blocks, 0).text, "Here they are:");
+        assert_eq!(blocks[1..4], [image("a.svg"), image("b.svg"), image("c.svg")]);
+        assert_eq!(prose(&blocks, 4).text, "Look:\u{2028}Done");
+        assert_eq!(blocks[5], image("a.svg"));
+        assert_eq!(blocks.len(), 6);
     }
 
     #[test]

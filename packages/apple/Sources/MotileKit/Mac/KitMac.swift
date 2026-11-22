@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import QuartzCore
+import UniformTypeIdentifiers
 
 /// An entry of the menu a view opens under a right click.
 struct MenuAction {
@@ -830,6 +831,18 @@ enum MediaFiles {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setData(tiff, forType: .tiff)
             }
+        }
+    }
+
+    static func copySVG(_ file: URL, named name: String) {
+        svgParts(file, named: name) { named, svg, png in
+            let item = NSPasteboardItem()
+            item.setString(named.absoluteString, forType: .fileURL)
+            item.setData(svg, forType: NSPasteboard.PasteboardType(UTType.svg.identifier))
+            if let png { item.setData(png, forType: .png) }
+            item.setString(String(decoding: svg, as: UTF8.self), forType: .string)
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.writeObjects([item])
         }
     }
 
