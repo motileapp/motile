@@ -80,6 +80,7 @@ fun QuestionsView(approval: Approval, modifier: Modifier = Modifier) {
         FadingScroll(
             Dp.Infinity,
             Modifier.weight(1f, fill = false).padding(top = 6.dp, bottom = 12.dp).overhang(horizontal = optionReach),
+            endOn = store.typedAnswer(approval),
         ) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.padding(horizontal = optionReach), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -146,7 +147,7 @@ private fun OwnAnswerRow(approval: Approval, multiple: Boolean) {
             }
             Text(
                 written.ifEmpty { if (multiple) "Add your own answer below" else "Or type your own answer below" }, Modifier.weight(1f), size = TextSize.Sm, weight = FontWeight.Medium,
-                color = if (written.isEmpty()) palette.mutedForeground else palette.foreground, maxLines = 3,
+                color = if (written.isEmpty()) palette.mutedForeground else palette.foreground,
             )
         }
     }

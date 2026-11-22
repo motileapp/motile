@@ -10,6 +10,7 @@ struct QuestionsView: View {
     private static let optionReach: CGFloat = 8
     private static let optionGap: CGFloat = 2
     private static let markGap: CGFloat = 10
+    private static let ownAnswerID = "own-answer"
 
     var body: some View {
         let question = store.question(approval)
@@ -21,6 +22,29 @@ struct QuestionsView: View {
             )
             .foregroundStyle(Color.themeWarning)
             // Takes only the room the composer leaves, so the composer stays above the keyboard.
+            choices(question)
+            .padding(.horizontal, -Self.optionReach)
+            .padding(.top, 6)
+            .padding(.bottom, 12)
+            HStack(spacing: 0) {
+                if index > 0 {
+                    ActionButton("Back", icon: .chevronLeft, variant: .ghost, margin: .beside(trailing: 8)) { store.goBack(approval) }
+                }
+                Spacer()
+                ActionButton(approval.refuseLabel, variant: .ghost, margin: .beside(leading: 8, trailing: ComposerStrip.gap / 2)) {
+                    store.answer(approval, allow: false)
+                }
+                ActionButton(store.isLastQuestion(approval) ? approval.allowLabel : "Next", variant: .primary, glass: true, margin: .beside(leading: ComposerStrip.gap / 2)) {
+                    store.goOn(approval)
+                }
+                .disabled(!store.canGoOn(approval))
+            }
+        }
+    }
+
+    /// The question and its options, scrolled to the answer written in the composer as it is written.
+    private func choices(_ question: Question) -> some View {
+        ScrollViewReader { scroller in
             FadingScroll(maxHeight: .infinity) {
                 VStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -39,24 +63,12 @@ struct QuestionsView: View {
                             row(option, multiple: question.multiple)
                         }
                         ownAnswer(multiple: question.multiple)
+                            .id(Self.ownAnswerID)
                     }
                 }
             }
-            .padding(.horizontal, -Self.optionReach)
-            .padding(.top, 6)
-            .padding(.bottom, 12)
-            HStack(spacing: 0) {
-                if index > 0 {
-                    ActionButton("Back", icon: .chevronLeft, variant: .ghost, margin: .beside(trailing: 8)) { store.goBack(approval) }
-                }
-                Spacer()
-                ActionButton(approval.refuseLabel, variant: .ghost, margin: .beside(leading: 8, trailing: ComposerStrip.gap / 2)) {
-                    store.answer(approval, allow: false)
-                }
-                ActionButton(store.isLastQuestion(approval) ? approval.allowLabel : "Next", variant: .primary, glass: true, margin: .beside(leading: ComposerStrip.gap / 2)) {
-                    store.goOn(approval)
-                }
-                .disabled(!store.canGoOn(approval))
+            .onChange(of: store.typedAnswer(approval)) {
+                scroller.scrollTo(Self.ownAnswerID, anchor: .bottom)
             }
         }
     }
@@ -119,7 +131,6 @@ struct QuestionsView: View {
                 Text(written.isEmpty ? (multiple ? "Add your own answer below" : "Or type your own answer below") : written)
                     .font(.ui(.sm, weight: .medium))
                     .foregroundStyle(written.isEmpty ? Color.themeMutedForeground : Color.themeForeground)
-                    .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
             }
