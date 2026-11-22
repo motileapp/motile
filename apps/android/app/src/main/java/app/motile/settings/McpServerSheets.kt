@@ -152,7 +152,7 @@ fun McpServerAddSheet(query: String = "") {
         adder.add(step.url, step.given, header = header, key = key)
     }
     fun continueWithAddress() {
-        address?.let { adder.add(it, name.trim().ifEmpty { null }) }
+        address?.let { adder.add(it, name.trim().ifEmpty { McpServerAdder.hostName(it) }) }
     }
     McpServerSheetFrame(title) {
         when (step) {
@@ -210,7 +210,7 @@ private fun Pick(
                 McpServerAdder.hostName(address), name, onName, Modifier.fillMaxWidth(), size = ControlSize.Large,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go), onSubmit = continueWithAddress,
             )
-            McpServerRow.slugOf(name)?.let { AgentName("mcp__${it}__…") }
+            (McpServerRow.slugOf(name) ?: McpServerRow.slugOf(McpServerAdder.hostName(address)))?.let { AgentName("mcp__${it}__…") }
         }
         Text("Your gateway reaches it there, and signs in or asks you for a key if it needs one.", size = TextSize.Xs, color = palette.mutedForeground)
         return

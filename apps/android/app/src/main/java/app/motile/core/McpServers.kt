@@ -488,7 +488,7 @@ class McpServerAdder(private val mcpServers: McpServers) {
     companion object {
         private val skipped = setOf("mcp", "api", "www", "server", "app")
 
-        /** "Linear" for `https://mcp.linear.app/mcp`, until the gateway names it; an address by itself. */
+        /** "Linear" for `https://mcp.linear.app/mcp`: the name an MCP server gets when none is typed; an address by itself. */
         fun hostName(url: String): String {
             val host = url.toUri().host ?: url
             if (host.none { it.isLetter() } || host == "localhost") return host

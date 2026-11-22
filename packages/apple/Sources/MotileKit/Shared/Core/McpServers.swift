@@ -428,7 +428,7 @@ final class McpServerAdder {
         }
     }
 
-    /// "Linear" for `https://mcp.linear.app/mcp`, until the gateway names it; an address by itself.
+    /// "Linear" for `https://mcp.linear.app/mcp`: the name an MCP server gets when none is typed; an address by itself.
     static func hostName(_ url: String) -> String {
         let host = URL(string: url)?.host() ?? url
         guard host.contains(where: \.isLetter), host != "localhost" else { return host }

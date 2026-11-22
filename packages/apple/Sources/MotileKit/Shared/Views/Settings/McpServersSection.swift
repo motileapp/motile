@@ -339,7 +339,7 @@ struct McpServerAddSheet: View {
                 SheetLabel("Name")
                 InputField(McpServerAdder.hostName(address), text: $name)
                     .onReturn(continueWithAddress)
-                if let slug = McpServerRow.slug(of: name) {
+                if let slug = McpServerRow.slug(of: name) ?? McpServerRow.slug(of: McpServerAdder.hostName(address)) {
                     AgentName(text: "mcp__\(slug)__…")
                 }
             }
@@ -446,7 +446,7 @@ struct McpServerAddSheet: View {
     private func continueWithAddress() {
         guard let address else { return }
         let name = name.trimmingCharacters(in: .whitespaces)
-        adder.add(url: address, name: name.isEmpty ? nil : name)
+        adder.add(url: address, name: name.isEmpty ? McpServerAdder.hostName(address) : name)
     }
 
     @ViewBuilder private var buttons: some View {

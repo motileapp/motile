@@ -98,7 +98,7 @@ fn update(store: &Entity<Store>, id: &str, change: McpChange, cx: &mut App) {
     })
 }
 
-/// "Linear" for `https://mcp.linear.app/mcp`, until the gateway names it; an address by itself.
+/// "Linear" for `https://mcp.linear.app/mcp`: the name an MCP server gets when none is typed; an address by itself.
 fn host_name(url: &str) -> String {
     let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
     let authority = rest.split(['/', '?', '#']).next().unwrap_or(rest);
@@ -866,8 +866,9 @@ impl AddSheet {
         if !matches!(self.step, Step::Pick) || !is_address(&text) {
             return;
         }
-        let name = Some(text_of(&self.name, cx)).filter(|name| !name.is_empty());
-        self.add(text, name, cx);
+        let typed = text_of(&self.name, cx);
+        let name = if typed.is_empty() { host_name(&text) } else { typed };
+        self.add(text, Some(name), cx);
     }
 
     /// Sends the address to the gateway, with the key the key step holds.
@@ -1001,7 +1002,8 @@ impl AddSheet {
             body.push(warning_line(error.clone(), cx).into_any_element());
         }
         if is_address(&text) {
-            body.push(name_field(&self.name, None, None, cx).into_any_element());
+            let placeholder = mcp_slug(&host_name(&text));
+            body.push(name_field(&self.name, None, Some(&placeholder), cx).into_any_element());
             body.push(
                 caption("Your gateway reaches it there, and signs in or asks you for a key if it needs one.", cx)
                     .into_any_element(),
