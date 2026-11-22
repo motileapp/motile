@@ -1035,6 +1035,7 @@ struct SlimThreadRow: View, Equatable {
         }
         .font(.ui(.xs))
         .foregroundStyle(Color.themeMutedStrongerForeground)
+        .fixedSize()
         .opacity(hovering ? 0 : 1)
     }
 }
@@ -1167,6 +1168,7 @@ struct ThreadStatus: View {
             Text(Time.ago(thread.updatedAt, now: AgoClock.shared.now))
                 .font(.ui(.xs))
                 .foregroundStyle(Color.themeMutedStrongerForeground)
+                .fixedSize()
         }
     }
 
@@ -1178,6 +1180,7 @@ struct ThreadStatus: View {
                 .monospacedDigit()
         }
         .foregroundStyle(color)
+        .fixedSize()
     }
 
     private func symbol(_ name: Symbol) -> some View {
@@ -1206,6 +1209,7 @@ struct StartingRow: View {
                     .font(.ui(.xs, weight: .medium))
             }
             .foregroundStyle(Color.themeMutedForeground)
+            .fixedSize()
         }
         .padding(.horizontal, sidebarRowPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
