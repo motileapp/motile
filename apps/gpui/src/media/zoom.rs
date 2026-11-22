@@ -42,6 +42,8 @@ pub struct ZoomableImage {
     largest_fit: f32,
     /// The size in points it opens at, when not fitted as usual: an SVG's row's.
     opens_at: Option<f32>,
+    /// The least room it can be moved past each of its edges: `room_past_edges`.
+    past_edges: f32,
     /// It lies over a picture's darkness, as in the viewer, where a picture with see-through parts
     /// lies on its checkerboard, framed.
     over_picture: bool,
@@ -83,6 +85,7 @@ impl ZoomableImage {
             radius,
             largest_fit: 1.,
             opens_at: None,
+            past_edges: 0.,
             over_picture: false,
             clicked_beside: None,
             right_clicked: None,
@@ -99,6 +102,13 @@ impl ZoomableImage {
             marking: false,
             _markup_changes: None,
         }
+    }
+
+    /// The least room it can be moved past each edge of its own when zoomed in, clear of what lies
+    /// at the room's edges, when that is more than its margin.
+    pub fn room_past_edges(mut self, room: f32) -> Self {
+        self.past_edges = room;
+        self
     }
 
     /// Opens enlarged to this width in points at most, rather than the usual `largest_fit`.
@@ -295,8 +305,8 @@ impl ZoomableImage {
         let scale = self.scale.unwrap_or(self.fit(points));
         let spare =
             |length: f32, margin: f32, room: Pixels| ((length * scale + 2. * margin - f32::from(room)) / 2.).max(0.);
-        let spare_x = spare(points.width, self.margin.width, room.width);
-        let spare_y = spare(points.height, self.margin.height, room.height);
+        let spare_x = spare(points.width, self.margin.width.max(self.past_edges), room.width);
+        let spare_y = spare(points.height, self.margin.height.max(self.past_edges), room.height);
         self.offset.x = self.offset.x.clamp(px(-spare_x), px(spare_x));
         self.offset.y = self.offset.y.clamp(px(-spare_y), px(spare_y));
     }

@@ -170,9 +170,8 @@ private object Viewer {
     val markupControls = PaddingValues(top = barGap + GlassButton.side + 8.dp, bottom = barGap + floatingHeight + 8.dp)
     /** How much of the picture around the pin whose note is written stays in sight. */
     val pinMargin = 16.dp
-    /** How far a zoomed picture moves past its sides, and past its top and bottom. */
-    val edgeRoomSides = 16.dp
-    val edgeRoomEnds = 72.dp
+    /** How far clear of the safe area's sides, and of the buttons at the top and bottom, a zoomed picture's edges can be brought. */
+    val edgeGap = 16.dp
 }
 
 @Composable
@@ -566,8 +565,8 @@ private class Framing {
     var origin by mutableStateOf(Offset.Zero)
         private set
     private var gliding: Job? = null
-    /** How far past its sides and its top and bottom a zoomed picture moves, in pixels, so every edge can be brought clear of the buttons. */
-    var edgeRoom = Offset.Zero
+    /** How far past each edge a zoomed picture moves, in pixels, so every edge can be brought clear of the buttons. */
+    var edgeRoom = Edges()
 
     /** The zoom the picture is at its actual size at: 1 but for an SVG, drawn larger than its own size. */
     private var actual by mutableFloatStateOf(1f)
@@ -655,14 +654,14 @@ private class Framing {
 
     /** Centres a picture smaller than the screen; one zoomed past fitting moves `edgeRoom` past its edges. */
     private fun placed(at: Offset, zoom: Float): Offset {
-        val past = if (zoom > fit + 0.001f) edgeRoom else Offset.Zero
-        fun axis(at: Float, start: Float, end: Float, length: Float, past: Float): Float {
-            val room = end - start
-            return if (length + 2 * past <= room) start + (room - length) / 2 else at.coerceIn(end - length - past, start + past)
+        val past = if (zoom > fit + 0.001f) edgeRoom else Edges()
+        fun axis(at: Float, start: Float, end: Float, length: Float, pastStart: Float, pastEnd: Float): Float {
+            val centred = (end - start - length) / 2
+            return at.coerceIn(end - length - max(centred, pastEnd), start + max(centred, pastStart))
         }
         return Offset(
-            axis(at.x, clear.left, size.width - clear.right, width * zoom, past.x),
-            axis(at.y, clear.top, size.height - clear.bottom, height * zoom, past.y),
+            axis(at.x, clear.left, size.width - clear.right, width * zoom, past.left, past.right),
+            axis(at.y, clear.top, size.height - clear.bottom, height * zoom, past.top, past.bottom),
         )
     }
 
@@ -703,8 +702,18 @@ private fun ZoomableImage(image: ImageBitmap, svgSize: Pair<Float, Float>?, draw
     val framing = remember { Framing() }
     val clear = covered(controls)
     val actual = svgSize?.let { (width, _) -> width * density.density / image.width } ?: 1f
+    val safe = WindowInsets.safeDrawing
+    val direction = LocalLayoutDirection.current
+    val edgeRoom = with(density) {
+        val gap = Viewer.edgeGap.toPx()
+        val buttons = (GlassButton.side + Viewer.barGap).toPx()
+        Edges(
+            safe.getLeft(density, direction) + gap, safe.getTop(density) + buttons + gap,
+            safe.getRight(density, direction) + gap, safe.getBottom(density) + buttons + gap,
+        )
+    }
     SideEffect {
-        framing.edgeRoom = with(density) { Offset(Viewer.edgeRoomSides.toPx(), Viewer.edgeRoomEnds.toPx()) }
+        framing.edgeRoom = edgeRoom
         framing.show(image, actual, Framing.largestFit(svgSize, drawnSize))
     }
     /** The selected pin's rows of the image, with its radius. */

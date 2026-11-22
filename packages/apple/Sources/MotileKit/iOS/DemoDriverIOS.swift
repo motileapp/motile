@@ -29,6 +29,7 @@ import UIKit
 ///     gateway code <code>                 finishes Claude's sign-in with the code
 ///     view [n]|close                    opens the thread's images in the viewer, at the nth, or closes it
 ///     zoom <times>                      zooms the viewer's picture to that many times its fitted size
+///     pan top|bottom|left|right         drags the viewer's zoomed picture as far as it goes that way
 ///     branches                          opens the branch picker in the thread's settings
 ///     top                               scrolls the transcript to its start
 ///     focus | blur                      gives the composer the keyboard, or takes it away
@@ -256,6 +257,7 @@ enum DemoDriver {
         case "view" where rest == "composer":
             store.view(store.attachments.compactMap(\.viewed), at: 0)
         case "view" where rest == "close": store.closeViewer()
+        case "pan": views(ZoomingScrollView.self).last?.pan(toward: rest)
         case "zoom":
             guard let times = Double(rest) else { return }
             views(ZoomingScrollView.self).last?.zoom(times: CGFloat(times))

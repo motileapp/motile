@@ -97,10 +97,13 @@ impl Checker {
     }
 }
 
-/// Fills the bounds with the first colour and lays squares of the second over it, from the top
-/// left corner, only where they can be seen and inside the rounded corners.
-fn paint_board(bounds: Bounds<Pixels>, radius: f32, (one, other): (Hsla, Hsla), window: &mut Window) {
-    window.paint_quad(fill(bounds, one).corner_radii(px(radius)));
+/// Calls `paint` with each square of the board over `bounds` that can be seen, from its top left
+/// corner, and whether it is of the second colour.
+fn for_visible_squares(
+    bounds: Bounds<Pixels>,
+    window: &mut Window,
+    mut paint: impl FnMut(Bounds<Pixels>, bool, &mut Window),
+) {
     let visible = bounds.intersect(&window.content_mask().bounds);
     if visible.size.width <= px(0.) || visible.size.height <= px(0.) {
         return;
@@ -112,17 +115,25 @@ fn paint_board(bounds: Bounds<Pixels>, radius: f32, (one, other): (Hsla, Hsla), 
     };
     for row in squares(visible.top(), visible.bottom(), top) {
         for column in squares(visible.left(), visible.right(), left) {
-            if (row + column).rem_euclid(2) == 0 {
-                continue;
-            }
             let square = Bounds::new(
                 point(px(left + column as f32 * side), px(top + row as f32 * side)),
                 size(px(side), px(side)),
             )
             .intersect(&bounds);
-            paint_rounded_square(square, bounds, radius, other, window);
+            paint(square, (row + column).rem_euclid(2) == 1, window);
         }
     }
+}
+
+/// Fills the bounds with the first colour and lays squares of the second over it, from the top
+/// left corner, only where they can be seen and inside the rounded corners.
+fn paint_board(bounds: Bounds<Pixels>, radius: f32, (one, other): (Hsla, Hsla), window: &mut Window) {
+    window.paint_quad(fill(bounds, one).corner_radii(px(radius)));
+    for_visible_squares(bounds, window, |square, alternate, window| {
+        if alternate {
+            paint_rounded_square(square, bounds, radius, other, window);
+        }
+    });
 }
 
 /// Paints the square, cut into strips where one of the bounds' rounded corners clips it.

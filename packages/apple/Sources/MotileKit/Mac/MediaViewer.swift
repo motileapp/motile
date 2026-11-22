@@ -269,12 +269,12 @@ struct MediaViewer: View {
                 image: image,
                 size: svgSize ?? CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale),
                 margin: markup == nil ? ZoomingScrollView.viewerMargin : Self.markupMargin,
-                radius: Radius.md,
                 largestFit: Self.largestFit(svgSize, opening: item.drawnSize),
                 menu: menu,
                 clickedBeside: { if markup == nil { store.closeViewer() } },
                 markup: markup,
-                checker: checker
+                checker: checker,
+                edgeRoom: Self.edgeRoom
             )
             .ignoresSafeArea()
         case .video(let player):
@@ -307,6 +307,9 @@ struct MediaViewer: View {
     private static let buttonGap: CGFloat = 8
     /// The room between the corner's buttons and the window's top and trailing edges.
     private static let cornerInset: CGFloat = 16
+    /// How far past its edges a zoomed-in picture scrolls: clear of the buttons over it, and as far
+    /// again from them.
+    private static let edgeRoom = 2 * cornerInset + ControlSize.large.height
     /// The room on each side of the name: what all four corner buttons take and a gap, the same
     /// on both sides so the name stays centered and doesn't move when the buttons come in.
     private static var nameInset: CGFloat {
@@ -489,6 +492,8 @@ struct ZoomableImage: NSViewRepresentable {
     var markup: MarkupSession?
     /// The checkerboard all of the view shows behind it, with a frame at its edges.
     var checker: Pictures.Checker?
+    /// How far past its edges it scrolls once it is larger than the view, at least its margin.
+    var edgeRoom: CGFloat = 0
 
     func makeNSView(context: Context) -> ZoomingScrollView {
         ZoomingScrollView(margin: margin, radius: radius, largestFit: largestFit)
@@ -500,6 +505,7 @@ struct ZoomableImage: NSViewRepresentable {
         view.menuActions = menu
         view.clickedBeside = clickedBeside
         view.largestFit = largestFit
+        view.edgeRoom = edgeRoom
         view.show(image, size: size)
         view.markup = markup
         view.margin = margin
@@ -525,7 +531,7 @@ final class ZoomingScrollView: NSScrollView {
     /// The room around the picture when it fits: more while it is marked up, to clear the bar.
     var margin: CGSize {
         didSet {
-            contentInsets = Self.insets(margin)
+            placeEdges()
             guard margin != oldValue else { return }
             let wasFitted = abs(magnification - fitFor(oldValue)) < 0.001
             limitZoom()
@@ -573,10 +579,15 @@ final class ZoomingScrollView: NSScrollView {
 
     private var fit: CGFloat { fitFor(margin) }
 
-    /// A picture larger than the view scrolls its margin past each of its edges, so that every edge
-    /// can be brought clear of the buttons over the view.
-    private static func insets(_ margin: CGSize) -> NSEdgeInsets {
-        NSEdgeInsets(top: margin.height, left: margin.width, bottom: margin.height, right: margin.width)
+    var edgeRoom: CGFloat = 0 {
+        didSet { placeEdges() }
+    }
+
+    /// A picture larger than the view scrolls past each of its edges, so that every edge can be
+    /// brought clear of the buttons over the view.
+    private func placeEdges() {
+        let (across, down) = (max(margin.width, edgeRoom), max(margin.height, edgeRoom))
+        contentInsets = NSEdgeInsets(top: down, left: across, bottom: down, right: across)
     }
 
     /// Zooms out to a quarter of fitting, or of its real size if that is smaller, and in to eight
@@ -606,7 +617,7 @@ final class ZoomingScrollView: NSScrollView {
         self.largestFit = largestFit
         super.init(frame: .zero)
         contentView = CenteringClipView()
-        contentInsets = Self.insets(margin)
+        placeEdges()
         grid.wantsLayer = true
         addSubview(grid, positioned: .below, relativeTo: contentView)
         documentView = picture
@@ -749,12 +760,18 @@ final class ZoomingScrollView: NSScrollView {
 }
 
 /// Keeps a picture smaller than the window in its middle.
+/// Centres a picture that fits with the scroll view's insets around it; a larger one scrolls past
+/// its edges by those insets.
 private final class CenteringClipView: NSClipView {
     override func constrainBoundsRect(_ proposed: NSRect) -> NSRect {
         var rect = super.constrainBoundsRect(proposed)
-        guard let document = documentView else { return rect }
-        if rect.width > document.frame.width { rect.origin.x = (document.frame.width - rect.width) / 2 }
-        if rect.height > document.frame.height { rect.origin.y = (document.frame.height - rect.height) / 2 }
+        guard let document = documentView, rect.width > 0 else { return rect }
+        let insets = (superview as? NSScrollView)?.contentInsets ?? NSEdgeInsetsZero
+        let scale = frame.width / rect.width
+        let across = (insets.left + insets.right) / scale
+        let down = (insets.top + insets.bottom) / scale
+        if rect.width >= document.frame.width + across { rect.origin.x = (document.frame.width - rect.width) / 2 }
+        if rect.height >= document.frame.height + down { rect.origin.y = (document.frame.height - rect.height) / 2 }
         return rect
     }
 }

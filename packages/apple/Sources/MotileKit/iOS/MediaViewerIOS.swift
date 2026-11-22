@@ -304,6 +304,8 @@ private extension View {
 /// One image or video of the viewer, fetched when it is the one shown.
 private struct MediaPage: View {
     private static let playedHere: Set<String> = ["mp4", "mov", "m4v"]
+    /// The room between a zoomed-in picture's edge and the buttons it is brought clear of.
+    private static let edgeGap: CGFloat = 16
 
     /// How much a picture is enlarged to fit at most: an SVG up to the size its row shows it at.
     private static func largestFit(_ svgSize: CGSize?, opening drawn: CGSize?) -> CGFloat {
@@ -376,7 +378,8 @@ private struct MediaPage: View {
                 tapped: tapped,
                 markup: markup,
                 controls: controls,
-                checker: checker
+                checker: checker,
+                edgeRoom: room + Self.edgeGap
             )
             .ignoresSafeArea()
         case .video(let player):
@@ -467,6 +470,8 @@ struct ZoomableImage: UIViewRepresentable {
     var controls = EdgeInsets()
     /// The checkerboard all of the view shows behind it, with a frame at its edges.
     var checker: Pictures.Checker?
+    /// How far past its top and bottom it scrolls once zoomed in, beyond the safe area.
+    var edgeRoom: CGFloat = 0
 
     func makeUIView(context: Context) -> ZoomingScrollView {
         ZoomingScrollView(margin: margin, radius: radius, largestFit: largestFit)
@@ -480,6 +485,7 @@ struct ZoomableImage: UIViewRepresentable {
         view.markup = markup
         view.controls = UIEdgeInsets(top: controls.top, left: controls.leading, bottom: controls.bottom, right: controls.trailing)
         view.checker = checker
+        view.edgeRoom = edgeRoom
     }
 }
 
@@ -497,6 +503,11 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
     /// The checkerboard behind the picture, kept over the visible bounds so that it stays put while
     /// the picture zooms and is dragged.
     private let grid = UIView()
+    /// How far past its top and bottom a zoomed-in picture scrolls, beyond the safe area: clear of
+    /// the viewer's buttons.
+    var edgeRoom: CGFloat = 0 {
+        didSet { if edgeRoom != oldValue { setNeedsLayout() } }
+    }
     private var shown: AnyObject?
     private var laidOut = CGSize.zero
     /// The scale that fit the last layout.
@@ -643,6 +654,19 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
         grid.frame = bounds
     }
 
+    /// Moves the picture as far as it goes toward an edge, as a drag would.
+    func pan(toward edge: String) {
+        var offset = contentOffset
+        switch edge {
+        case "top": offset.y = -contentInset.top
+        case "bottom": offset.y = contentSize.height - bounds.height + contentInset.bottom
+        case "left": offset.x = -contentInset.left
+        case "right": offset.x = contentSize.width - bounds.width + contentInset.right
+        default: return
+        }
+        setContentOffset(offset, animated: true)
+    }
+
     /// Zooms to `times` its fitted size, as a pinch would.
     func zoom(times: CGFloat) {
         setZoomScale(fitted * times, animated: true)
@@ -658,17 +682,19 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
         center()
     }
 
-    /// Keeps a picture smaller than what is left clear in its middle, and lets a larger one move
-    /// out from under what covers the edges.
-    /// How far past its edges a picture larger than the screen scrolls, so that every edge can be
-    /// brought clear of the viewer's buttons.
-    private static let edgeRoom = UIEdgeInsets(top: 72, left: 16, bottom: 72, right: 16)
+    /// How far past its sides a zoomed-in picture scrolls.
+    private static let sideRoom: CGFloat = 16
 
-    /// Centres a picture smaller than the screen; a larger one scrolls `edgeRoom` past its edges.
+    /// Centres a picture smaller than what is left clear in its middle. A zoomed-in one scrolls past
+    /// its edges, clear of the safe area and of `edgeRoom` above and below.
     private func center() {
         let across = (bounds.width - clear.left - clear.right - contentSize.width) / 2
         let down = (bounds.height - clear.top - clear.bottom - contentSize.height) / 2
-        let room = zoomScale > fitted + 0.001 ? Self.edgeRoom : .zero
+        let room = zoomScale > fitted + 0.001
+            ? UIEdgeInsets(
+                top: safeAreaInsets.top + edgeRoom, left: safeAreaInsets.left + Self.sideRoom,
+                bottom: safeAreaInsets.bottom + edgeRoom, right: safeAreaInsets.right + Self.sideRoom)
+            : .zero
         contentInset = UIEdgeInsets(
             top: clear.top + max(down, room.top), left: clear.left + max(across, room.left),
             bottom: clear.bottom + max(down, room.bottom), right: clear.right + max(across, room.right))
