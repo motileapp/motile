@@ -8,7 +8,7 @@ use motile_core::render::openui::tree::{Glyph, ItemMarker, ListMarker, MarkdownB
 
 use super::style::{self, BODY, LABEL, Look, SMALL, Type};
 use super::{UiCx, framed, node};
-use crate::theme::{Colors, Layer, TextSize, colors};
+use crate::theme::{Colors, TextSize, colors};
 use crate::transcript::prose::{self, CodeBox};
 use crate::transcript::rows::{self, code_box, open_link};
 use crate::ui::rich_text::RichText;
@@ -114,7 +114,7 @@ pub fn rich(id: ElementId, text: &Rich, look: Look, cx: &UiCx, app: &App) -> Div
 
 fn rich_text(id: ElementId, text: &Rich, look: Look, cx: &UiCx, app: &App) -> RichText {
     let set = style::set(text, look, app);
-    let tint = cx.surface.layer(Layer::Control, colors(app));
+    let tint = colors(app).inline_code;
     RichText::with_runs(id, set.text, set.runs)
         .row(cx.key)
         .in_control(cx.in_control)

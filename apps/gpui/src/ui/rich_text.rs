@@ -20,6 +20,9 @@ type LinkPress = Rc<std::cell::Cell<Option<Point<Pixels>>>>;
 /// Where each byte of a text is in the text its transcript row was searched in, in UTF-16 units.
 pub type Sent = Rc<dyn Fn(usize) -> u32>;
 
+/// How far inline code's box reaches past its glyphs, and the room the text beside it keeps.
+pub const TINT_PAD: Pixels = px(4.);
+
 pub struct RichText {
     id: ElementId,
     text: SharedString,
@@ -250,12 +253,30 @@ impl RichText {
         self
     }
 
-    /// The tint behind a stretch, a rounded box on each line it reaches, as long as its glyphs.
+    /// The room the text beside each tinted stretch keeps from it, but at the ends of its lines.
+    fn tint_room(&self) -> Vec<(usize, Pixels)> {
+        let bytes = self.text.as_bytes();
+        let beside = |at: usize| bytes.get(at).is_some_and(|byte| *byte != b'\n');
+        self.tinted
+            .iter()
+            .flat_map(|range| {
+                let before = (range.start > 0 && beside(range.start - 1)).then_some((range.start, TINT_PAD));
+                let after = beside(range.end).then_some((range.end, TINT_PAD));
+                before.into_iter().chain(after)
+            })
+            .collect()
+    }
+
+    /// The tint behind a stretch, a rounded box on each line it reaches, `pad` longer than its
+    /// glyphs at each end. The room after its end, kept past its glyphs, isn't tinted.
+    #[allow(clippy::too_many_arguments)]
     fn paint_tint(
         text: &str,
         layout: &TextLayout,
         range: Range<usize>,
         height: Pixels,
+        pad: Pixels,
+        room: Pixels,
         color: Hsla,
         window: &mut Window,
     ) {
@@ -269,13 +290,16 @@ impl RichText {
             .filter(|at| *at > range.start && *at < range.end)
             .collect();
         let line_height = layout.line_height();
-        let (inset, pad) = ((line_height - height) / 2., px(2.));
+        let inset = (line_height - height) / 2.;
         let left = layout.bounds().left();
         let starts = std::iter::once(range.start).chain(breaks.iter().copied());
         let ends = breaks.iter().copied().chain(std::iter::once(range.end));
         for (index, (from, to)) in starts.zip(ends).enumerate() {
             // An index where a line wraps is placed at the end of the line before it.
-            let Some(end) = layout.position_for_index(to) else { continue };
+            let Some(mut end) = layout.position_for_index(to) else { continue };
+            if to == range.end {
+                end.x -= room;
+            }
             let from_x = match index {
                 0 => match layout.position_for_index(from) {
                     Some(start) if start.y == end.y => start.x,
@@ -421,6 +445,8 @@ impl Element for RichText {
             copied.text = self.text.clone();
             copied.links = self.links.clone();
         }
+        let styled = std::mem::replace(&mut self.styled, StyledText::new(""));
+        self.styled = styled.with_spacing(self.tint_room());
         let (layout_id, ()) = self.styled.request_layout(global_id, inspector_id, window, cx);
         (layout_id, kept)
     }
@@ -468,8 +494,10 @@ impl Element for RichText {
         self.listen_for_presses(&kept.handle, hitbox, bounds, window);
         let glyphs =
             self.tint_glyphs.unwrap_or_else(|| window.text_style().font_size.to_pixels(window.rem_size()) * 1.22);
+        let room = self.tint_room();
         for range in self.tinted.clone() {
-            Self::paint_tint(&self.text, &layout, range, glyphs, self.tint, window);
+            let after = room.iter().find(|(at, _)| *at == range.end).map_or(px(0.), |(_, room)| *room);
+            Self::paint_tint(&self.text, &layout, range, glyphs, TINT_PAD, after, self.tint, window);
         }
         if !self.found.is_empty() {
             let c = crate::theme::colors(cx);
@@ -479,7 +507,7 @@ impl Element for RichText {
                 if current {
                     note_current_match(&layout, range.clone());
                 }
-                Self::paint_tint(&self.text, &layout, range, height, color, window);
+                Self::paint_tint(&self.text, &layout, range, height, px(2.), px(0.), color, window);
             }
         }
         for name in &self.skills {

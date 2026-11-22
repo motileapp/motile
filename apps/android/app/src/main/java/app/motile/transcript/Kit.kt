@@ -476,7 +476,7 @@ private fun DrawScope.drawMark(layout: TextLayoutResult, start: Int, end: Int, s
     if (end <= start || end > layout.layoutInput.text.length) return
     if (skill) return with(SkillChip) { drawBox(layout, start, end, 0f, palette, dark) }
     val fontSize = Theme.inlineCodeFont.fontSize.toPx()
-    val pad = 2.dp.toPx()
+    val pad = TextMarks.codeRoom.toPx()
     for (line in layout.getLineForOffset(start)..layout.getLineForOffset(end - 1)) {
         val from = max(start, layout.getLineStart(line))
         val to = min(end, layout.getLineEnd(line, visibleEnd = true))
@@ -485,7 +485,7 @@ private fun DrawScope.drawMark(layout: TextLayoutResult, start: Int, end: Int, s
         val right = layout.getBoundingBox(to - 1).right
         val baseline = layout.getLineBaseline(line)
         drawRoundRect(
-            palette.backgroundAccent,
+            palette.inlineCode,
             topLeft = Offset(left - pad, baseline - fontSize * 0.95f),
             size = Size(right - left + pad * 2, fontSize * 1.2f),
             cornerRadius = CornerRadius(Radius.xs.toPx()),

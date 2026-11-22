@@ -478,7 +478,7 @@ function inline(text: string) {
       return (
         <code
           key={index}
-          className="rounded-xs bg-background-accent px-1 py-px font-mono text-(length:--type-xs) text-foreground"
+          className="rounded-xs bg-inline-code px-1 py-px font-mono text-(length:--type-xs) text-foreground"
         >
           {part.slice(1, -1)}
         </code>

@@ -1,3 +1,87 @@
+diff --git a/src/elements/text.rs b/src/elements/text.rs
+index d1896ad..e5af218 100644
+--- a/src/elements/text.rs
++++ b/src/elements/text.rs
+@@ -271,7 +271,7 @@ impl Element for &'static str {
+         cx: &mut App,
+     ) -> (LayoutId, Self::RequestLayoutState) {
+         let mut state = TextLayout::default();
+-        let layout_id = state.layout(SharedString::from(*self), None, window, cx);
++        let layout_id = state.layout(SharedString::from(*self), None, Vec::new(), window, cx);
+         (layout_id, state)
+     }
+ 
+@@ -345,7 +345,7 @@ impl Element for SharedString {
+         cx: &mut App,
+     ) -> (LayoutId, Self::RequestLayoutState) {
+         let mut state = TextLayout::default();
+-        let layout_id = state.layout(self.clone(), None, window, cx);
++        let layout_id = state.layout(self.clone(), None, Vec::new(), window, cx);
+         (layout_id, state)
+     }
+ 
+@@ -393,6 +393,7 @@ pub struct StyledText {
+     runs: Option<Vec<TextRun>>,
+     delayed_highlights: Option<Vec<(Range<usize>, HighlightStyle)>>,
+     delayed_font_family_overrides: Option<Vec<(Range<usize>, SharedString)>>,
++    spacing: Vec<(usize, Pixels)>,
+     layout: TextLayout,
+ }
+ 
+@@ -404,10 +405,17 @@ impl StyledText {
+             runs: None,
+             delayed_highlights: None,
+             delayed_font_family_overrides: None,
++            spacing: Vec::new(),
+             layout: TextLayout::default(),
+         }
+     }
+ 
++    /// Adds room before bytes of the text: each pair is a byte and the room before it.
++    pub fn with_spacing(mut self, spacing: Vec<(usize, Pixels)>) -> Self {
++        self.spacing = spacing;
++        self
++    }
++
+     /// Get the layout for this element. This can be used to map indices to pixels and vice versa.
+     pub fn layout(&self) -> &TextLayout {
+         &self.layout
+@@ -571,7 +579,8 @@ impl Element for StyledText {
+             Self::apply_font_family_overrides(runs, overrides);
+         }
+ 
+-        let layout_id = self.layout.layout(self.text.clone(), runs, window, cx);
++        let spacing = std::mem::take(&mut self.spacing);
++        let layout_id = self.layout.layout(self.text.clone(), runs, spacing, window, cx);
+         (layout_id, ())
+     }
+ 
+@@ -635,6 +644,7 @@ impl TextLayout {
+         &self,
+         text: SharedString,
+         runs: Option<Vec<TextRun>>,
++        spacing: Vec<(usize, Pixels)>,
+         window: &mut Window,
+         _: &mut App,
+     ) -> LayoutId {
+@@ -741,13 +751,16 @@ impl TextLayout {
+                     (text.clone(), Cow::Borrowed(&*runs))
+                 };
+                 let len = text.len();
++                // Truncating changes the text, which the spacing's bytes no longer fit.
++                let spacing: &[(usize, Pixels)] = if truncate_width.is_none() { &spacing } else { &[] };
+ 
+                 let Some(lines) = window
+                     .text_system()
+-                    .shape_text(
++                    .shape_text_spaced(
+                         text,
+                         font_size,
+                         &runs,
++                        spacing,
+                         wrap_width,            // Wrap if we know the width.
+                         text_style.line_clamp, // Limit the number of lines if line_clamp is set.
+                     )
 diff --git a/src/gpui.rs b/src/gpui.rs
 index d4da5aa..fd42945 100644
 --- a/src/gpui.rs
@@ -237,6 +321,180 @@ index 0000000..b27121b
 +        },
 +    }
 +}
+diff --git a/src/text_system.rs b/src/text_system.rs
+index cf6bb10..af33489 100644
+--- a/src/text_system.rs
++++ b/src/text_system.rs
+@@ -754,6 +754,20 @@ impl WindowTextSystem {
+         runs: &[TextRun],
+         wrap_width: Option<Pixels>,
+         line_clamp: Option<usize>,
++    ) -> Result<SmallVec<[WrappedLine; 1]>> {
++        self.shape_text_spaced(text, font_size, runs, &[], wrap_width, line_clamp)
++    }
++
++    /// Like [`Self::shape_text`], with room before bytes of the text: each pair is a byte and the
++    /// room before it.
++    pub fn shape_text_spaced(
++        &self,
++        text: SharedString,
++        font_size: Pixels,
++        runs: &[TextRun],
++        spacing: &[(usize, Pixels)],
++        wrap_width: Option<Pixels>,
++        line_clamp: Option<usize>,
+     ) -> Result<SmallVec<[WrappedLine; 1]>> {
+         let mut runs = runs.iter().filter(|run| run.len > 0).cloned().peekable();
+         let mut font_runs = self.font_runs_pool.lock().pop().unwrap_or_default();
+@@ -815,10 +829,16 @@ impl WindowTextSystem {
+                 run_start += run_len_within_line;
+             }
+ 
++            let line_spacing: SmallVec<[(usize, Pixels); 2]> = spacing
++                .iter()
++                .filter(|(at, _)| (line_start..line_end).contains(at))
++                .map(|(at, room)| (at - line_start, *room))
++                .collect();
+             let layout = self.line_layout_cache.layout_wrapped_line(
+                 &line_text,
+                 font_size,
+                 &font_runs,
++                &line_spacing,
+                 wrap_width,
+                 max_wrap_lines.map(|max| max.saturating_sub(wrapped_lines)),
+             );
+@@ -926,6 +946,7 @@ impl WindowTextSystem {
+             &SharedString::new(text),
+             font_size,
+             &font_runs,
++            &[],
+             force_width,
+         );
+ 
+@@ -946,6 +967,7 @@ impl WindowTextSystem {
+                     len: buffer.len(),
+                     font_id,
+                 }],
++                &[],
+                 None,
+             )
+             .width
+diff --git a/src/text_system/line_layout.rs b/src/text_system/line_layout.rs
+index f0bf121..f53ea39 100644
+--- a/src/text_system/line_layout.rs
++++ b/src/text_system/line_layout.rs
+@@ -604,6 +604,7 @@ impl LineLayoutCache {
+         text: Text,
+         font_size: Pixels,
+         runs: &[FontRun],
++        spacing: &[(usize, Pixels)],
+         wrap_width: Option<Pixels>,
+         max_lines: Option<usize>,
+     ) -> Arc<WrappedLineLayout>
+@@ -616,6 +617,7 @@ impl LineLayoutCache {
+             text: text.as_ref(),
+             font_size,
+             runs,
++            spacing,
+             wrap_width,
+             force_width: None,
+         } as &dyn AsCacheKeyRef;
+@@ -636,7 +638,8 @@ impl LineLayoutCache {
+         } else {
+             drop(current_frame);
+             let text = SharedString::from(text);
+-            let unwrapped_layout = self.layout_line::<&SharedString>(&text, font_size, runs, None);
++            let unwrapped_layout =
++                self.layout_line::<&SharedString>(&text, font_size, runs, spacing, None);
+             let wrap_boundaries = if let Some(wrap_width) = wrap_width {
+                 unwrapped_layout.compute_wrap_boundaries(text.as_ref(), wrap_width, max_lines)
+             } else {
+@@ -651,6 +654,7 @@ impl LineLayoutCache {
+                 text,
+                 font_size,
+                 runs: SmallVec::from(runs),
++                spacing: SmallVec::from(spacing),
+                 wrap_width,
+                 force_width: None,
+             });
+@@ -670,6 +674,7 @@ impl LineLayoutCache {
+         text: Text,
+         font_size: Pixels,
+         runs: &[FontRun],
++        spacing: &[(usize, Pixels)],
+         force_width: Option<Pixels>,
+     ) -> Arc<LineLayout>
+     where
+@@ -681,6 +686,7 @@ impl LineLayoutCache {
+             text: text.as_ref(),
+             font_size,
+             runs,
++            spacing,
+             wrap_width: None,
+             force_width,
+         } as &dyn AsCacheKeyRef;
+@@ -704,11 +710,13 @@ impl LineLayoutCache {
+             if let Some(force_width) = force_width {
+                 apply_force_width_to_layout(&mut layout, force_width);
+             }
++            apply_spacing_to_layout(&mut layout, spacing);
+ 
+             let key = Arc::new(CacheKey {
+                 text,
+                 font_size,
+                 runs: SmallVec::from(runs),
++                spacing: SmallVec::from(spacing),
+                 wrap_width: None,
+                 force_width,
+             });
+@@ -921,6 +929,23 @@ fn apply_force_width_to_layout(layout: &mut LineLayout, force_width: Pixels) {
+     }
+ }
+ 
++/// Moves every glyph at or after each byte of `spacing` right by the room before that byte.
++fn apply_spacing_to_layout(layout: &mut LineLayout, spacing: &[(usize, Pixels)]) {
++    if spacing.is_empty() {
++        return;
++    }
++    for run in layout.runs.iter_mut() {
++        for glyph in run.glyphs.iter_mut() {
++            glyph.position.x += room_before(spacing, glyph.index);
++        }
++    }
++    layout.width += room_before(spacing, layout.len);
++}
++
++fn room_before(spacing: &[(usize, Pixels)], index: usize) -> Pixels {
++    spacing.iter().filter(|(at, _)| *at <= index).map(|(_, room)| *room).sum()
++}
++
+ /// A run of text with a single font.
+ #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+ #[expect(missing_docs)]
+@@ -938,6 +963,7 @@ struct CacheKey {
+     text: SharedString,
+     font_size: Pixels,
+     runs: SmallVec<[FontRun; 1]>,
++    spacing: SmallVec<[(usize, Pixels); 2]>,
+     wrap_width: Option<Pixels>,
+     force_width: Option<Pixels>,
+ }
+@@ -947,6 +973,7 @@ struct CacheKeyRef<'a> {
+     text: &'a str,
+     font_size: Pixels,
+     runs: &'a [FontRun],
++    spacing: &'a [(usize, Pixels)],
+     wrap_width: Option<Pixels>,
+     force_width: Option<Pixels>,
+ }
+@@ -1039,6 +1066,7 @@ impl AsCacheKeyRef for CacheKey {
+             text: &self.text,
+             font_size: self.font_size,
+             runs: self.runs.as_slice(),
++            spacing: self.spacing.as_slice(),
+             wrap_width: self.wrap_width,
+             force_width: self.force_width,
+         }
 diff --git a/src/window.rs b/src/window.rs
 index 1214b03..5e4bebe 100644
 --- a/src/window.rs

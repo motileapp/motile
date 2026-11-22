@@ -240,7 +240,7 @@ fn paragraph(id: ElementId, para: &TextPara, look: ParaLook, marks: Option<&Mark
     crate::ui::rich_text::RichText::with_runs(id, para.text.clone(), runs)
         .row(key)
         .links(para.links.clone(), open_link)
-        .tinted(code, c.background_accent)
+        .tinted(code, c.inline_code)
         .tint_size(crate::fonts::inline_code_size(size).into())
         .found(found, cx)
         .sent(find::stretch(para.text.clone(), para.source))

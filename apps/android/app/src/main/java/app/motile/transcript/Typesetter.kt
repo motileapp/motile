@@ -131,6 +131,7 @@ object Typesetter {
             builder.append(shown)
             builder.pop()
             builder.addStyle(symbolStyle, start + 1, start + 2)
+            builder.addStyle(SkillChip.leadStyle, start, start + 1)
             builder.addStringAnnotation(TextMarks.skill, chip.name, start, builder.length)
             moves += chip.end to (shown.length - chip.length)
             at = chip.end
@@ -305,6 +306,7 @@ object Typesetter {
                     val weight = if (bold || heading) FontWeight.SemiBold else FontWeight.Normal
                     builder.addStyle(SpanStyle(fontFamily = Theme.mono, fontSize = Theme.codeSize, fontWeight = weight, color = palette.foreground), start, end)
                     builder.addStringAnnotation(TextMarks.code, "", start, end)
+                    TextMarks.makeRoomAroundCode(builder, source.text, start, end)
                 }
                 heading -> if (italic) builder.addStyle(SpanStyle(fontStyle = FontStyle.Italic), start, end)
                 bold || italic -> builder.addStyle(

@@ -1,5 +1,6 @@
 package app.motile.composer
 
+import android.graphics.Paint
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -12,6 +13,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.BaselineShift
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import app.motile.R
 import app.motile.platform.Symbol
@@ -47,6 +49,18 @@ object SkillChip {
      */
     fun shown(label: String): String =
         "$narrowSpace${symbol.character ?: ""}$noBreakSpace${label.replace(' ', noBreakSpace)}$narrowSpace"
+
+    /** The room before the chip's symbol, less than the padding: its drawing leaves room of its own. */
+    private const val symbolInset = 3f
+
+    /**
+     * The style of the room before the chip's symbol, its first character: a narrow space, spaced to
+     * [symbolInset] wide. A letter's spacing falls half before it and half after, inside the chip's box.
+     */
+    val leadStyle: SpanStyle by lazy {
+        val narrow = Paint().apply { textSize = 100f }.measureText(narrowSpace.toString()) / 100f
+        SpanStyle(letterSpacing = (symbolInset / textSize.fontSize.value - narrow).em)
+    }
 
     /** The style of what the chip shows, and of its symbol, the second character of it. */
     fun styles(palette: Palette): Pair<SpanStyle, SpanStyle> {

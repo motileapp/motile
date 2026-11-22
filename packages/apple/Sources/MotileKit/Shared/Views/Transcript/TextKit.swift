@@ -166,8 +166,11 @@ final class DecoratingLayoutManager: NSLayoutManager {
                 let baseline = line.minY + self.location(forGlyphAt: onLine.location).y
                 let top = (baseline - font.ascender).rounded()
                 let bottom = (baseline - font.descender).rounded()
+                // The room after the code is the kern of its last character, inside its rect.
+                let ends = NSMaxRange(self.characterRange(forGlyphRange: onLine, actualGlyphRange: nil)) == NSMaxRange(range)
+                let room = ends ? storage.attribute(.kern, at: NSMaxRange(range) - 1, effectiveRange: nil) as? CGFloat ?? 0 : 0
                 self.enumerateEnclosingRects(forGlyphRange: onLine, withinSelectedGlyphRange: unselected, in: container) { rect, _ in
-                    let box = CGRect(x: rect.minX - RowTextView.overhang, y: top, width: rect.width + 2 * RowTextView.overhang, height: bottom - top)
+                    let box = CGRect(x: rect.minX - RowTextView.overhang, y: top, width: rect.width - room + 2 * RowTextView.overhang, height: bottom - top)
                     RoundedBox.fill(box.offsetBy(dx: origin.x, dy: origin.y), radius: Radius.xs)
                 }
             }
@@ -448,9 +451,10 @@ enum TextMeasure {
 }
 
 extension RowTextView {
-    /// How far inline code's box reaches past its text. The text's container is this much wider
-    /// than its text on each side, so that a box at the start or the end of a line isn't cut off.
-    static let overhang: CGFloat = 2
+    /// How far inline code's box reaches past its text, and the room the text beside it keeps. The
+    /// text's container is this much wider than its text on each side, so that a box at the start
+    /// or the end of a line isn't cut off.
+    static let overhang: CGFloat = 4
 
     /// Places the view so that its text takes `frame`.
     func place(_ frame: CGRect) {

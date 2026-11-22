@@ -8,6 +8,7 @@ extension Theme {
     static let backgroundAccentStrongest = tone(0xced2da, 0x2b2c32)
     static let backgroundAccentLarger = tone(0xe8eaee, 0x14151a)
     static let backgroundAccentLargerStronger = tone(0xdfe2e8, 0x191a1f)
+    static let inlineCode = tone(0xdee1e7, 0x212329)
     static let backgroundSecondary = tone(0xeaecf0, 0x111217)
     static let backgroundSecondaryAccent = tone(0xdfe2e8, 0x191a1f)
     static let backgroundSecondaryAccentStronger = tone(0xd4d8e0, 0x212227)
@@ -125,6 +126,7 @@ extension Theme {
         case "background-accent-strongest": backgroundAccentStrongest
         case "background-accent-larger": backgroundAccentLarger
         case "background-accent-larger-stronger": backgroundAccentLargerStronger
+        case "inline-code": inlineCode
         case "background-secondary": backgroundSecondary
         case "background-secondary-accent": backgroundSecondaryAccent
         case "background-secondary-accent-stronger": backgroundSecondaryAccentStronger
@@ -242,6 +244,7 @@ extension Color {
     static let themeBackgroundAccentStrongest = Color(platform: Theme.backgroundAccentStrongest)
     static let themeBackgroundAccentLarger = Color(platform: Theme.backgroundAccentLarger)
     static let themeBackgroundAccentLargerStronger = Color(platform: Theme.backgroundAccentLargerStronger)
+    static let themeInlineCode = Color(platform: Theme.inlineCode)
     static let themeBackgroundSecondary = Color(platform: Theme.backgroundSecondary)
     static let themeBackgroundSecondaryAccent = Color(platform: Theme.backgroundSecondaryAccent)
     static let themeBackgroundSecondaryAccentStronger = Color(platform: Theme.backgroundSecondaryAccentStronger)

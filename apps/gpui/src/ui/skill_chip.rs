@@ -10,6 +10,8 @@ use crate::ui::icons;
 pub const SYMBOL: &str = "box";
 const SYMBOL_SIZE: IconSize = IconSize::Sm;
 pub const PADDING: f32 = 5.;
+/// The room before the symbol, less than the padding: the symbol's drawing leaves room of its own.
+const SYMBOL_INSET: f32 = 3.;
 const GAP: f32 = 4.;
 /// The room between the chip and the text on either side.
 pub const MARGIN: f32 = 1.;
@@ -17,9 +19,9 @@ pub const TEXT_SIZE: TextSize = TextSize::Sm;
 /// As tall as a line of the composer's text.
 const HEIGHT: f32 = 20.;
 
-/// The room before the name: the padding, the symbol and the gap after it.
+/// The room before the name: the symbol, the room before it and the gap after it.
 fn lead() -> f32 {
-    PADDING + SYMBOL_SIZE.side() + GAP
+    SYMBOL_INSET + SYMBOL_SIZE.side() + GAP
 }
 
 /// The room a message leaves before and after a chip's name.
@@ -36,7 +38,8 @@ pub fn chip(label: SharedString, selected: bool, height: Pixels, cx: &App) -> Di
         .flex()
         .items_center()
         .gap(px(GAP))
-        .px(px(PADDING))
+        .pl(px(SYMBOL_INSET))
+        .pr(px(PADDING))
         .rounded(px(Radius::XS))
         .border_1()
         .border_color(c.at(c.skill, Opacity::ColorTintChart))
@@ -62,6 +65,6 @@ pub fn paint_box(start: Point<Pixels>, end: Point<Pixels>, line_height: Pixels, 
     let edge = c.at(c.skill, Opacity::ColorTintChart);
     window.paint_quad(quad(bounds, px(Radius::XS), c.wash(c.skill, false), px(1.), edge, BorderStyle::Solid));
     let side = px(SYMBOL_SIZE.side());
-    let symbol = Bounds::new(point(bounds.left() + px(PADDING), top + (height - side) / 2.), size(side, side));
+    let symbol = Bounds::new(point(bounds.left() + px(SYMBOL_INSET), top + (height - side) / 2.), size(side, side));
     let _ = window.paint_svg(symbol, icons::path(SYMBOL), None, TransformationMatrix::unit(), c.skill, cx);
 }

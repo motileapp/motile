@@ -12,6 +12,7 @@ class Palette(
     val backgroundAccentStrongest: Color,
     val backgroundAccentLarger: Color,
     val backgroundAccentLargerStronger: Color,
+    val inlineCode: Color,
     val backgroundSecondary: Color,
     val backgroundSecondaryAccent: Color,
     val backgroundSecondaryAccentStronger: Color,
@@ -126,6 +127,7 @@ class Palette(
             backgroundAccentStrongest = Color(0xFFCED2DA),
             backgroundAccentLarger = Color(0xFFE8EAEE),
             backgroundAccentLargerStronger = Color(0xFFDFE2E8),
+            inlineCode = Color(0xFFDEE1E7),
             backgroundSecondary = Color(0xFFEAECF0),
             backgroundSecondaryAccent = Color(0xFFDFE2E8),
             backgroundSecondaryAccentStronger = Color(0xFFD4D8E0),
@@ -240,6 +242,7 @@ class Palette(
             backgroundAccentStrongest = Color(0xFF2B2C32),
             backgroundAccentLarger = Color(0xFF14151A),
             backgroundAccentLargerStronger = Color(0xFF191A1F),
+            inlineCode = Color(0xFF212329),
             backgroundSecondary = Color(0xFF111217),
             backgroundSecondaryAccent = Color(0xFF191A1F),
             backgroundSecondaryAccentStronger = Color(0xFF212227),
@@ -356,6 +359,7 @@ class Palette(
         "background-accent-strongest" -> backgroundAccentStrongest
         "background-accent-larger" -> backgroundAccentLarger
         "background-accent-larger-stronger" -> backgroundAccentLargerStronger
+        "inline-code" -> inlineCode
         "background-secondary" -> backgroundSecondary
         "background-secondary-accent" -> backgroundSecondaryAccent
         "background-secondary-accent-stronger" -> backgroundSecondaryAccentStronger

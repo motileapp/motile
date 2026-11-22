@@ -115,6 +115,7 @@ fun UiRich.annotated(color: Color, palette: Palette, inlines: Int = 0): Annotate
         if (bits and Runs.CODE != 0) {
             builder.addStyle(SpanStyle(fontFamily = Theme.mono, fontSize = Theme.inlineCodeFont.fontSize, color = palette.foreground), start, end)
             builder.addStringAnnotation(TextMarks.code, "", start, end)
+            TextMarks.makeRoomAroundCode(builder, text, start, end)
         }
         if (bits and Runs.BOLD != 0) builder.addStyle(SpanStyle(fontWeight = FontWeight.SemiBold, color = palette.foreground), start, end)
         if (bits and Runs.ITALIC != 0) builder.addStyle(SpanStyle(fontStyle = FontStyle.Italic), start, end)
