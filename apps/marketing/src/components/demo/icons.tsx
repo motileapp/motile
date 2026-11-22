@@ -24,7 +24,7 @@ export function MenuChevron() {
   )
 }
 
-/** The reasoning effort High, as the clients draw it: a rounded frame filled all the way. */
+/** The reasoning effort High, as the clients draw it: a rounded frame filled with three blocks. */
 export function EffortHighIcon() {
   return (
     <svg
@@ -38,12 +38,14 @@ export function EffortHighIcon() {
         y="2"
         width="14"
         height="20"
-        rx="5"
+        rx="4"
         fill="none"
         stroke="currentColor"
         strokeWidth="2"
       />
-      <rect x="8" y="5" width="8" height="14" rx="2" />
+      <path d="M8 8.3333V6A1 1 0 0 1 9 5H15A1 1 0 0 1 16 6V8.3333Z" />
+      <rect x="8" y="10.3333" width="8" height="3.3334" />
+      <path d="M8 15.6667H16V18A1 1 0 0 1 15 19H9A1 1 0 0 1 8 18Z" />
     </svg>
   )
 }
