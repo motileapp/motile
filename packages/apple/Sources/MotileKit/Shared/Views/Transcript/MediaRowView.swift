@@ -34,6 +34,9 @@ struct MediaContent {
         poster = json.optionalString("poster")
     }
 
+    /// The size an SVG is shown at, which the viewer opens it at too.
+    var svgSize: CGSize? { id.lowercased().hasSuffix(".svg") ? pixels : nil }
+
     /// The image the box shows: the image itself, or a video's poster.
     var picture: String? { video ? poster : id }
 
@@ -69,8 +72,21 @@ enum Pictures {
         cache.totalCostLimit = 256 * 1024 * 1024
         return cache
     }()
-    /// How light what each picture with see-through parts draws is, by the picture's key.
-    private static let inks = NSCache<NSString, NSNumber>()
+    /// What is learned of each picture as it is decoded, by its key: kept, unlike the pictures,
+    /// since a picture shown again from its row must lie on the same checkerboard.
+    private static var facts: [String: (ink: Double?, svgSize: CGSize?)] = [:]
+    private static let factsLock = NSLock()
+
+    private static func fact(_ id: String) -> (ink: Double?, svgSize: CGSize?)? {
+        factsLock.withLock { facts[id] ?? facts[svgKey(id, dark: Platform.isDark) as String] }
+    }
+
+    private static func learn(_ key: NSString, ink: Double? = nil, svgSize: CGSize? = nil) {
+        factsLock.withLock {
+            let known = facts[key as String]
+            facts[key as String] = (ink ?? known?.ink, svgSize ?? known?.svgSize)
+        }
+    }
     private static let decoding = DispatchQueue(label: "app.motile.pictures", qos: .userInitiated, attributes: .concurrent)
 
     /// An SVG is kept for the appearance it was drawn in, since its `currentColor` is the text's.
@@ -94,8 +110,13 @@ enum Pictures {
         ink(id) != nil
     }
 
+    /// The size an SVG asks to be drawn at, which is its actual size in the viewer.
+    static func svgSize(_ id: String) -> CGSize? {
+        fact(id)?.svgSize
+    }
+
     private static func ink(_ id: String) -> Double? {
-        (inks.object(forKey: id as NSString) ?? inks.object(forKey: svgKey(id, dark: Platform.isDark)))?.doubleValue
+        fact(id)?.ink
     }
 
     /// What a picture's see-through parts show, as image editors do.
@@ -169,7 +190,7 @@ enum Pictures {
             decoding.async {
                 if let image {
                     cache.setObject(image, forKey: key, cost: image.bytesPerRow * image.height)
-                    if let ink = inkLuminance(image) { inks.setObject(NSNumber(value: ink), forKey: key) }
+                    if let ink = inkLuminance(image) { learn(key, ink: ink) }
                 }
                 DispatchQueue.main.async { done(image) }
             }
@@ -177,6 +198,7 @@ enum Pictures {
         decoding.async {
             guard !svg else {
                 guard let data = try? Data(contentsOf: file) else { return finish(nil) }
+                if let size = svgSize(of: data) { learn(key, svgSize: size) }
                 return drawSVG(inked(data, color: color), side: min(maxPixels, svgMaxPixels), done: finish)
             }
             let options: [CFString: Any] = [
@@ -200,6 +222,15 @@ enum Pictures {
         let tag = text[root.upperBound...].prefix { $0 != ">" }
         guard tag.range(of: #"\scolor\s*="#, options: .regularExpression) == nil else { return data }
         return Data((text[..<root.upperBound] + " color=\"\(color)\"" + text[root.upperBound...]).utf8)
+    }
+
+    private static func svgSize(of data: Data) -> CGSize? {
+        #if os(macOS)
+        guard let size = NSImage(data: data)?.size, size.width > 0, size.height > 0 else { return nil }
+        return size
+        #else
+        return SVGSize.size(of: data)
+        #endif
     }
 
     /// The SVG drawn `side` pixels on its longer side.
@@ -594,6 +625,6 @@ final class MediaBox: FlippedView {
     /// Opens the image or the video in the viewer, which plays a video and fills the screen with it.
     private func pressed() {
         guard let media = content, media.video || picture.picture != nil else { return }
-        owner?.view([ViewedMedia(name: media.name, video: media.video, source: .media(media.id))], at: 0)
+        owner?.view([ViewedMedia(name: media.name, video: media.video, source: .media(media.id), drawnSize: media.svgSize)], at: 0)
     }
 }

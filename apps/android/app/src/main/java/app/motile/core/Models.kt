@@ -1410,6 +1410,8 @@ data class ViewedMedia(
     val source: Source,
     /** The composer's attachment it is, which marking it up replaces. */
     val attachment: String? = null,
+    /** The size an SVG opens at, in dp: its row's, which it isn't enlarged past to fit. */
+    val drawnSize: Pair<Float, Float>? = null,
 ) {
     sealed interface Source {
         data class LocalFile(val file: File) : Source

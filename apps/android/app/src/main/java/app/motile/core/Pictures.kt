@@ -77,6 +77,20 @@ object Pictures {
         return Regex("""\scolor\s*=|\bcolor\s*:""").containsMatchIn(tag)
     }
 
+    /** An SVG's own size, from its root's `width` and `height`, or else its `viewBox`. */
+    fun svgSize(svg: String): Pair<Float, Float>? {
+        val root = svg.indexOf("<svg").takeIf { it >= 0 } ?: return null
+        val tag = svg.substring(root + 4).substringBefore('>')
+        fun attribute(name: String) = Regex("""\s$name\s*=\s*["']([^"']*)["']""").find(tag)?.groupValues?.get(1)
+        fun length(name: String) = attribute(name)?.takeUnless { it.endsWith("%") }?.trim()?.trimEnd { it.isLetter() }?.toFloatOrNull()
+        val width = length("width")
+        val height = length("height")
+        if (width != null && height != null && width > 0 && height > 0) return width to height
+        val box = attribute("viewBox")?.split(' ', ',')?.mapNotNull { it.toFloatOrNull() } ?: return null
+        if (box.size != 4 || box[2] <= 0 || box[3] <= 0) return null
+        return box[2] to box[3]
+    }
+
     private fun hex(argb: Int) = "#%06x".format(argb and 0xffffff)
 
     /**

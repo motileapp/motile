@@ -20,6 +20,8 @@ struct MediaViewer: View {
     @State private var file: URL?
     /// The checkerboard behind a picture with see-through parts.
     @State private var checker: Pictures.Checker?
+    /// An SVG's own size, which is its actual size: it is drawn far larger, to stay sharp zoomed.
+    @State private var svgSize: CGSize?
     @State private var copies = 0
     @State private var markup: MarkupSession?
     @State private var discarding: Discarding?
@@ -265,10 +267,10 @@ struct MediaViewer: View {
         case .image(let image, let scale):
             ZoomableImage(
                 image: image,
-                size: CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale),
+                size: svgSize ?? CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale),
                 margin: markup == nil ? ZoomingScrollView.viewerMargin : Self.markupMargin,
                 radius: Radius.md,
-                largestFit: ZoomingScrollView.viewerLargestFit,
+                largestFit: Self.largestFit(svgSize, opening: item.drawnSize),
                 menu: menu,
                 clickedBeside: { if markup == nil { store.closeViewer() } },
                 markup: markup,
@@ -316,6 +318,12 @@ struct MediaViewer: View {
         width: ZoomingScrollView.viewerMargin.width, height: cornerInset + 8 + ControlSize.large.height + 12 + 12)
     /// The same beside Cancel and Add to Message.
     private static let markupNameInset: CGFloat = 300
+
+    /// How much a picture is enlarged to fit at most: an SVG up to the size its row shows it at.
+    static func largestFit(_ svgSize: CGSize?, opening drawn: CGSize?) -> CGFloat {
+        guard let svgSize, let drawn, svgSize.width > 0 else { return ZoomingScrollView.viewerLargestFit }
+        return max(1, drawn.width / svgSize.width)
+    }
 
     private static func copyTitle(_ item: ViewedMedia) -> String {
         item.video ? "Copy Video" : "Copy Image"
@@ -377,7 +385,7 @@ struct MediaViewer: View {
 
     private func load(_ item: ViewedMedia) {
         pause()
-        (loaded, failed, fraction, playerReady, file, checker) = (nil, false, nil, false, nil, nil)
+        (loaded, failed, fraction, playerReady, file, checker, svgSize) = (nil, false, nil, false, nil, nil, nil)
         let show = { (file: URL?) in
             guard viewing.item == item else { return }
             guard let file else { return failed = true }
@@ -388,6 +396,7 @@ struct MediaViewer: View {
                     guard viewing.item == item else { return }
                     let id = "view:\(file.path)"
                     checker = Pictures.isSeenThrough(id) ? Pictures.checker(behind: id) : nil
+                    svgSize = Pictures.svgSize(id)
                     loaded = image.map { .image($0, scale: scale) }
                     failed = image == nil
                 }
@@ -490,6 +499,7 @@ struct ZoomableImage: NSViewRepresentable {
         view.keys = keys
         view.menuActions = menu
         view.clickedBeside = clickedBeside
+        view.largestFit = largestFit
         view.show(image, size: size)
         view.markup = markup
         view.margin = margin
@@ -515,15 +525,16 @@ final class ZoomingScrollView: NSScrollView {
     /// The room around the picture when it fits: more while it is marked up, to clear the bar.
     var margin: CGSize {
         didSet {
+            contentInsets = Self.insets(margin)
             guard margin != oldValue else { return }
             let wasFitted = abs(magnification - fitFor(oldValue)) < 0.001
-            minMagnification = smallest
+            limitZoom()
             guard wasFitted else { return }
             animator().magnification = fit
         }
     }
     private let radius: CGFloat
-    private let largestFit: CGFloat
+    var largestFit: CGFloat
     private let picture = FlippedView()
     /// The checkerboard behind the picture, which stays put while the picture zooms and scrolls.
     private let grid = NSView()
@@ -562,12 +573,25 @@ final class ZoomingScrollView: NSScrollView {
 
     private var fit: CGFloat { fitFor(margin) }
 
-    private func fitFor(_ margin: CGSize) -> CGFloat {
+    /// A picture larger than the view scrolls its margin past each of its edges, so that every edge
+    /// can be brought clear of the buttons over the view.
+    private static func insets(_ margin: CGSize) -> NSEdgeInsets {
+        NSEdgeInsets(top: margin.height, left: margin.width, bottom: margin.height, right: margin.width)
+    }
+
+    /// Zooms out to a quarter of fitting, or of its real size if that is smaller, and in to eight
+    /// times its real size, or four times the size that fills the view if that is more.
+    private func limitZoom() {
+        minMagnification = smallest
+        maxMagnification = max(8, fitFor(margin, largest: .infinity) * 4)
+    }
+
+    private func fitFor(_ margin: CGSize, largest: CGFloat? = nil) -> CGFloat {
         let size = picture.frame.size
-        guard size.width > 0, size.height > 0 else { return 1 }
+        guard size.width > 0, size.height > 0, bounds.width > 0 else { return 1 }
         let width = (bounds.width - 2 * margin.width) / size.width
         let height = (bounds.height - 2 * margin.height) / size.height
-        return max(0.01, min(largestFit, width, height))
+        return max(0.01, min(largest ?? largestFit, width, height))
     }
 
     /// An image enlarged to fit can still be shown at its real size, and either can be zoomed out
@@ -582,6 +606,7 @@ final class ZoomingScrollView: NSScrollView {
         self.largestFit = largestFit
         super.init(frame: .zero)
         contentView = CenteringClipView()
+        contentInsets = Self.insets(margin)
         grid.wantsLayer = true
         addSubview(grid, positioned: .below, relativeTo: contentView)
         documentView = picture
@@ -602,7 +627,7 @@ final class ZoomingScrollView: NSScrollView {
         guard picture.layer?.contents as AnyObject? !== image else { return }
         picture.layer?.contents = image
         picture.setFrameSize(size)
-        minMagnification = smallest
+        limitZoom()
         magnification = fit
     }
 
@@ -610,7 +635,7 @@ final class ZoomingScrollView: NSScrollView {
         let wasFitted = fitted
         super.setFrameSize(size)
         grid.frame = bounds
-        minMagnification = smallest
+        limitZoom()
         guard wasFitted || magnification < smallest else { return }
         magnification = fit
     }

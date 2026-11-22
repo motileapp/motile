@@ -262,7 +262,7 @@ enum DemoDriver {
         case "view":
             let shown = store.transcript.rows.compactMap { row -> ViewedMedia? in
                 guard case .media(let media) = row.kind else { return nil }
-                return ViewedMedia(name: media.name, video: media.video, source: .media(media.id))
+                return ViewedMedia(name: media.name, video: media.video, source: .media(media.id), drawnSize: media.svgSize)
             }
             store.view(shown, at: min(Int(rest) ?? 0, max(shown.count - 1, 0)))
         case "slide":

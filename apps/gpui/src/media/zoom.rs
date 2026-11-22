@@ -40,6 +40,8 @@ pub struct ZoomableImage {
     radius: f32,
     /// The most it is enlarged to fit, as a multiple of its real size.
     largest_fit: f32,
+    /// The size in points it opens at, when not fitted as usual: an SVG's row's.
+    opens_at: Option<f32>,
     /// It lies over a picture's darkness, as in the viewer, where a picture with see-through parts
     /// lies on its checkerboard, framed.
     over_picture: bool,
@@ -80,6 +82,7 @@ impl ZoomableImage {
             margin,
             radius,
             largest_fit: 1.,
+            opens_at: None,
             over_picture: false,
             clicked_beside: None,
             right_clicked: None,
@@ -96,6 +99,12 @@ impl ZoomableImage {
             marking: false,
             _markup_changes: None,
         }
+    }
+
+    /// Opens enlarged to this width in points at most, rather than the usual `largest_fit`.
+    pub fn opens_at(mut self, opens_at: Option<(f32, f32)>) -> Self {
+        self.opens_at = opens_at.map(|(width, _)| width);
+        self
     }
 
     pub fn largest_fit(mut self, times: f32) -> Self {
@@ -204,12 +213,12 @@ impl ZoomableImage {
         true
     }
 
-    /// The picture, and its size in points: its pixels at the display's scale.
+    /// The picture, and its size in points: an SVG's own, or its pixels at the display's scale.
     fn picture(&self, cx: &mut App) -> (Picture, Size<f32>) {
         let picture = Pictures::load_file(&format!("view:{}", self.file.display()), &self.file, MAX_PIXELS, cx);
         let Picture::Ready(shown) = &picture else { return (picture, size(0., 0.)) };
         let scale = self.pixels_per_point;
-        let points = size(shown.width as f32 / scale, shown.height as f32 / scale);
+        let points = shown.svg_size.unwrap_or(size(shown.width as f32 / scale, shown.height as f32 / scale));
         (picture, points)
     }
 
@@ -221,7 +230,8 @@ impl ZoomableImage {
         }
         let across = (f32::from(room.width) - 2. * self.margin.width) / points.width;
         let down = (f32::from(room.height) - 2. * self.margin.height) / points.height;
-        across.min(down).clamp(0.01, self.largest_fit)
+        let largest = self.opens_at.map_or(self.largest_fit, |width| (width / points.width).max(1.));
+        across.min(down).clamp(0.01, largest)
     }
 
     /// An image enlarged to fit can still be shown at its real size, and either can be zoomed out
@@ -278,11 +288,15 @@ impl ZoomableImage {
         cx.notify();
     }
 
+    /// Keeps the picture centred while it and its margin fit in the room, and otherwise lets it
+    /// move until each edge is its margin clear of the room's, past what lies at the room's edges.
     fn clamp_offset(&mut self, points: Size<f32>) {
         let room = self.bounds.get().size;
         let scale = self.scale.unwrap_or(self.fit(points));
-        let spare_x = ((points.width * scale - f32::from(room.width)) / 2.).max(0.);
-        let spare_y = ((points.height * scale - f32::from(room.height)) / 2.).max(0.);
+        let spare =
+            |length: f32, margin: f32, room: Pixels| ((length * scale + 2. * margin - f32::from(room)) / 2.).max(0.);
+        let spare_x = spare(points.width, self.margin.width, room.width);
+        let spare_y = spare(points.height, self.margin.height, room.height);
         self.offset.x = self.offset.x.clamp(px(-spare_x), px(spare_x));
         self.offset.y = self.offset.y.clamp(px(-spare_y), px(spare_y));
     }

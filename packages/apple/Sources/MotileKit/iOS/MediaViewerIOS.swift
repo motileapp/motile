@@ -305,6 +305,12 @@ private extension View {
 private struct MediaPage: View {
     private static let playedHere: Set<String> = ["mp4", "mov", "m4v"]
 
+    /// How much a picture is enlarged to fit at most: an SVG up to the size its row shows it at.
+    private static func largestFit(_ svgSize: CGSize?, opening drawn: CGSize?) -> CGFloat {
+        guard let svgSize, let drawn, svgSize.width > 0 else { return ZoomingScrollView.viewerLargestFit }
+        return max(1, drawn.width / svgSize.width)
+    }
+
     @Environment(AppStore.self) private var store
     let item: ViewedMedia
     let shown: Bool
@@ -328,6 +334,8 @@ private struct MediaPage: View {
     @State private var fraction: Double?
     /// The checkerboard behind a picture with see-through parts.
     @State private var checker: Pictures.Checker?
+    /// An SVG's own size, which is its actual size: it is drawn far larger, to stay sharp zoomed.
+    @State private var svgSize: CGSize?
 
     private enum Loaded {
         case image(CGImage, scale: CGFloat)
@@ -361,9 +369,9 @@ private struct MediaPage: View {
             let shown = markupPicture ?? image
             ZoomableImage(
                 image: shown,
-                size: CGSize(width: CGFloat(shown.width) / scale, height: CGFloat(shown.height) / scale),
+                size: svgSize ?? CGSize(width: CGFloat(shown.width) / scale, height: CGFloat(shown.height) / scale),
                 margin: .zero,
-                largestFit: ZoomingScrollView.viewerLargestFit,
+                largestFit: Self.largestFit(svgSize, opening: item.drawnSize),
                 onZoom: { zoomed = $0 },
                 tapped: tapped,
                 markup: markup,
@@ -421,6 +429,7 @@ private struct MediaPage: View {
                 return Pictures.decode(url, id: "view:\(url.path)", maxPixels: 6144) { image in
                     let id = "view:\(url.path)"
                     checker = Pictures.isSeenThrough(id) ? Pictures.checker(behind: id) : nil
+                    svgSize = Pictures.svgSize(id)
                     if shown { shownChecker = checker }
                     loaded = image.map { .image($0, scale: scale) }
                     failed = image == nil
@@ -466,6 +475,7 @@ struct ZoomableImage: UIViewRepresentable {
     func updateUIView(_ view: ZoomingScrollView, context: Context) {
         view.onZoom = onZoom
         view.tapped = tapped
+        view.largestFit = largestFit
         view.show(image, size: size)
         view.markup = markup
         view.controls = UIEdgeInsets(top: controls.top, left: controls.leading, bottom: controls.bottom, right: controls.trailing)
@@ -482,8 +492,11 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
     var onZoom: (Bool) -> Void = { _ in }
     var tapped: () -> Void = {}
     private let margin: CGSize
-    private let largestFit: CGFloat
+    var largestFit: CGFloat
     private let picture = UIImageView()
+    /// The checkerboard behind the picture, kept over the visible bounds so that it stays put while
+    /// the picture zooms and is dragged.
+    private let grid = UIView()
     private var shown: AnyObject?
     private var laidOut = CGSize.zero
     /// The scale that fit the last layout.
@@ -509,7 +522,7 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
     /// Fills the view with the checkerboard, which stays put while the picture zooms over it, and
     /// frames the picture as thinly however far it is zoomed.
     private func paintChecker() {
-        backgroundColor = checker?.pattern()
+        grid.backgroundColor = checker?.pattern()
         picture.layer.borderColor = checker?.frame.cgColor
         picture.layer.borderWidth = checker == nil ? 0 : 1 / max(zoomScale, 0.01)
     }
@@ -562,6 +575,8 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
         picture.layer.cornerCurve = .continuous
         picture.layer.masksToBounds = radius > 0
         picture.layer.minificationFilter = .trilinear
+        grid.isUserInteractionEnabled = false
+        addSubview(grid)
         addSubview(picture)
         let double = UITapGestureRecognizer(target: self, action: #selector(doubleTapped(_:)))
         double.numberOfTapsRequired = 2
@@ -621,6 +636,11 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
             refit(reset: abs(zoomScale - fitted) < 0.001)
         }
         center()
+        grid.frame = bounds
+    }
+
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        grid.frame = bounds
     }
 
     /// Zooms to `times` its fitted size, as a pinch would.
@@ -640,10 +660,18 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
 
     /// Keeps a picture smaller than what is left clear in its middle, and lets a larger one move
     /// out from under what covers the edges.
+    /// How far past its edges a picture larger than the screen scrolls, so that every edge can be
+    /// brought clear of the viewer's buttons.
+    private static let edgeRoom = UIEdgeInsets(top: 72, left: 16, bottom: 72, right: 16)
+
+    /// Centres a picture smaller than the screen; a larger one scrolls `edgeRoom` past its edges.
     private func center() {
-        let across = max(0, (bounds.width - clear.left - clear.right - contentSize.width) / 2)
-        let down = max(0, (bounds.height - clear.top - clear.bottom - contentSize.height) / 2)
-        contentInset = UIEdgeInsets(top: clear.top + down, left: clear.left + across, bottom: clear.bottom + down, right: clear.right + across)
+        let across = (bounds.width - clear.left - clear.right - contentSize.width) / 2
+        let down = (bounds.height - clear.top - clear.bottom - contentSize.height) / 2
+        let room = zoomScale > fitted + 0.001 ? Self.edgeRoom : .zero
+        contentInset = UIEdgeInsets(
+            top: clear.top + max(down, room.top), left: clear.left + max(across, room.left),
+            bottom: clear.bottom + max(down, room.bottom), right: clear.right + max(across, room.right))
     }
 
     private var shownPin: Int?

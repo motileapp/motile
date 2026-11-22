@@ -1462,6 +1462,9 @@ struct ViewedMedia: Equatable {
     let source: Source
     /// The composer's attachment it is, which marking it up replaces.
     var attachment: String?
+    /// An SVG's size as its row shows it, which the viewer opens it at, enlarged from its own size
+    /// when that is smaller.
+    var drawnSize: CGSize?
 }
 
 /// What the viewer has open: the images and videos of one message or of the composer, and

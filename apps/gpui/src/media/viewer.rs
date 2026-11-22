@@ -168,7 +168,9 @@ impl MediaViewer {
 
     fn zoomable(&self, file: &Path, cx: &mut Context<Self>) -> Entity<ZoomableImage> {
         let (viewer, menu) = (cx.entity().downgrade(), cx.entity().downgrade());
+        let opens_at = self.shown.as_ref().and_then(|item| item.opens_at);
         let image = ZoomableImage::new(file, size(MARGIN.0, MARGIN.1), Radius::MD)
+            .opens_at(opens_at)
             .largest_fit(LARGEST_FIT)
             .over_picture()
             .on_clicked_beside(move |_, cx| {

@@ -136,7 +136,8 @@ private fun AppStore.fetchFailure(fetched: Result<File>): String {
     return fetched.exceptionOrNull()?.message ?: "This image couldn't be loaded."
 }
 
-private fun mediaViewed(media: MediaContent) = ViewedMedia(media.name, media.video, ViewedMedia.Source.Media(media.id))
+private fun mediaViewed(media: MediaContent) =
+    ViewedMedia(media.name, media.video, ViewedMedia.Source.Media(media.id), drawnSize = media.svgSize)
 
 /** As large as the media's box in the column it is in. */
 private fun Modifier.boxed(media: MediaContent): Modifier = layout { measurable, constraints ->

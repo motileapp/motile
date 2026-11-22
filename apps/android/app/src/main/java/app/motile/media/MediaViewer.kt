@@ -170,6 +170,9 @@ private object Viewer {
     val markupControls = PaddingValues(top = barGap + GlassButton.side + 8.dp, bottom = barGap + floatingHeight + 8.dp)
     /** How much of the picture around the pin whose note is written stays in sight. */
     val pinMargin = 16.dp
+    /** How far a zoomed picture moves past its sides, and past its top and bottom. */
+    val edgeRoomSides = 16.dp
+    val edgeRoomEnds = 72.dp
 }
 
 @Composable
@@ -443,8 +446,11 @@ private fun ViewerChrome(dark: Boolean, content: @Composable () -> Unit) {
 }
 
 private sealed interface Loaded {
-    /** `ink`: how light what its see-through parts draw is, for the checkerboard behind it. */
-    class Picture(val image: ImageBitmap, val ink: Double?) : Loaded
+    /**
+     * `ink`: how light what its see-through parts draw is, for the checkerboard behind it. `svgSize`:
+     * an SVG's own size in dp, which is its actual size; it is drawn far larger, to stay sharp zoomed.
+     */
+    class Picture(val image: ImageBitmap, val ink: Double?, val svgSize: Pair<Float, Float>? = null) : Loaded
     class Video(val file: File) : Loaded
     /** A video the player can't play. */
     class Other(val file: File) : Loaded
@@ -487,7 +493,8 @@ private fun MediaPage(
             return@LaunchedEffect
         }
         val picture = withContext(Dispatchers.IO) {
-            Pictures.decode(file, 6144)?.let { Loaded.Picture(it.asImageBitmap(), Pictures.inkLuminance(it)) }
+            val svgSize = if (file.extension.equals("svg", ignoreCase = true)) runCatching { Pictures.svgSize(file.readText()) }.getOrNull() else null
+            Pictures.decode(file, 6144)?.let { Loaded.Picture(it.asImageBitmap(), Pictures.inkLuminance(it), svgSize) }
         }
         loaded = picture
         failed = picture == null
@@ -495,7 +502,7 @@ private fun MediaPage(
     }
     val tapping = Modifier.fillMaxSize().pointerInput(tapped) { detectTapGestures(onTap = { tapped() }) }
     when (val shownNow = loaded) {
-        is Loaded.Picture -> ZoomableImage(original ?: shownNow.image, checker, markup, controls, onZoom, tapped)
+        is Loaded.Picture -> ZoomableImage(original ?: shownNow.image, shownNow.svgSize.takeIf { original == null }, item.drawnSize, checker, markup, controls, onZoom, tapped)
         is Loaded.Video -> VideoPlayer(shownNow.file, playing = shown, Modifier.fillMaxSize().padding(vertical = Viewer.room)) {
             loaded = Loaded.Other(shownNow.file)
         }
@@ -559,24 +566,33 @@ private class Framing {
     var origin by mutableStateOf(Offset.Zero)
         private set
     private var gliding: Job? = null
+    /** How far past its sides and its top and bottom a zoomed picture moves, in pixels, so every edge can be brought clear of the buttons. */
+    var edgeRoom = Offset.Zero
 
-    /** Enlarges a small picture to twice its size at most. */
+    /** The zoom the picture is at its actual size at: 1 but for an SVG, drawn larger than its own size. */
+    private var actual by mutableFloatStateOf(1f)
+    /** The most a picture is enlarged to fit, as a multiple of its actual size. */
+    private var largest by mutableFloatStateOf(LARGEST_FIT)
+
+    /** Enlarges a small picture to `largest` times its actual size at most. */
     val fit: Float
         get() {
             if (size.width == 0 || size.height == 0) return 1f
             val across = (size.width - clear.left - clear.right) / width
             val down = (size.height - clear.top - clear.bottom) / height
-            return minOf(2f, across, down).coerceAtLeast(0.01f)
+            return minOf(largest * actual, across, down).coerceAtLeast(0.0001f)
         }
     val fitted: Boolean get() = abs(zoom - fit) < 0.001f
     val zoomed: Boolean get() = zoom > fit + 0.001f
     /** An image enlarged to fit can still be shown at its real size. */
-    private val smallest: Float get() = min(fit, 1f)
+    private val smallest: Float get() = min(fit, actual)
 
-    fun show(image: ImageBitmap) {
-        if (image.width == width && image.height == height && zoom > 0f) return
+    fun show(image: ImageBitmap, actual: Float, largest: Float) {
+        if (image.width == width && image.height == height && actual == this.actual && largest == this.largest && zoom > 0f) return
         width = image.width
         height = image.height
+        this.actual = actual
+        this.largest = largest
         settle(reset = true)
     }
 
@@ -637,14 +653,16 @@ private class Framing {
         return placed(Offset(at.x, y), zoom)
     }
 
+    /** Centres a picture smaller than the screen; one zoomed past fitting moves `edgeRoom` past its edges. */
     private fun placed(at: Offset, zoom: Float): Offset {
-        fun axis(at: Float, start: Float, end: Float, length: Float): Float {
+        val past = if (zoom > fit + 0.001f) edgeRoom else Offset.Zero
+        fun axis(at: Float, start: Float, end: Float, length: Float, past: Float): Float {
             val room = end - start
-            return if (length <= room) start + (room - length) / 2 else at.coerceIn(end - length, start)
+            return if (length + 2 * past <= room) start + (room - length) / 2 else at.coerceIn(end - length - past, start + past)
         }
         return Offset(
-            axis(at.x, clear.left, size.width - clear.right, width * zoom),
-            axis(at.y, clear.top, size.height - clear.bottom, height * zoom),
+            axis(at.x, clear.left, size.width - clear.right, width * zoom, past.x),
+            axis(at.y, clear.top, size.height - clear.bottom, height * zoom, past.y),
         )
     }
 
@@ -660,6 +678,17 @@ private class Framing {
             }
         }
     }
+
+    companion object {
+        /** A small picture is enlarged to fit, up to twice its size. */
+        const val LARGEST_FIT = 2f
+
+        /** An SVG opens at the size its row showed it at, `drawn`, and no larger, however small its own size. */
+        fun largestFit(svgSize: Pair<Float, Float>?, drawn: Pair<Float, Float>?): Float {
+            if (svgSize == null || drawn == null || svgSize.first <= 0f) return LARGEST_FIT
+            return max(1f, drawn.first / svgSize.first)
+        }
+    }
 }
 
 /**
@@ -668,12 +697,16 @@ private class Framing {
  * zoom it. It fits between the `controls` over it and keeps the pin whose note is written in sight.
  */
 @Composable
-private fun ZoomableImage(image: ImageBitmap, checker: Checker?, markup: MarkupSession?, controls: PaddingValues?, onZoom: (Boolean) -> Unit, tapped: () -> Unit) {
+private fun ZoomableImage(image: ImageBitmap, svgSize: Pair<Float, Float>?, drawnSize: Pair<Float, Float>?, checker: Checker?, markup: MarkupSession?, controls: PaddingValues?, onZoom: (Boolean) -> Unit, tapped: () -> Unit) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val framing = remember { Framing() }
     val clear = covered(controls)
-    SideEffect { framing.show(image) }
+    val actual = svgSize?.let { (width, _) -> width * density.density / image.width } ?: 1f
+    SideEffect {
+        framing.edgeRoom = with(density) { Offset(Viewer.edgeRoomSides.toPx(), Viewer.edgeRoomEnds.toPx()) }
+        framing.show(image, actual, Framing.largestFit(svgSize, drawnSize))
+    }
     /** The selected pin's rows of the image, with its radius. */
     fun pinRows(): ClosedFloatingPointRange<Float>? {
         val session = markup ?: return null

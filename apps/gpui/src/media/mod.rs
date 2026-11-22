@@ -288,6 +288,7 @@ pub fn attached_files(
                 video: file.video,
                 source: MediaSource::Media(media.clone()),
                 attachment: None,
+                opens_at: None,
             })
         })
         .collect();
@@ -362,6 +363,14 @@ pub fn attached_files(
             files.child(div().flex().flex_col().items_start().gap(px(LINE_GAP)).children(named))
         })
         .into_any_element()
+}
+
+/// The size an SVG opens at in the viewer: its row's, which the core enlarged if it was small.
+fn opens_at(media: &str, width: Option<u32>, height: Option<u32>) -> Option<(f32, f32)> {
+    if !media.to_ascii_lowercase().ends_with(".svg") {
+        return None;
+    }
+    Some((width.filter(|width| *width > 0)? as f32, height.filter(|height| *height > 0)? as f32))
 }
 
 /// How large a picture is drawn in a column: its own size, or smaller to fit, at most `MAX_HEIGHT`
@@ -445,8 +454,13 @@ pub fn picture_box(shown: Shown, ctx: &RowContext, window: &mut Window, cx: &mut
     };
     let loading = matches!(picture, Some(Picture::Loading));
     let caption = (video && poster.is_none()).then(|| format!("{name} · {}", file_size(size)));
-    let viewed =
-        vec![ViewedMedia { name: name.clone(), video, source: MediaSource::Media(media.clone()), attachment: None }];
+    let viewed = vec![ViewedMedia {
+        name: name.clone(),
+        video,
+        source: MediaSource::Media(media.clone()),
+        attachment: None,
+        opens_at: opens_at(&media, width, height),
+    }];
     let open = {
         let store = ctx.store.clone();
         let ready = shown.is_some();

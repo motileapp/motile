@@ -77,15 +77,20 @@ final class SVGImage: NSObject, WKNavigationDelegate {
 }
 
 /// The width of an SVG over its height, from its root's `width` and `height` or its `viewBox`.
-private final class SVGSize: NSObject, XMLParserDelegate {
-    private var ratio: CGFloat = 1
+final class SVGSize: NSObject, XMLParserDelegate {
+    private var size: CGSize?
 
     static func ratio(of data: Data) -> CGFloat {
+        size(of: data).map { $0.width / $0.height } ?? 1
+    }
+
+    /// The size the SVG asks to be drawn at, from its root's `width` and `height` or its `viewBox`.
+    static func size(of data: Data) -> CGSize? {
         let reader = SVGSize()
         let parser = XMLParser(data: data)
         parser.delegate = reader
         parser.parse()
-        return reader.ratio
+        return reader.size
     }
 
     func parser(_ parser: XMLParser, didStartElement name: String, namespaceURI: String?, qualifiedName: String?, attributes: [String: String] = [:]) {
@@ -100,10 +105,10 @@ private final class SVGSize: NSObject, XMLParserDelegate {
         } else if box.count == 4 {
             (CGFloat(box[2]), CGFloat(box[3]))
         } else {
-            (CGFloat(1), CGFloat(1))
+            (CGFloat(0), CGFloat(0))
         }
         guard width > 0, height > 0 else { return }
-        ratio = width / height
+        size = CGSize(width: width, height: height)
     }
 }
 #endif

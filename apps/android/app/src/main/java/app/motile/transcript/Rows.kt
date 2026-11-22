@@ -115,7 +115,7 @@ class RowModel(
     val mediaShown: ViewedMedia?
         get() {
             val media = (kind as? Kind.Media)?.content ?: return null
-            return ViewedMedia(media.name, media.video, ViewedMedia.Source.Media(media.id))
+            return ViewedMedia(media.name, media.video, ViewedMedia.Source.Media(media.id), drawnSize = media.svgSize)
         }
 
     fun applySpans(spans: IntArray) {
@@ -589,6 +589,9 @@ class MediaContent(json: JSON) {
     val name = json.string("name")
     /** The image that stands for a video until it plays. */
     val poster = json.optionalString("poster")
+
+    /** An SVG's size in its row, which it opens at in the viewer. */
+    val svgSize: Pair<Float, Float>? get() = pixels.takeIf { id.lowercase().endsWith(".svg") }
 
     /** The image the box shows: the image itself, or a video's poster. */
     val picture: String? get() = if (video) poster else id

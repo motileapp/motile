@@ -5306,6 +5306,7 @@ dependencies = [
  "tracing",
  "ttf-parser",
  "uds_windows",
+ "usvg 0.46.0",
  "uuid",
  "windows-registry 0.6.1",
  "windows-sys 0.61.2",

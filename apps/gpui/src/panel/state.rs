@@ -1130,6 +1130,7 @@ impl Store {
             video: media.video,
             source: crate::models::MediaSource::File(file.clone()),
             attachment: None,
+            opens_at: None,
         };
         self.view(vec![viewed], 0);
     }

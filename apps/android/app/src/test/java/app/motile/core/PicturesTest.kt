@@ -37,6 +37,14 @@ class PicturesTest {
     }
 
     @Test
+    fun anSvgsOwnSizeIsItsWidthAndHeightOrElseItsViewBox() {
+        assertEquals(24f to 24f, Pictures.svgSize("""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">"""))
+        assertEquals(300f to 150f, Pictures.svgSize("""<?xml version="1.0"?><svg width="300px" height="150" viewBox="0 0 2 1">"""))
+        assertEquals(32f to 8f, Pictures.svgSize("""<svg width="100%" viewBox="0,0,32,8">"""))
+        assertNull(Pictures.svgSize("not an svg"))
+    }
+
+    @Test
     fun aSmallPictureLiesInTheMiddleOfABoxItsTileCanBeSeenIn() {
         val icon = MediaContent(json("media" to "icon.svg", "width" to 64, "height" to 64))
         assertEquals(96f to 96f, icon.box(600f))

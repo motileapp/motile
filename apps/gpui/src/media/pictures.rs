@@ -40,6 +40,8 @@ pub struct Shown {
     /// How light what it draws is on average, weighed by how opaque it is: `None` when nothing in
     /// it is seen through.
     pub ink: Option<f32>,
+    /// An SVG's size in points as it asks to be drawn, which is its actual size in the viewer.
+    pub svg_size: Option<Size<f32>>,
 }
 
 impl Shown {
@@ -345,7 +347,11 @@ fn read_image(file: &Path, max_pixels: u32, svg: &SvgRenderer, color: &str) -> O
     if !is_svg {
         return decode(file, max_pixels);
     }
-    let parsed = svg.parse_svg(&inked(&std::fs::read(file).ok()?, color)).ok()?;
+    let bytes = inked(&std::fs::read(file).ok()?, color);
+    let parsed = svg.parse_svg(&bytes).ok()?;
+    let svg_size = usvg::Tree::from_data(&bytes, &usvg::Options::default())
+        .ok()
+        .map(|tree| size(tree.size().width(), tree.size().height()));
     let side = max_pixels.min(SVG_MAX_PIXELS) as i32;
     let draw = |width: i32| {
         let image =
@@ -357,7 +363,7 @@ fn read_image(file: &Path, max_pixels: u32, svg: &SvgRenderer, color: &str) -> O
     if height > side {
         (image, width, height) = draw(side * width / height)?;
     }
-    Some(Shown { image, width: width as u32, height: height as u32, ink: None })
+    Some(Shown { image, width: width as u32, height: height as u32, ink: None, svg_size })
 }
 
 /// The SVG with its `currentColor` in `color`, as a web page gives it the text's colour, unless its
@@ -578,7 +584,7 @@ fn shown(mut pixels: image::RgbaImage) -> Shown {
     }
     let (width, height) = pixels.dimensions();
     let frame = image::Frame::new(pixels);
-    Shown { image: Arc::new(RenderImage::new(vec![frame])), width, height, ink: None }
+    Shown { image: Arc::new(RenderImage::new(vec![frame])), width, height, ink: None, svg_size: None }
 }
 
 /// Fetches the file at `url` into `file`. Whether it did.
@@ -613,6 +619,16 @@ mod tests {
         let shown = read(&file, 64, &SvgRenderer::new(Arc::new(())), color);
         let _ = std::fs::remove_file(&file);
         shown.expect("the SVG is drawn")
+    }
+
+    #[test]
+    fn an_svg_keeps_the_size_it_asks_for_however_large_it_is_drawn() {
+        let icon =
+            r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="12"/></svg>"#;
+        let sized = r#"<svg xmlns="http://www.w3.org/2000/svg" width="300" height="150" viewBox="0 0 2 1"/>"#;
+        let size = |svg: &str| read_svg(svg, "#000000").svg_size.map(|size| (size.width, size.height));
+        assert_eq!(size(icon), Some((24., 24.)));
+        assert_eq!(size(sized), Some((300., 150.)));
     }
 
     #[test]
