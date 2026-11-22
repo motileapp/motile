@@ -588,6 +588,33 @@ class GestureTests {
         assertTrue(device.hasObject(copy))
     }
 
+    /**
+     * A hold on a program's text selects a word of it to copy, and with the word selected a drag on
+     * the program's text still scrolls the transcript, as on a reply's.
+     */
+    @Test
+    fun aHoldOnAProgramsTextSelectsAWordAndADragOnItStillScrolls() {
+        try {
+            openSidebar()
+            device.findObject(newThread).click()
+            assertTrue(gone(newThread))
+            send("show the ui drones")
+            val caption = lastShown(By.textStartsWith("Illustrative. Fixed costs cover")) ?: return fail("no program")
+            settled(caption)
+            val bounds = caption.visibleBounds
+            val (x, y) = bounds.left + bounds.width() / 10 to bounds.centerY()
+            device.swipe(x, y, x, y, 160)
+            assertTrue(shown(By.text("Copy")))
+            val dp = instrumentation.context.resources.displayMetrics.density
+            val top = settled(caption)
+            val dragX = bounds.left + bounds.width() * 7 / 10
+            dragAndRest(dragX, y, dragX, y + (160 * dp).toInt())
+            assertTrue(settled(caption) > top + 100 * dp)
+        } finally {
+            deleteThread("The Drone Photography Market")
+        }
+    }
+
     private fun fail(message: String) {
         assertEquals("", message)
     }

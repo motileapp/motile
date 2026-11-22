@@ -1,7 +1,7 @@
 #if os(iOS)
 import UIKit
 
-/// A place in a program's joined text.
+/// A place in a program's text.
 final class ProgramTextPosition: UITextPosition {
     let offset: Int
 
@@ -40,71 +40,24 @@ private final class ProgramSelectionRect: UITextSelectionRect {
     override var isVertical: Bool { false }
 }
 
-/// A program row's texts as one read-only text, which the system's text interaction selects in
-/// with a long press, handles and the edit menu. It lies over the row's views, as large as the
-/// row, to draw the selection over them; it only takes the touches the row hands it and those on
-/// its handles, and hides from accessibility, which reads each text on its own.
-final class ProgramTextInput: UIView, UITextInput {
-    weak var row: ProgramRowView?
-    weak var inputDelegate: UITextInputDelegate?
-    lazy var tokenizer: UITextInputTokenizer = UITextInputStringTokenizer(textInput: self)
-    private static let empty = ProgramSelection()
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        accessibilityElementsHidden = true
+/// A program's text is selected as a reply's is, with the system's text interaction: a long press
+/// takes a word, its handles stretch it and the edit menu copies it.
+extension ProgramTextView: UITextInput {
+    func addTextInteraction() {
         let interaction = UITextInteraction(for: .nonEditable)
         interaction.textInput = self
         addInteraction(interaction)
     }
 
-    required init?(coder: NSCoder) { fatalError("not used") }
-
-    private var selection: ProgramSelection { row?.selection ?? Self.empty }
-
-    private func collectTexts() {
-        row?.collectTexts()
-    }
-
-    func clear() {
+    func clearSelection() {
+        guard selected != nil else { return }
         inputDelegate?.selectionWillChange(self)
-        selection.select(nil)
+        selected = nil
         inputDelegate?.selectionDidChange(self)
         if isFirstResponder { resignFirstResponder() }
     }
 
-    override var canBecomeFirstResponder: Bool { true }
-
-    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        let hit = super.hitTest(point, with: event)
-        return hit === self ? nil : hit
-    }
-
-    override func copy(_ sender: Any?) {
-        guard let text = selection.copied() else { return }
-        Platform.copy(text)
-    }
-
-    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
-        guard action == #selector(copy(_:)) else { return false }
-        return selection.hasSelection
-    }
-
-    /// The text interaction starts a selection only on text.
-    override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
-        collectTexts()
-        return selection.hasSelection || selection.piece(under: inRow(recognizer.location(in: self))) != nil
-    }
-
-    private func inRow(_ point: CGPoint) -> CGPoint {
-        row.map { convert(point, to: $0) } ?? point
-    }
-
-    private func fromRow(_ rect: CGRect) -> CGRect {
-        row.map { convert(rect, from: $0) } ?? rect
-    }
-
-    private var length: Int { selection.text.length }
+    private var length: Int { selectableText.length }
 
     private func offset(_ position: UITextPosition) -> Int {
         (position as? ProgramTextPosition)?.offset ?? 0
@@ -119,11 +72,11 @@ final class ProgramTextInput: UIView, UITextInput {
     }
 
     var selectedTextRange: UITextRange? {
-        get { selection.range.map(ProgramTextRange.init) }
+        get { selected.map(ProgramTextRange.init) }
         set {
-            selection.select(newValue.map(nsRange))
-            guard selection.hasSelection, let row else { return }
-            row.owner?.rowWillSelect(row)
+            selected = newValue.map(nsRange)
+            guard let selected, selected.length > 0 else { return }
+            programRow?.textWillSelect(self)
         }
     }
 
@@ -140,16 +93,13 @@ final class ProgramTextInput: UIView, UITextInput {
 
     var beginningOfDocument: UITextPosition { ProgramTextPosition(0) }
 
-    var endOfDocument: UITextPosition {
-        collectTexts()
-        return ProgramTextPosition(length)
-    }
+    var endOfDocument: UITextPosition { ProgramTextPosition(length) }
 
     var textInputView: UIView { self }
 
     func text(in range: UITextRange) -> String? {
         let range = NSIntersectionRange(nsRange(range), NSRange(location: 0, length: length))
-        return selection.text.substring(with: range)
+        return (selectableText.string as NSString).substring(with: range)
     }
 
     func replace(_ range: UITextRange, withText text: String) {}
@@ -206,41 +156,37 @@ final class ProgramTextInput: UIView, UITextInput {
     func setBaseWritingDirection(_ writingDirection: NSWritingDirection, for range: UITextRange) {}
 
     func firstRect(for range: UITextRange) -> CGRect {
-        selection.rects(of: nsRange(range)).first.map(fromRow) ?? .zero
+        textGeometry?.rects(of: nsRange(range)).first ?? .zero
     }
 
     func caretRect(for position: UITextPosition) -> CGRect {
-        fromRow(selection.caret(at: clamped(offset(position))))
+        textGeometry?.caret(at: clamped(offset(position))) ?? .zero
     }
 
     func selectionRects(for range: UITextRange) -> [UITextSelectionRect] {
-        let rects = selection.rects(of: nsRange(range)).map(fromRow)
+        let rects = textGeometry?.rects(of: nsRange(range)) ?? []
         return rects.enumerated().map { index, rect in
             ProgramSelectionRect(rect, starts: index == 0, ends: index == rects.count - 1)
         }
     }
 
     func closestPosition(to point: CGPoint) -> UITextPosition? {
-        collectTexts()
-        return selection.offset(at: inRow(point)).map(ProgramTextPosition.init)
+        textGeometry.map { ProgramTextPosition($0.index(nearest: point)) }
     }
 
     func closestPosition(to point: CGPoint, within range: UITextRange) -> UITextPosition? {
         let within = nsRange(range)
-        let at = selection.offset(at: inRow(point)) ?? within.location
+        let at = textGeometry?.index(nearest: point) ?? within.location
         return ProgramTextPosition(max(within.location, min(NSMaxRange(within), at)))
     }
 
     func characterRange(at point: CGPoint) -> UITextRange? {
-        guard let at = selection.offset(at: inRow(point)) else { return nil }
-        let character = at < length ? selection.text.rangeOfComposedCharacterSequence(at: at) : NSRange(location: at, length: 0)
+        guard let at = textGeometry?.index(nearest: point) else { return nil }
+        let character = at < length ? (selectableText.string as NSString).rangeOfComposedCharacterSequence(at: at) : NSRange(location: at, length: 0)
         return ProgramTextRange(character)
     }
 
-    var hasText: Bool {
-        collectTexts()
-        return length > 0
-    }
+    var hasText: Bool { length > 0 }
 
     func insertText(_ text: String) {}
 

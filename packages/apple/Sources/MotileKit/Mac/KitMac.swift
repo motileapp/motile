@@ -576,8 +576,8 @@ class PointerTextView: NSTextView, CursorOwner {
 final class RowTextView: PointerTextView {
     /// Called when the user starts selecting here, so other rows can let go of their selection.
     var onSelect: (() -> Void)?
-    /// Its text is selected with the rest of its program's: its clicks go on to the program's row.
-    var selectsWithProgram = false
+    /// In a program, its text is selected with the rest of the program's: its clicks go on to the program's row.
+    var inProgram = false
     private var shownSelection: NSRange?
     private var system: TextSystem!
 
@@ -654,7 +654,7 @@ final class RowTextView: PointerTextView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        guard !selectsWithProgram else {
+        guard !inProgram else {
             nextResponder?.mouseDown(with: event)
             return
         }
@@ -663,7 +663,7 @@ final class RowTextView: PointerTextView {
     }
 
     override func menu(for event: NSEvent) -> NSMenu? {
-        selectsWithProgram ? nil : super.menu(for: event)
+        inProgram ? nil : super.menu(for: event)
     }
 
     override func scrollWheel(with event: NSEvent) {

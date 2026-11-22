@@ -76,8 +76,8 @@ if touches "$shared|^packages/apple/|^apps/(macos|ios)/"; then
     ran+=(apple)
     step packages/apple/scripts/check-ui.sh
     if [ "$(uname)" = Darwin ]; then
-        (cd apps/macos && step swift build --target Motile)
         step cargo build --release -p motile-core --lib
+        (cd apps/macos && step swift build --target Motile)
         step swift test --package-path packages/apple
     fi
 fi

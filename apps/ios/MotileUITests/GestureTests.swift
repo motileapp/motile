@@ -555,6 +555,26 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(app.menuItems["Copy"].waitForExistence(timeout: 3))
     }
 
+    /// With a word of a program selected, a drag on the program's text still scrolls the
+    /// transcript, as on a reply's.
+    func testADragOnAProgramsTextScrollsWithAWordOfItSelected() {
+        addTeardownBlock { [self] in deleteThread("The Drone Photography Market") }
+        app.buttons["Threads"].tap()
+        XCTAssertTrue(shown(newThread))
+        newThread.tap()
+        send("show the ui drones")
+        let caption = "Illustrative. Fixed costs cover insurance, gear, software and marketing; project costs cover editing and travel."
+        guard let text = lastShown(app.descendants(matching: .any).matching(NSPredicate(format: "label == %@", caption))) else {
+            return XCTFail("no program")
+        }
+        text.coordinate(withNormalizedOffset: .zero).withOffset(CGVector(dx: 30, dy: 10)).press(forDuration: 0.8)
+        XCTAssertTrue(app.menuItems["Copy"].waitForExistence(timeout: 3))
+        let top = settled(text)
+        let start = text.coordinate(withNormalizedOffset: CGVector(dx: 0.7, dy: 0.5))
+        start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: 0, dy: 160)), withVelocity: .slow, thenHoldForDuration: 0)
+        XCTAssertGreaterThan(settled(text), top + 100)
+    }
+
     /// A tap on a program's chart shows the tooltip of the column under it, beside the column, and a
     /// tap anywhere off the chart hides it. In a thread of its own, deleted after.
     func testATapOffAProgramsChartHidesItsTooltip() {
