@@ -690,7 +690,19 @@ extension NSAttributedString.Key {
 
 /// Turns the core's rows into attributed strings. Safe to call from any thread.
 enum Typesetter {
-    static let inlineCodeBackground = Theme.backgroundAccent
+    static let inlineCodeBackground = Theme.inlineCode
+
+    /// Moves the text around inline code as far from it as its box reaches past it.
+    static func makeRoom(aroundCode range: NSRange, in text: NSMutableAttributedString) {
+        let string = text.string as NSString
+        let newline: unichar = 0x0A
+        if range.location > 0, string.character(at: range.location - 1) != newline {
+            text.addAttribute(.kern, value: RowTextView.overhang, range: string.rangeOfComposedCharacterSequence(at: range.location - 1))
+        }
+        if NSMaxRange(range) < string.length, string.character(at: NSMaxRange(range)) != newline {
+            text.addAttribute(.kern, value: RowTextView.overhang, range: string.rangeOfComposedCharacterSequence(at: NSMaxRange(range) - 1))
+        }
+    }
 
     private static let italicFont = Theme.proseFont.italicised
     private static let boldItalicFont = Theme.proseBold.italicised
@@ -944,6 +956,7 @@ enum Typesetter {
             if code {
                 let font = bold || heading != nil ? inlineCodeBold : Theme.inlineCodeFont
                 result.addAttributes([.font: font, .foregroundColor: Theme.foreground, .backgroundColor: inlineCodeBackground], range: range)
+                makeRoom(aroundCode: range, in: result)
             } else if let heading {
                 if italic { result.addAttribute(.font, value: heading.italicised, range: range) }
             } else if bold || italic {

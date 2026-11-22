@@ -14,6 +14,8 @@ enum SkillChip {
     /// Smaller than the icon for its text, to keep clear of the box's edges, which hug the text.
     static let symbolSize = IconSize.sm
     static let padding: CGFloat = 5
+    /// The room before the symbol, less than the padding: the symbol's drawing leaves room of its own.
+    static let symbolInset: CGFloat = 3
     static let gap: CGFloat = 4
     /// The room between the chip and the text on either side.
     static let margin: CGFloat = 1
@@ -30,8 +32,8 @@ enum SkillChip {
 
     static var symbolSide: CGFloat { PlatformImage.symbolSide(symbolSize) }
 
-    /// The room before the name: the padding, the symbol and the gap after it.
-    static var lead: CGFloat { padding + symbolSide + gap }
+    /// The room before the name: the symbol, the room before it and the gap after it.
+    static var lead: CGFloat { symbolInset + symbolSide + gap }
 
     /// How tall the chip is beside text of `font`: from its ascender to its descender, as inline
     /// code's box is, so that it never rises above its line, where the first line's is cut off.
@@ -56,7 +58,7 @@ enum SkillChip {
         RoundedBox.stroke(box, radius: radius)
         guard let context = Platform.drawing, let path = PlatformImage.symbolPath(symbol, side: symbolSide) else { return }
         let side = symbolSide
-        let origin = CGPoint(x: rect.minX + padding, y: (rect.midY - side / 2).rounded())
+        let origin = CGPoint(x: rect.minX + symbolInset, y: (rect.midY - side / 2).rounded())
         context.saveGState()
         context.translateBy(x: origin.x, y: origin.y + side)
         context.scaleBy(x: 1, y: -1)

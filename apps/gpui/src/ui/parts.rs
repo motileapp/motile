@@ -592,7 +592,15 @@ pub struct FadingScroll {
 
 impl FadingScroll {
     pub fn new(id: impl Into<ElementId>, max_height: f32) -> Self {
-        Self { id: id.into(), max_height, padding: 0., starts_at_end: false, end_on: None, fill: None, children: Vec::new() }
+        Self {
+            id: id.into(),
+            max_height,
+            padding: 0.,
+            starts_at_end: false,
+            end_on: None,
+            fill: None,
+            children: Vec::new(),
+        }
     }
 
     pub fn padding(mut self, padding: f32) -> Self {

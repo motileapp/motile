@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.buildAnnotatedString
 import app.motile.core.Agent
 import app.motile.core.AgentState
@@ -646,4 +648,24 @@ fun byteCount(bytes: Long): String = Formatter.formatShortFileSize(Platform.cont
 object TextMarks {
     const val code = "motile.code"
     const val skill = "motile.skill"
+
+    /** How far inline code's box reaches past its glyphs, and the room the text beside it keeps. */
+    val codeRoom = 4.sp
+
+    /**
+     * Moves the text beside the code from `start` to `end` of `text` [codeRoom] away from it. A
+     * letter's spacing falls half before it and half after, so a space beside the code takes it all
+     * and any other letter twice it.
+     */
+    fun makeRoomAroundCode(builder: AnnotatedString.Builder, text: CharSequence, start: Int, end: Int) {
+        fun spread(at: Int) {
+            if (at < 0 || at >= text.length || text[at] == '\n') return
+            val from = if (at > 0 && text[at].isLowSurrogate()) at - 1 else at
+            val to = if (text[from].isHighSurrogate()) from + 2 else from + 1
+            val spacing = if (text[from].isWhitespace()) codeRoom else codeRoom * 2
+            builder.addStyle(SpanStyle(letterSpacing = spacing), from, to.coerceAtMost(text.length))
+        }
+        spread(start - 1)
+        spread(end)
+    }
 }

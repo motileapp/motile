@@ -241,6 +241,7 @@ class ComposerTextModel(private val store: AppStore) {
             replace(chip.start, chip.end, shown)
             addStyle(styles.first, chip.start, chip.start + shown.length)
             addStyle(styles.second, chip.start + 1, chip.start + 2)
+            addStyle(SkillChip.leadStyle, chip.start, chip.start + 1)
         }
     }
 
