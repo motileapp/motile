@@ -15,7 +15,7 @@ use super::{MediaFiles, SAVE_TITLE};
 use crate::models::{MediaSource, SavedMarkup, ViewedMedia};
 use crate::store::Store;
 use crate::store::shortcuts::ShortcutContext;
-use crate::theme::{ControlSize, Opacity, Radius, ShadowSize, Surface, TextSize, colors};
+use crate::theme::{ControlSize, Opacity, ShadowSize, Surface, TextSize, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, presented};
 use crate::ui::parts::CopyButton;
@@ -781,7 +781,7 @@ impl MediaViewer {
                         .right(px(MARGIN.0))
                         .top(px(MARGIN.1))
                         .bottom(px(MARGIN.1))
-                        .rounded(px(Radius::MD))
+                        .rounded(px(crate::theme::Radius::MD))
                         .overflow_hidden()
                 })
                 .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
