@@ -606,6 +606,28 @@ final class GestureTests: XCTestCase {
         return (0..<3).map { bytes[offset + $0] }
     }
 
+    /// A hold on Send while the agent works sends the message the other way: queued, as the settings steer.
+    func testAHoldOnSendWhileTheAgentWorksQueuesTheMessage() {
+        app.buttons["Threads"].tap()
+        XCTAssertTrue(shown(newThread))
+        newThread.tap()
+        let composer = app.textViews.firstMatch
+        XCTAssertTrue(shown(composer))
+        composer.tap()
+        composer.typeText("look over greet.py slowly")
+        app.buttons["Send"].tap()
+        addTeardownBlock { [self] in deleteThread("Look Over greet.py") }
+        XCTAssertTrue(app.buttons["Stop"].waitForExistence(timeout: 5))
+        composer.typeText("then the README")
+        app.buttons["Send"].press(forDuration: 1.2)
+        let queue = app.buttons["Queue"]
+        XCTAssertTrue(shown(queue))
+        queue.tap()
+        XCTAssertTrue(app.staticTexts["Queued"].waitForExistence(timeout: 5))
+        app.buttons["Stop"].tap()
+        XCTAssertTrue(app.buttons["Stop"].waitForNonExistence(timeout: 10))
+    }
+
     func testATapBesideTheComposersTextBringsTheKeyboard() {
         let text = app.textViews.firstMatch
         XCTAssertTrue(text.waitForExistence(timeout: 10))

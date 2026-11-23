@@ -355,7 +355,8 @@ struct ComposerView: View {
     #endif
 }
 
-/// Stops the turn that runs, and sends what is written: into that turn, or queued behind it.
+/// Stops the turn that runs, and sends what is written: into that turn, or queued behind it. A long
+/// press, or a right click on the Mac, sends it the other way.
 /// While the client tries to reach the server neither works, and the last of them waits for it,
 /// sending signals.
 struct ComposerSendButtons: View {
@@ -387,10 +388,16 @@ struct ComposerSendButtons: View {
                 ) {
                     store.send()
                 }
+                .menu(running ? [alternate] : [])
                 .disabled(!store.canSend)
                 .accessibilityLabel("Send")
             }
         }
+    }
+
+    /// Sends this once the other way, as the keys in `whileRunning` do.
+    private var alternate: MenuItem {
+        MenuItem(steers ? "Queue" : "Steer", symbol: steers ? .clock : .zap) { store.send(alternate: true) }
     }
 
     /// What sending does while the agent works, and the keys that do the other.

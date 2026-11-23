@@ -534,6 +534,8 @@ def title_answer():
         title = "Four Hundred Steps"
     if "watch the deploy" in message:
         title = "Watch the Deploy"
+    if "look over greet.py slowly" in message:
+        title = "Look Over greet.py"
     if "show the screenshot" in message:
         title = "Screenshot of the Landing Page"
     if "show the logo" in message:

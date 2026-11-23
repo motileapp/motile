@@ -641,9 +641,12 @@ pub struct ActionButton {
     signals: bool,
     on_click: Option<OnClick>,
     on_open: Option<OnOpen>,
+    /// What a right click offers besides what it does.
+    context_menu: Option<MakeMenu>,
 }
 
 type OnOpen = Rc<dyn Fn(Opened, &mut Window, &mut App)>;
+type MakeMenu = Rc<dyn Fn(&mut App) -> Menu>;
 
 impl ActionButton {
     /// A button with words, and a symbol before them when it has one.
@@ -666,6 +669,7 @@ impl ActionButton {
             signals: false,
             on_click: None,
             on_open: None,
+            context_menu: None,
         }
     }
 
@@ -969,6 +973,12 @@ impl ActionButton {
         self
     }
 
+    /// Opens the menu `menu` makes where it is right clicked. An empty one opens nothing.
+    pub fn context_menu(mut self, menu: impl Fn(&mut App) -> Menu + 'static) -> Self {
+        self.context_menu = Some(Rc::new(menu));
+        self
+    }
+
     /// Its colour and rings this frame: a new variant starts its colour growing over the old one,
     /// and rings that stop go on until the last ones are out.
     fn motion(&self, fill: Hsla, opacity: f32, signals: bool, window: &mut Window, cx: &mut App) -> ButtonMotion {
@@ -1124,6 +1134,16 @@ impl RenderOnce for ActionButton {
                         cx.stop_propagation();
                         keys(Opened::Keys, window, cx)
                     })
+            })
+            .when_some(self.context_menu.filter(|_| active), |button, menu| {
+                button.on_mouse_down(MouseButton::Right, move |event, window, cx| {
+                    let menu = menu(cx);
+                    if menu.is_empty() {
+                        return;
+                    }
+                    cx.stop_propagation();
+                    menu.show(event.position, window, cx)
+                })
             })
     }
 }

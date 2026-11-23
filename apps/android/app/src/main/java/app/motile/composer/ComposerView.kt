@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.AppStore
+import app.motile.core.Preferences
 import app.motile.core.Server
 import app.motile.core.ThreadChildren
 import app.motile.core.ThreadInfo
@@ -61,6 +62,7 @@ import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
 import app.motile.ui.Disabled
 import app.motile.ui.Icon
+import app.motile.ui.MenuBuilder
 import app.motile.ui.Text
 import kotlinx.coroutines.delay
 
@@ -289,7 +291,8 @@ private fun Attachments() {
 }
 
 /**
- * Stops the turn that runs, and sends what is written: into that turn, or queued behind it, as the settings say.
+ * Stops the turn that runs, and sends what is written: into that turn, or queued behind it, as the settings say. A
+ * long press sends it the other way.
  * While the client tries to reach the server neither works, and the last of them waits for it, sending signals.
  */
 @Composable
@@ -313,10 +316,17 @@ fun ComposerSendButtons() {
                 ActionButton(
                     icon = Symbol.ArrowUp, help = "Send", variant = if (connecting) ButtonVariant.Waiting else ButtonVariant.Primary,
                     symbolSize = IconSize.Md, round = true, margin = ComposerView.margin(leading = 4.dp, trailing = ComposerView.edge), signals = connecting,
+                    menu = { if (running) sendsOtherWay(store) },
                 ) { store.send() }
             }
         }
     }
+}
+
+/** Sends what is written once the other way: queued when the settings steer, steering when they queue. */
+private fun MenuBuilder.sendsOtherWay(store: AppStore) {
+    val steers = Preferences.optionalBool(AppStore.STEERS_KEY) ?: AppStore.STEERS_BY_DEFAULT
+    item(if (steers) "Queue" else "Steer", if (steers) Symbol.Clock else Symbol.Zap) { store.send(alternate = true) }
 }
 
 /** The square the button that stops shows. */

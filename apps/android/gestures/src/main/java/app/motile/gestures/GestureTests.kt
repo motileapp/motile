@@ -423,6 +423,30 @@ class GestureTests {
         assertTrue(waitForKeyboard(true))
     }
 
+    /** A hold on Send while the agent works sends the message the other way: queued, as the settings steer. */
+    @Test
+    fun aHoldOnSendWhileTheAgentWorksQueuesTheMessage() {
+        try {
+            openSidebar()
+            device.findObject(newThread).click()
+            assertTrue(gone(newThread))
+            val composer = device.wait(Until.findObject(By.clazz("android.widget.EditText")), 10_000) ?: return fail("no composer")
+            composer.click()
+            type("look%sover%sgreet.py%sslowly")
+            device.findObject(By.desc("Send")).click()
+            assertTrue(shown(By.desc("Stop"), 5_000))
+            type("then%sthe%sREADME")
+            device.wait(Until.findObject(By.desc("Send")), 3_000)?.longClick() ?: return fail("no send")
+            device.wait(Until.findObject(By.text("Queue")), 3_000)?.click() ?: return fail("no menu")
+            assertTrue(shown(By.text("Queued"), 5_000))
+            device.findObject(By.desc("Stop"))?.click()
+            assertTrue(gone(By.desc("Stop"), 10_000))
+        } finally {
+            device.pressBack()
+            deleteThread("Look Over greet.py")
+        }
+    }
+
     /** A finger dragged on a map pans it: the transcript stays where it is and the sidebar doesn't come in. */
     @Test
     fun aFingerDraggedOnAMapPansItAndLeavesTheTranscript() {
