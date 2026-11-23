@@ -153,7 +153,7 @@ impl MarkupSession {
             ink: LAST_INK.with_borrow(Clone::clone),
             note: String::new(),
         };
-        let mut open = json!({ "op": "open", "width": width, "height": height });
+        let mut open = json!({ "op": "open", "width": width, "height": height, "source": session.source });
         if let Some(saved) = saved {
             open["marks"] = json!(saved.marks);
         }

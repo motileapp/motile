@@ -115,7 +115,7 @@ final class MarkupSession {
         self.source = source
         self.name = name
         self.attachment = attachment
-        var open: JSON = ["op": "open", "width": width, "height": height]
+        var open: JSON = ["op": "open", "width": width, "height": height, "source": source.path]
         open["marks"] = saved?.marks
         guard apply(Self.ask(open)) else { return nil }
     }

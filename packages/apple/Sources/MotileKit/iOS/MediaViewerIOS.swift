@@ -577,10 +577,8 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
             panGestureRecognizer.minimumNumberOfTouches = marking ? 2 : 1
             taps.forEach { $0.isEnabled = !marking }
             if let canvas {
-                canvas.frame = picture.bounds
-                canvas.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-                canvas.contentScaleFactor = Platform.pixelsPerPoint * zoomScale
                 picture.addSubview(canvas)
+                fitCanvas()
                 addGestureRecognizer(drawing)
             } else {
                 removeGestureRecognizer(drawing)
@@ -666,10 +664,27 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
         }
         center()
         grid.frame = bounds
+        fitCanvas()
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         grid.frame = bounds
+        fitCanvas()
+    }
+
+    /// Lays the canvas over the part of the picture on screen, drawn at the screen's sharpness
+    /// however far the picture is zoomed. It moves with the picture while that is animated.
+    private func fitCanvas() {
+        guard let canvas else { return }
+        let shown = picture.bounds.intersection(convert(bounds, to: picture))
+        guard !shown.isNull, shown.width > 0, shown.height > 0 else { return canvas.isHidden = true }
+        UIView.performWithoutAnimation {
+            canvas.isHidden = false
+            canvas.frame = shown
+            canvas.contentScaleFactor = Platform.pixelsPerPoint * zoomScale
+            canvas.image = picture.bounds.offsetBy(dx: -shown.minX, dy: -shown.minY)
+            canvas.setNeedsDisplay()
+        }
     }
 
     /// Moves the picture as far as it goes toward an edge, as a drag would.
@@ -725,7 +740,7 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
     private func showSelectedPin() {
         guard let canvas, let pin = canvas.session.selectedPin else { return }
         let center = canvas.convert(canvas.point(CGPoint(x: pin.x, y: pin.y)), to: self)
-        let reach = canvas.point(CGPoint(x: pin.radius, y: 0)).x * zoomScale + 16
+        let reach = canvas.points(pin.radius) * zoomScale + 16
         let top = contentOffset.y + clear.top
         let bottom = contentOffset.y + bounds.height - clear.bottom
         var offset = contentOffset
@@ -745,14 +760,8 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
     func scrollViewDidZoom(_ scrollView: UIScrollView) {
         center()
         paintChecker()
+        fitCanvas()
         onZoom(zoomScale > fitted + 0.001)
-    }
-
-    /// Marks are drawn again at the zoom's sharpness once it settles.
-    func scrollViewDidEndZooming(_ scrollView: UIScrollView, with view: UIView?, atScale scale: CGFloat) {
-        guard let canvas else { return }
-        canvas.contentScaleFactor = Platform.pixelsPerPoint * scale
-        canvas.setNeedsDisplay()
     }
 
     func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
@@ -766,7 +775,8 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
 
     @objc private func drew(_ recognizer: OneFinger) {
         guard let canvas else { return }
-        let at = recognizer.location(in: canvas)
+        let at = recognizer.location(in: picture)
+        let pixel = { (point: CGPoint) in canvas.pixel(canvas.convert(point, from: self.picture)) }
         let session = canvas.session
         switch recognizer.state {
         case .began:
@@ -775,13 +785,13 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
             if let start = landed {
                 guard hypot(at.x - start.x, at.y - start.y) * zoomScale > Self.drawingSlop else { return }
                 landed = nil
-                session.down(at: canvas.pixel(start), slop: canvas.pixels(12, zoom: zoomScale))
+                session.down(at: pixel(start), slop: canvas.pixels(12, zoom: zoomScale))
             }
-            session.drag(to: canvas.pixel(at))
+            session.drag(to: pixel(at))
         case .ended:
-            if let start = landed { session.down(at: canvas.pixel(start), slop: canvas.pixels(12, zoom: zoomScale)) }
+            if let start = landed { session.down(at: pixel(start), slop: canvas.pixels(12, zoom: zoomScale)) }
             landed = nil
-            session.up(at: canvas.pixel(at))
+            session.up(at: pixel(at))
         case .cancelled:
             if landed == nil { session.cancel() }
             landed = nil
