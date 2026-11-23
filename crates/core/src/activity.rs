@@ -221,7 +221,16 @@ impl Grid {
             return slice;
         }
         let (day, part) = (slice / self.parts, slice % self.parts);
-        ((day % self.rows) * self.columns + day / self.rows) * self.parts + part
+        (day % self.rows) * self.width() + day / self.rows * self.parts + part
+    }
+
+    /// The columns drawn: a calendar's end where its last cell is, not where its last week ends.
+    fn width(&self) -> usize {
+        let full = self.columns * self.parts;
+        let Some(last) = self.filled.checked_sub(1).filter(|_| self.calendar) else { return full };
+        let (day, part) = (last / self.parts, last % self.parts);
+        let week = day / self.rows * self.parts;
+        if day % self.rows > 0 { week + self.parts } else { week + part + 1 }
     }
 
     fn start(&self, slice: usize) -> f64 {
@@ -1098,7 +1107,7 @@ fn heatmap(hours: &[&HourBucket], together: &[(f64, f64)], grid: &Grid) -> (Heat
 
     let most = |weight: fn(&Tally) -> f64| slices.iter().map(weight).fold(0.0, f64::max);
     let (most_time, most_messages) = (most(Tally::time), most(|slice| f64::from(slice.messages)));
-    let mut cells: Vec<Option<HeatCell>> = (0..grid.rows * grid.columns * grid.parts).map(|_| None).collect();
+    let mut cells: Vec<Option<HeatCell>> = (0..grid.rows * grid.width()).map(|_| None).collect();
     for (index, slice) in slices.iter().enumerate() {
         cells[grid.position(index)] = Some(HeatCell {
             label: grid.label(index),
@@ -1112,7 +1121,7 @@ fn heatmap(hours: &[&HourBucket], together: &[(f64, f64)], grid: &Grid) -> (Heat
     }
     let heatmap = Heatmap {
         rows: grid.rows(),
-        columns: grid.columns * grid.parts,
+        columns: grid.width(),
         axis: grid.axis(),
         cells,
         latest: grid.position(grid.filled.saturating_sub(1)),
@@ -1867,6 +1876,20 @@ mod tests {
         assert_eq!(quarter.latest, thursday(&quarter, 12));
         assert_eq!(axis(&quarter).first(), Some(&(0, "Aug 17".into())));
         assert_eq!(axis(&quarter).len(), 7);
+    }
+
+    #[test]
+    fn a_calendar_heatmap_ends_at_its_last_cell() {
+        let month = |now: f64| heatmap(&[], &[], &Grid::of(&Window::ending(now, 86_400, 30, 0), now)).0;
+        // Monday, November 9 2026, 3:46 am, then 4:46 am, then Tuesday.
+        let monday = month(1_794_455_160.0 - 3.0 * DAY);
+        assert_eq!((monday.columns, monday.cells.len()), (25, 7 * 25));
+        assert_eq!(monday.latest, 24);
+        assert_eq!(monday.cells[24].as_ref().map(|cell| cell.label.as_str()), Some("Mon, Nov 9, 00:00–04:00"));
+        assert!(monday.cells[25 + 24].is_none() && monday.cells[25 + 23].is_some());
+        assert_eq!(monday.axis.last().map(|label| label.column), Some(24));
+        assert_eq!(month(1_794_455_160.0 - 3.0 * DAY + HOUR).columns, 26);
+        assert_eq!(month(1_794_455_160.0 - 2.0 * DAY).columns, 30);
     }
 
     #[test]
