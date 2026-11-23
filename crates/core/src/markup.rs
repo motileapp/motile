@@ -553,8 +553,12 @@ fn paint_scene(pixmap: &mut tiny_skia::Pixmap, scene: &Scene, transform: tiny_sk
     }
 }
 
-/// Reads `source` as it shows, turned as its camera says.
+/// Reads `source` as it shows, turned as its camera says. An SVG is drawn at `SVG_SIDE` pixels on
+/// its longer side, or its own size if that is larger.
 fn decode(source: &FilePath) -> Result<RgbaImage, String> {
+    if is_svg(source) {
+        return draw_svg(source);
+    }
     let reader =
         ImageReader::open(source).and_then(|reader| reader.with_guessed_format()).map_err(|e| e.to_string())?;
     let mut decoder = reader.into_decoder().map_err(|e| e.to_string())?;
@@ -562,6 +566,32 @@ fn decode(source: &FilePath) -> Result<RgbaImage, String> {
     let mut picture = DynamicImage::from_decoder(decoder).map_err(|e| e.to_string())?;
     picture.apply_orientation(orientation);
     Ok(picture.into_rgba8())
+}
+
+const SVG_SIDE: f32 = 2560.;
+const SVG_LARGEST_SIDE: f32 = 8192.;
+
+fn is_svg(source: &FilePath) -> bool {
+    source.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("svg"))
+}
+
+fn draw_svg(source: &FilePath) -> Result<RgbaImage, String> {
+    let data = std::fs::read(source).map_err(|e| e.to_string())?;
+    let mut options = resvg::usvg::Options::default();
+    options.fontdb_mut().load_system_fonts();
+    let tree = resvg::usvg::Tree::from_data(&data, &options).map_err(|e| e.to_string())?;
+    let size = tree.size();
+    let longer = size.width().max(size.height());
+    let scale = longer.clamp(SVG_SIDE, SVG_LARGEST_SIDE) / longer;
+    let (width, height) =
+        ((size.width() * scale).round().max(1.) as u32, (size.height() * scale).round().max(1.) as u32);
+    let mut pixmap = tiny_skia::Pixmap::new(width, height).ok_or("The image is empty.")?;
+    resvg::render(&tree, tiny_skia::Transform::from_scale(scale, scale), &mut pixmap.as_mut());
+    let pixels = pixmap.pixels().iter().flat_map(|pixel| {
+        let color = pixel.demultiply();
+        [color.red(), color.green(), color.blue(), color.alpha()]
+    });
+    RgbaImage::from_raw(width, height, pixels.collect()).ok_or_else(|| "The image couldn't be drawn.".to_string())
 }
 
 /// Writes `source` with `scene` painted over it into a new folder under `folder`, as a JPEG when
@@ -884,5 +914,26 @@ mod tests {
 
         let reopened = ask(json!({ "op": "open", "width": 600, "height": 400, "marks": answer["marks"] }));
         assert_eq!((reopened["marked"].as_bool(), reopened["can_undo"].as_bool()), (Some(true), Some(false)));
+    }
+
+    #[test]
+    fn an_svg_is_drawn_large_enough_to_mark_up_and_written_as_a_png() {
+        let folder = tempfile::tempdir().unwrap();
+        let source = folder.path().join("icon.svg");
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="12" fill="#0000ff"/></svg>"##;
+        std::fs::write(&source, svg).unwrap();
+        let id = open(24, 24);
+        stroke(id, "box", [14.0, 14.0], [20.0, 20.0]);
+
+        let answer = ask(json!({
+            "op": "flatten", "id": id, "source": source, "folder": folder.path(), "name": "icon.svg",
+        }));
+        let file = PathBuf::from(answer["file"].as_str().unwrap());
+        assert!(file.ends_with("icon marked up.png"));
+
+        let marked = image::open(&file).unwrap().into_rgba8();
+        assert_eq!(marked.dimensions(), (2560, 2560));
+        assert_eq!(marked.get_pixel(1280, 400).0, [0, 0, 255, 255]);
+        assert_eq!(marked.get_pixel(1280, 1800).0[3], 0, "what the SVG leaves bare stays see-through");
     }
 }

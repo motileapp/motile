@@ -39,6 +39,7 @@ ratex-parser = "=0.1.15"
 ratex-types = "=0.1.15"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "tiff"] }
 tiny-skia = "0.12"
+resvg = { version = "0.50", default-features = false, features = ["text", "system-fonts"] }
 
 [dev-dependencies]
 syn = { version = "2", features = ["full"] }
