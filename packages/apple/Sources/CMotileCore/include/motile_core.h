@@ -35,6 +35,13 @@ char *motile_snooze(const char *input_json);
 // Free the answer with `motile_free_string`.
 char *motile_markup(const char *input_json);
 
+// Draws an SVG `side` pixels on its longer side, on any thread, as premultiplied RGBA, its size in
+// `width` and `height`; null when it can't be drawn. Free the pixels with `motile_free_pixels`.
+unsigned char *motile_svg_draw(const unsigned char *data, unsigned long length, float side, unsigned int *width, unsigned int *height);
+
+// Frees pixels `motile_svg_draw` answered with, `length` bytes long.
+void motile_free_pixels(unsigned char *pixels, unsigned long length);
+
 // Frees a string the core answered with.
 void motile_free_string(char *string);
 

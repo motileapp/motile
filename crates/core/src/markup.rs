@@ -576,17 +576,11 @@ fn is_svg(source: &FilePath) -> bool {
 }
 
 fn draw_svg(source: &FilePath) -> Result<RgbaImage, String> {
-    let data = std::fs::read(source).map_err(|e| e.to_string())?;
-    let mut options = resvg::usvg::Options::default();
-    options.fontdb_mut().load_system_fonts();
-    let tree = resvg::usvg::Tree::from_data(&data, &options).map_err(|e| e.to_string())?;
-    let size = tree.size();
-    let longer = size.width().max(size.height());
-    let scale = longer.clamp(SVG_SIDE, SVG_LARGEST_SIDE) / longer;
-    let (width, height) =
-        ((size.width() * scale).round().max(1.) as u32, (size.height() * scale).round().max(1.) as u32);
-    let mut pixmap = tiny_skia::Pixmap::new(width, height).ok_or("The image is empty.")?;
-    resvg::render(&tree, tiny_skia::Transform::from_scale(scale, scale), &mut pixmap.as_mut());
+    let tree = crate::svg::tree(&std::fs::read(source).map_err(|e| e.to_string())?)?;
+    let longer = tree.size().width().max(tree.size().height());
+    let pixmap =
+        crate::svg::draw_tree(&tree, longer.clamp(SVG_SIDE, SVG_LARGEST_SIDE) / longer).ok_or("The image is empty.")?;
+    let (width, height) = (pixmap.width(), pixmap.height());
     let pixels = pixmap.pixels().iter().flat_map(|pixel| {
         let color = pixel.demultiply();
         [color.red(), color.green(), color.blue(), color.alpha()]

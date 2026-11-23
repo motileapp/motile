@@ -1,4 +1,5 @@
 import AVKit
+import CMotileCore
 import ImageIO
 
 #if os(macOS)
@@ -199,7 +200,7 @@ enum Pictures {
             guard !svg else {
                 guard let data = try? Data(contentsOf: file) else { return finish(nil) }
                 if let size = svgSize(of: data) { learn(key, svgSize: size) }
-                return drawSVG(inked(data, color: color), side: min(maxPixels, svgMaxPixels), done: finish)
+                return finish(drawSVG(inked(data, color: color), side: min(maxPixels, svgMaxPixels)))
             }
             let options: [CFString: Any] = [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -233,25 +234,26 @@ enum Pictures {
         #endif
     }
 
-    /// The SVG drawn `side` pixels on its longer side.
-    static func drawSVG(_ data: Data, side: CGFloat, done: @escaping (CGImage?) -> Void) {
-        #if os(macOS)
-        guard let svg = NSImage(data: data), svg.size.width > 0, svg.size.height > 0 else { return done(nil) }
-        let scale = side / max(svg.size.width, svg.size.height)
-        let (width, height) = (max(1, Int((svg.size.width * scale).rounded())), max(1, Int((svg.size.height * scale).rounded())))
-        guard let canvas = CGContext(
-            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return done(nil) }
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(cgContext: canvas, flipped: false)
-        NSGraphicsContext.current?.imageInterpolation = .high
-        svg.draw(in: NSRect(x: 0, y: 0, width: width, height: height))
-        NSGraphicsContext.restoreGraphicsState()
-        done(canvas.makeImage())
-        #else
-        Task { @MainActor in done(await SVGImage.image(of: data, side: side)?.cgImage) }
-        #endif
+    /// The SVG drawn `side` pixels on its longer side, by the core: on the thread it is asked on.
+    static func drawSVG(_ data: Data, side: CGFloat) -> CGImage? {
+        var (width, height): (UInt32, UInt32) = (0, 0)
+        let drawn = data.withUnsafeBytes { bytes -> UnsafeMutablePointer<UInt8>? in
+            guard let base = bytes.bindMemory(to: UInt8.self).baseAddress else { return nil }
+            return motile_svg_draw(base, UInt(bytes.count), Float(side), &width, &height)
+        }
+        guard let drawn else { return nil }
+        let length = Int(width) * Int(height) * 4
+        let release: CGDataProviderReleaseDataCallback = { _, pixels, size in
+            motile_free_pixels(UnsafeMutablePointer(mutating: pixels.assumingMemoryBound(to: UInt8.self)), UInt(size))
+        }
+        guard let provider = CGDataProvider(dataInfo: nil, data: drawn, size: length, releaseData: release) else {
+            motile_free_pixels(drawn, UInt(length))
+            return nil
+        }
+        return CGImage(
+            width: Int(width), height: Int(height), bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: Int(width) * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
     }
 
     /// How light what the picture draws is on average, weighed by how opaque it is: nil when
@@ -352,10 +354,8 @@ extension MediaFiles {
         DispatchQueue.global(qos: .userInitiated).async {
             guard let svg = try? Data(contentsOf: file) else { return }
             let named = namedCopy(of: file, name: name)
-            Pictures.drawSVG(svg, side: copiedSVGPixels) { image in
-                let png = image.flatMap(pngData)
-                DispatchQueue.main.async { done(named, svg, png) }
-            }
+            let png = Pictures.drawSVG(svg, side: copiedSVGPixels).flatMap(pngData)
+            DispatchQueue.main.async { done(named, svg, png) }
         }
     }
 
@@ -625,6 +625,6 @@ final class MediaBox: FlippedView {
     /// Opens the image or the video in the viewer, which plays a video and fills the screen with it.
     private func pressed() {
         guard let media = content, media.video || picture.picture != nil else { return }
-        owner?.view([ViewedMedia(name: media.name, video: media.video, source: .media(media.id), drawnSize: media.svgSize)], at: 0)
+        owner?.view([ViewedMedia(name: media.name, video: media.video, source: .media(media.id), drawnSize: media.svgSize, pixels: media.pixels)], at: 0)
     }
 }

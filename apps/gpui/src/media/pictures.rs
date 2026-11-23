@@ -97,6 +97,78 @@ impl Checker {
     }
 }
 
+impl Checker {
+    /// The checkerboard over all of its parent, from its top left corner, drawn as one image.
+    pub fn viewer_board(self, c: &Colors) -> impl IntoElement {
+        let colors = self.colors(c);
+        canvas(
+            |_, _, _| {},
+            move |bounds, _, window, cx| {
+                let scale = window.scale_factor();
+                let Some(image) = board_image(self, colors, bounds.size, scale, window, cx) else { return };
+                let drawn = image.size(0);
+                let drawn = size(px(i32::from(drawn.width) as f32 / scale), px(i32::from(drawn.height) as f32 / scale));
+                let _ =
+                    window.paint_image(bounds, Bounds::new(bounds.origin, drawn), Corners::default(), image, 0, false);
+            },
+        )
+        .absolute()
+        .inset_0()
+    }
+}
+
+/// The viewer's checkerboard as an image, drawn again only when the board changes or the viewer
+/// outgrows it.
+#[derive(Default)]
+struct ViewerBoard(Option<(Checker, u32, Arc<RenderImage>)>);
+
+impl Global for ViewerBoard {}
+
+/// What the board image's sides are rounded up to, in pixels, so that a window resized a little
+/// doesn't draw it again.
+const BOARD_STEP: u32 = 512;
+
+fn board_image(
+    checker: Checker,
+    (one, other): (Hsla, Hsla),
+    room: Size<Pixels>,
+    scale: f32,
+    window: &mut Window,
+    cx: &mut App,
+) -> Option<Arc<RenderImage>> {
+    let side = (Checker::SQUARE * scale).round().max(1.) as u32;
+    let needed = |length: Pixels| ((f32::from(length) * scale).ceil().max(1.) as u32).div_ceil(BOARD_STEP) * BOARD_STEP;
+    let (width, height) = (needed(room.width), needed(room.height));
+    if let Some((kept, kept_side, image)) = &cx.default_global::<ViewerBoard>().0 {
+        let drawn = image.size(0);
+        let covers = i32::from(drawn.width) as u32 >= width && i32::from(drawn.height) as u32 >= height;
+        if *kept == checker && *kept_side == side && covers {
+            return Some(image.clone());
+        }
+    }
+    let bgra = |color: Hsla| {
+        let color = Rgba::from(color);
+        let byte = |value: f32| (value.clamp(0., 1.) * 255.).round() as u8;
+        [byte(color.b), byte(color.g), byte(color.r), byte(color.a)]
+    };
+    let (one, other) = (bgra(one), bgra(other));
+    let row = |first: u32| -> Vec<u8> {
+        (0..width).flat_map(|x| if (x / side + first).is_multiple_of(2) { one } else { other }).collect()
+    };
+    let rows = [row(0), row(1)];
+    let mut pixels = Vec::with_capacity(width as usize * height as usize * 4);
+    for y in 0..height {
+        pixels.extend_from_slice(&rows[(y / side % 2) as usize]);
+    }
+    let pixels = image::RgbaImage::from_raw(width, height, pixels)?;
+    let image = Arc::new(RenderImage::new(vec![image::Frame::new(pixels)]));
+    let old = cx.default_global::<ViewerBoard>().0.replace((checker, side, image.clone()));
+    if let Some((_, _, old)) = old {
+        cx.drop_image(old, Some(window));
+    }
+    Some(image)
+}
+
 /// Calls `paint` with each square of the board over `bounds` that can be seen, from its top left
 /// corner, and whether it is of the second colour.
 fn for_visible_squares(

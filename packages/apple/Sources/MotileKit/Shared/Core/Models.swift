@@ -1471,6 +1471,8 @@ struct ViewedMedia: Equatable {
     /// An SVG's size as its row shows it, which the viewer opens it at, enlarged from its own size
     /// when that is smaller.
     var drawnSize: CGSize?
+    /// Its size in pixels, for the viewer to show its row's picture at at once.
+    var pixels: CGSize?
 }
 
 /// What the viewer has open: the images and videos of one message or of the composer, and

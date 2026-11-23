@@ -988,6 +988,7 @@ impl Attachment {
                 source: MediaSource::File(file.clone()),
                 attachment: Some(self.id.clone()),
                 opens_at: None,
+                pixels: None,
             });
         }
         self.media.as_ref().map(|media| ViewedMedia {
@@ -996,6 +997,7 @@ impl Attachment {
             source: MediaSource::Media(media.clone()),
             attachment: Some(self.id.clone()),
             opens_at: None,
+            pixels: None,
         })
     }
 }
@@ -1017,6 +1019,9 @@ pub struct ViewedMedia {
     /// The size in points it opens at, when not its picture's own: an SVG's, which is drawn far
     /// larger than it is shown so that zooming in stays sharp.
     pub opens_at: Option<(f32, f32)>,
+    /// Its picture's size in pixels as the core knows it, which the viewer opens it at before its
+    /// file is here.
+    pub pixels: Option<(u32, u32)>,
 }
 
 /// What the viewer has open: the images and videos of one message or of the composer, and

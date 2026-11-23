@@ -130,6 +130,46 @@ pub extern "C" fn motile_markup(input_json: *const c_char) -> *mut c_char {
     CString::new(answer).unwrap_or_default().into_raw()
 }
 
+/// Draws an SVG `side` pixels on its longer side (`svg::draw`), on any thread, as premultiplied
+/// RGBA with its size in `width` and `height`; null when it can't be drawn. The pixels are the
+/// caller's to free with `motile_free_pixels`.
+///
+/// # Safety
+///
+/// `data` points to `length` bytes; `width` and `height` point to writable integers.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn motile_svg_draw(
+    data: *const u8,
+    length: usize,
+    side: f32,
+    width: *mut u32,
+    height: *mut u32,
+) -> *mut u8 {
+    if data.is_null() || width.is_null() || height.is_null() {
+        return std::ptr::null_mut();
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(data, length) };
+    let Some((drawn_width, drawn_height, pixels)) = crate::svg::draw(bytes, side) else { return std::ptr::null_mut() };
+    unsafe {
+        *width = drawn_width;
+        *height = drawn_height;
+    }
+    Box::into_raw(pixels.into_boxed_slice()).cast()
+}
+
+/// Frees pixels `motile_svg_draw` answered with.
+///
+/// # Safety
+///
+/// `pixels` is null or what `motile_svg_draw` answered, `length` bytes long, freed only once.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn motile_free_pixels(pixels: *mut u8, length: usize) {
+    if pixels.is_null() {
+        return;
+    }
+    drop(unsafe { Box::from_raw(std::ptr::slice_from_raw_parts_mut(pixels, length)) });
+}
+
 /// Frees a string the core gave the client.
 ///
 /// # Safety

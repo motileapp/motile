@@ -289,6 +289,7 @@ pub fn attached_files(
                 source: MediaSource::Media(media.clone()),
                 attachment: None,
                 opens_at: None,
+                pixels: None,
             })
         })
         .collect();
@@ -460,6 +461,7 @@ pub fn picture_box(shown: Shown, ctx: &RowContext, window: &mut Window, cx: &mut
         source: MediaSource::Media(media.clone()),
         attachment: None,
         opens_at: opens_at(&media, width, height),
+        pixels: width.zip(height),
     }];
     let open = {
         let store = ctx.store.clone();

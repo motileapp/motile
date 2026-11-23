@@ -170,7 +170,7 @@ private object Viewer {
     val markupControls = PaddingValues(top = barGap + GlassButton.side + 8.dp, bottom = barGap + floatingHeight + 8.dp)
     /** How much of the picture around the pin whose note is written stays in sight. */
     val pinMargin = 16.dp
-    /** How far clear of the safe area's sides, and of the buttons at the top and bottom, a zoomed picture's edges can be brought. */
+    /** How far clear of the buttons at the top and bottom a zoomed picture's edges can be brought. */
     val edgeGap = 16.dp
 }
 
@@ -455,6 +455,13 @@ private sealed interface Loaded {
     class Other(val file: File) : Loaded
 }
 
+/** The picture the media row decoded, with what it learned of it, for the viewer to show at once. */
+private fun rowPicture(item: ViewedMedia): Loaded.Picture? {
+    val id = (item.source as? ViewedMedia.Source.Media)?.id?.takeUnless { item.video } ?: return null
+    val image = PictureCache.cached(id) ?: return null
+    return Loaded.Picture(image, PictureCache.ink(id), PictureCache.svgSize(id))
+}
+
 /** One image or video of the viewer, fetched when it is the one shown or next to it. An image marked up shows `original` in its place when it has one. */
 @Composable
 private fun MediaPage(
@@ -472,7 +479,8 @@ private fun MediaPage(
     tapped: () -> Unit,
 ) {
     val store = LocalStore.current
-    var loaded by remember(item) { mutableStateOf<Loaded?>(null) }
+    // The picture the row already decoded is shown at once, at its size and on its board, until the sharp copy is.
+    var loaded by remember(item) { mutableStateOf<Loaded?>(rowPicture(item)) }
     val palette = LocalPalette.current
     val checker = (loaded as? Loaded.Picture)?.ink?.let { PictureCache.checker(it, palette) }
     LaunchedEffect(checker) { onChecker(checker) }
@@ -495,13 +503,16 @@ private fun MediaPage(
             val svgSize = if (file.extension.equals("svg", ignoreCase = true)) runCatching { Pictures.svgSize(file.readText()) }.getOrNull() else null
             Pictures.decode(file, 6144)?.let { Loaded.Picture(it.asImageBitmap(), Pictures.inkLuminance(it), svgSize) }
         }
-        loaded = picture
+        if (picture != null) loaded = picture
         failed = picture == null
         picture?.image?.let(onPicture)
     }
     val tapping = Modifier.fillMaxSize().pointerInput(tapped) { detectTapGestures(onTap = { tapped() }) }
     when (val shownNow = loaded) {
-        is Loaded.Picture -> ZoomableImage(original ?: shownNow.image, shownNow.svgSize.takeIf { original == null }, item.drawnSize, checker, markup, controls, onZoom, tapped)
+        is Loaded.Picture -> {
+            val (svgSize, pixels) = if (original == null) shownNow.svgSize to item.pixels else null to null
+            ZoomableImage(original ?: shownNow.image, svgSize, pixels, item.drawnSize, checker, markup, controls, onZoom, tapped)
+        }
         is Loaded.Video -> VideoPlayer(shownNow.file, playing = shown, Modifier.fillMaxSize().padding(vertical = Viewer.room)) {
             loaded = Loaded.Other(shownNow.file)
         }
@@ -565,7 +576,7 @@ private class Framing {
     var origin by mutableStateOf(Offset.Zero)
         private set
     private var gliding: Job? = null
-    /** How far past each edge a zoomed picture moves, in pixels, so every edge can be brought clear of the buttons. */
+    /** How far past its top and bottom a zoomed picture moves, in pixels, so both can be brought clear of the buttons. */
     var edgeRoom = Edges()
 
     /** The zoom the picture is at its actual size at: 1 but for an SVG, drawn larger than its own size. */
@@ -586,12 +597,21 @@ private class Framing {
     /** An image enlarged to fit can still be shown at its real size. */
     private val smallest: Float get() = min(fit, actual)
 
+    /** Shows the picture; a sharper copy of the one shown takes its place where it is, as large on screen. */
     fun show(image: ImageBitmap, actual: Float, largest: Float) {
         if (image.width == width && image.height == height && actual == this.actual && largest == this.largest && zoom > 0f) return
+        val sameShape = abs(image.width.toFloat() / image.height - width.toFloat() / height) < 0.01f
+        val sameSize = abs(actual * image.width / (this.actual * width) - 1f) < 0.01f
+        val copy = zoom > 0f && sameShape && sameSize
+        val scale = width.toFloat() / image.width
         width = image.width
         height = image.height
         this.actual = actual
         this.largest = largest
+        if (copy) {
+            zoom *= scale
+            return
+        }
         settle(reset = true)
     }
 
@@ -696,21 +716,19 @@ private class Framing {
  * zoom it. It fits between the `controls` over it and keeps the pin whose note is written in sight.
  */
 @Composable
-private fun ZoomableImage(image: ImageBitmap, svgSize: Pair<Float, Float>?, drawnSize: Pair<Float, Float>?, checker: Checker?, markup: MarkupSession?, controls: PaddingValues?, onZoom: (Boolean) -> Unit, tapped: () -> Unit) {
+private fun ZoomableImage(image: ImageBitmap, svgSize: Pair<Float, Float>?, pixels: Pair<Float, Float>?, drawnSize: Pair<Float, Float>?, checker: Checker?, markup: MarkupSession?, controls: PaddingValues?, onZoom: (Boolean) -> Unit, tapped: () -> Unit) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val framing = remember { Framing() }
     val clear = covered(controls)
-    val actual = svgSize?.let { (width, _) -> width * density.density / image.width } ?: 1f
+    // Its actual size on screen, whatever the size of the copy shown: an SVG's own, or else the image's pixels.
+    val actualWidth = svgSize?.let { it.first * density.density } ?: pixels?.first ?: image.width.toFloat()
+    val actual = actualWidth / image.width
     val safe = WindowInsets.safeDrawing
-    val direction = LocalLayoutDirection.current
     val edgeRoom = with(density) {
         val gap = Viewer.edgeGap.toPx()
         val buttons = (GlassButton.side + Viewer.barGap).toPx()
-        Edges(
-            safe.getLeft(density, direction) + gap, safe.getTop(density) + buttons + gap,
-            safe.getRight(density, direction) + gap, safe.getBottom(density) + buttons + gap,
-        )
+        Edges(top = safe.getTop(density) + buttons + gap, bottom = safe.getBottom(density) + buttons + gap)
     }
     SideEffect {
         framing.edgeRoom = edgeRoom

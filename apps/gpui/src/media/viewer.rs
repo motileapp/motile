@@ -10,6 +10,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use super::markup::{self, MarkupSession, MarkupTool, ink_color, ink_contrast};
+use super::pictures::{Picture, Pictures, Shown};
 use super::zoom::ZoomableImage;
 use super::{MediaFiles, SAVE_TITLE};
 use crate::models::{MediaSource, SavedMarkup, ViewedMedia};
@@ -126,6 +127,7 @@ impl MediaViewer {
         }
         self.image = None;
         let Some(item) = item else { return };
+        self.show_row_picture(&item, cx);
         match &item.source {
             MediaSource::File(file) => self.show(item.clone(), Ok(file.clone()), cx),
             MediaSource::Media(id) => {
@@ -149,7 +151,10 @@ impl MediaViewer {
         };
         self.file = Some(file.clone());
         if !item.video {
-            self.image = Some(self.zoomable(&file, cx));
+            match &self.image {
+                Some(image) => image.update(cx, |image, cx| image.set_file(file, cx)),
+                None => self.image = Some(self.zoomable(Some(&file), None, cx)),
+            }
             return cx.notify();
         }
         // A video the system's player can't play opens in the app the system has for it.
@@ -166,10 +171,30 @@ impl MediaViewer {
         cx.notify();
     }
 
-    fn zoomable(&self, file: &Path, cx: &mut Context<Self>) -> Entity<ZoomableImage> {
+    /// Shows at once the picture the item's row has already decoded, as large as the file's, until
+    /// the file is here and its own picture decoded.
+    fn show_row_picture(&mut self, item: &ViewedMedia, cx: &mut Context<Self>) {
+        let MediaSource::Media(id) = &item.source else { return };
+        if item.video {
+            return;
+        }
+        let Some(Picture::Ready(shown)) = Pictures::known(id, cx) else { return };
+        self.image = Some(self.zoomable(None, Some((shown, item.pixels)), cx));
+    }
+
+    fn zoomable(
+        &self,
+        file: Option<&Path>,
+        first: Option<(Shown, Option<(u32, u32)>)>,
+        cx: &mut Context<Self>,
+    ) -> Entity<ZoomableImage> {
         let (viewer, menu) = (cx.entity().downgrade(), cx.entity().downgrade());
         let opens_at = self.shown.as_ref().and_then(|item| item.opens_at);
-        let image = ZoomableImage::new(file, size(MARGIN.0, MARGIN.1), 0.)
+        let mut image = ZoomableImage::new(file, size(MARGIN.0, MARGIN.1), 0.);
+        if let Some((shown, pixels)) = first {
+            image = image.showing_first(shown, pixels);
+        }
+        let image = image
             .opens_at(opens_at)
             .room_past_edges(2. * CORNER_INSET + ControlSize::Large.height())
             .largest_fit(LARGEST_FIT)
@@ -211,7 +236,7 @@ impl MediaViewer {
             let opened = MarkupSession::open(file, item.name, item.attachment, pixels, None);
             return self.begin_markup(opened, window, cx);
         };
-        self.image = Some(self.zoomable(&saved.original, cx));
+        self.image = Some(self.zoomable(Some(&saved.original), None, cx));
         self.resuming = Some(saved);
         self.resume_markup(window, cx);
     }
@@ -278,7 +303,7 @@ impl MediaViewer {
         let reload = Some(&markup.read(cx).source) != self.file.as_ref();
         (self.resuming, self.noted, self.discarding, self._markup_changes) = (None, None, false, None);
         match (reload, self.file.clone()) {
-            (true, Some(file)) => self.image = Some(self.zoomable(&file, cx)),
+            (true, Some(file)) => self.image = Some(self.zoomable(Some(&file), None, cx)),
             _ => {
                 if let Some(image) = &self.image {
                     image.update(cx, |image, cx| {

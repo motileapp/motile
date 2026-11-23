@@ -951,7 +951,7 @@ impl RightPanelView {
         {
             return image.clone();
         }
-        let image = cx.new(|_| ZoomableImage::new(file, size(16., 16.), 0.));
+        let image = cx.new(|_| ZoomableImage::new(Some(file), size(16., 16.), 0.));
         self.zooms.insert(tab.clone(), (file.to_path_buf(), image.clone()));
         image
     }

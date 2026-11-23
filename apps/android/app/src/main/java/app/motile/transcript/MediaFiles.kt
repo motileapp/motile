@@ -41,6 +41,8 @@ object PictureCache {
     }
     /** How light what each picture with see-through parts draws is, by the picture's key. */
     private val inks = LruCache<String, Double>(1024)
+    /** Each SVG's own size, by the picture's key. */
+    private val svgSizes = LruCache<String, Pair<Float, Float>>(256)
 
     /** An SVG is kept for the appearance it was drawn in, since its `currentColor` is the text's. */
     private fun svgKey(key: String, dark: Boolean) = "$key#${if (dark) "dark" else "light"}"
@@ -53,15 +55,22 @@ object PictureCache {
 
     /** The image, no larger than `maxPixels` on a side, kept under `key`. */
     suspend fun decode(file: File, key: String, maxPixels: Int): ImageBitmap? = withContext(Dispatchers.IO) {
-        val kept = if (file.extension.equals("svg", ignoreCase = true)) svgKey(key, Theme.dark) else key
+        val svg = file.extension.equals("svg", ignoreCase = true)
+        val kept = if (svg) svgKey(key, Theme.dark) else key
+        if (svg) runCatching { Pictures.svgSize(file.readText()) }.getOrNull()?.let { svgSizes.put(key, it) }
         val bitmap = Pictures.decode(file, maxPixels) ?: return@withContext null
         Pictures.inkLuminance(bitmap)?.let { inks.put(kept, it) }
         bitmap.asImageBitmap().also { cache.put(kept, it) }
     }
 
+    /** How light what the picture kept under `key` draws is, when it has see-through parts. */
+    fun ink(key: String?): Double? = key?.let { inks.get(it) ?: inks.get(svgKey(it, Theme.dark)) }
+
+    /** The own size of the SVG kept under `key`. */
+    fun svgSize(key: String): Pair<Float, Float>? = svgSizes.get(key)
+
     /** The checkerboard behind the picture kept under `key`: `checker(ink)` of what it draws. */
-    fun checker(key: String?, palette: Palette): Checker =
-        checker(key?.let { inks.get(it) ?: inks.get(svgKey(it, Theme.dark)) }, palette)
+    fun checker(key: String?, palette: Palette): Checker = checker(ink(key), palette)
 
     /**
      * The checkerboard behind a picture: the dark one under what draws in light colours, `ink`, the

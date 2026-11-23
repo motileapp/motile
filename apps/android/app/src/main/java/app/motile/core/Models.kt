@@ -1418,6 +1418,8 @@ data class ViewedMedia(
     val attachment: String? = null,
     /** The size an SVG opens at, in dp: its row's, which it isn't enlarged past to fit. */
     val drawnSize: Pair<Float, Float>? = null,
+    /** Its size in pixels, for the viewer to show its row's picture at at once. */
+    val pixels: Pair<Float, Float>? = null,
 ) {
     sealed interface Source {
         data class LocalFile(val file: File) : Source

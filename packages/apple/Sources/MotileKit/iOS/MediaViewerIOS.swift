@@ -338,6 +338,8 @@ private struct MediaPage: View {
     @State private var checker: Pictures.Checker?
     /// An SVG's own size, which is its actual size: it is drawn far larger, to stay sharp zoomed.
     @State private var svgSize: CGSize?
+    /// The picture's size in points, known before it is decoded.
+    @State private var pictureSize: CGSize?
 
     private enum Loaded {
         case image(CGImage, scale: CGFloat)
@@ -371,7 +373,7 @@ private struct MediaPage: View {
             let shown = markupPicture ?? image
             ZoomableImage(
                 image: shown,
-                size: svgSize ?? CGSize(width: CGFloat(shown.width) / scale, height: CGFloat(shown.height) / scale),
+                size: svgSize ?? pictureSize ?? CGSize(width: CGFloat(shown.width) / scale, height: CGFloat(shown.height) / scale),
                 margin: .zero,
                 largestFit: Self.largestFit(svgSize, opening: item.drawnSize),
                 onZoom: { zoomed = $0 },
@@ -424,6 +426,7 @@ private struct MediaPage: View {
 
     private func load() {
         (failed, fraction, shownChecker) = (false, nil, nil)
+        showRowPicture()
         let show = { (url: URL?) in
             guard let url else { return failed = true }
             file = url
@@ -434,8 +437,8 @@ private struct MediaPage: View {
                     checker = Pictures.isSeenThrough(id) ? Pictures.checker(behind: id) : nil
                     svgSize = Pictures.svgSize(id)
                     if shown { shownChecker = checker }
-                    loaded = image.map { .image($0, scale: scale) }
-                    failed = image == nil
+                    loaded = image.map { .image($0, scale: scale) } ?? loaded
+                    failed = loaded == nil
                     if shown { picture = image }
                 }
             }
@@ -448,6 +451,18 @@ private struct MediaPage: View {
         case .file(let url): show(url)
         case .media(let id): store.media(id, done: show)
         }
+    }
+
+    /// Shows at once the picture its row has decoded, at its size and on its checkerboard, while the
+    /// sharp one is decoded to take its place.
+    private func showRowPicture() {
+        guard !item.video, case .media(let id) = item.source, let row = Pictures.cached(id) else { return }
+        let scale = Platform.pixelsPerPoint
+        checker = Pictures.isSeenThrough(id) ? Pictures.checker(behind: id) : nil
+        svgSize = Pictures.svgSize(id)
+        pictureSize = item.pixels.map { CGSize(width: $0.width / scale, height: $0.height / scale) }
+        if shown { shownChecker = checker }
+        loaded = .image(row, scale: scale)
     }
 }
 
@@ -630,11 +645,14 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
         return max(0.01, min(largestFit, width, height))
     }
 
+    /// Shows the picture, fitted, or in place of one of the same size without moving or zooming.
     func show(_ image: AnyObject, size: CGSize) {
         guard shown !== image else { return }
+        let replacing = shown != nil && picture.bounds.size == size
         shown = image
-        zoomScale = 1
         picture.image = (image as? UIImage) ?? UIImage(cgImage: image as! CGImage)
+        guard !replacing else { return }
+        zoomScale = 1
         picture.frame = CGRect(origin: .zero, size: size)
         contentSize = size
         refit(reset: true)
@@ -682,18 +700,13 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
         center()
     }
 
-    /// How far past its sides a zoomed-in picture scrolls.
-    private static let sideRoom: CGFloat = 16
-
     /// Centres a picture smaller than what is left clear in its middle. A zoomed-in one scrolls past
-    /// its edges, clear of the safe area and of `edgeRoom` above and below.
+    /// its top and bottom, clear of the safe area and of `edgeRoom`.
     private func center() {
         let across = (bounds.width - clear.left - clear.right - contentSize.width) / 2
         let down = (bounds.height - clear.top - clear.bottom - contentSize.height) / 2
         let room = zoomScale > fitted + 0.001
-            ? UIEdgeInsets(
-                top: safeAreaInsets.top + edgeRoom, left: safeAreaInsets.left + Self.sideRoom,
-                bottom: safeAreaInsets.bottom + edgeRoom, right: safeAreaInsets.right + Self.sideRoom)
+            ? UIEdgeInsets(top: safeAreaInsets.top + edgeRoom, left: 0, bottom: safeAreaInsets.bottom + edgeRoom, right: 0)
             : .zero
         contentInset = UIEdgeInsets(
             top: clear.top + max(down, room.top), left: clear.left + max(across, room.left),

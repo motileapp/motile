@@ -22,6 +22,8 @@ struct MediaViewer: View {
     @State private var checker: Pictures.Checker?
     /// An SVG's own size, which is its actual size: it is drawn far larger, to stay sharp zoomed.
     @State private var svgSize: CGSize?
+    /// The picture's size in points, known before it is decoded.
+    @State private var pictureSize: CGSize?
     @State private var copies = 0
     @State private var markup: MarkupSession?
     @State private var discarding: Discarding?
@@ -267,7 +269,7 @@ struct MediaViewer: View {
         case .image(let image, let scale):
             ZoomableImage(
                 image: image,
-                size: svgSize ?? CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale),
+                size: svgSize ?? pictureSize ?? CGSize(width: CGFloat(image.width) / scale, height: CGFloat(image.height) / scale),
                 margin: markup == nil ? ZoomingScrollView.viewerMargin : Self.markupMargin,
                 largestFit: Self.largestFit(svgSize, opening: item.drawnSize),
                 menu: menu,
@@ -276,6 +278,7 @@ struct MediaViewer: View {
                 checker: checker,
                 edgeRoom: Self.edgeRoom
             )
+            .id(viewing.index)
             .ignoresSafeArea()
         case .video(let player):
             PlayerView(player: player, ready: $playerReady, fullScreen: $fullScreen, menu: menu)
@@ -307,8 +310,8 @@ struct MediaViewer: View {
     private static let buttonGap: CGFloat = 8
     /// The room between the corner's buttons and the window's top and trailing edges.
     private static let cornerInset: CGFloat = 16
-    /// How far past its edges a zoomed-in picture scrolls: clear of the buttons over it, and as far
-    /// again from them.
+    /// How far past its top and bottom a zoomed-in picture scrolls: clear of the buttons over it,
+    /// and as far again from them.
     private static let edgeRoom = 2 * cornerInset + ControlSize.large.height
     /// The room on each side of the name: what all four corner buttons take and a gap, the same
     /// on both sides so the name stays centered and doesn't move when the buttons come in.
@@ -321,6 +324,16 @@ struct MediaViewer: View {
         width: ZoomingScrollView.viewerMargin.width, height: cornerInset + 8 + ControlSize.large.height + 12 + 12)
     /// The same beside Cancel and Add to Message.
     private static let markupNameInset: CGFloat = 300
+
+    /// Shows at once the picture its row has decoded, at its size and on its checkerboard, while the
+    /// sharp one is decoded to take its place.
+    private func showRowPicture(_ item: ViewedMedia, scale: CGFloat) {
+        guard !item.video, case .media(let id) = item.source, let shown = Pictures.cached(id) else { return }
+        checker = Pictures.isSeenThrough(id) ? Pictures.checker(behind: id) : nil
+        svgSize = Pictures.svgSize(id)
+        pictureSize = item.pixels.map { CGSize(width: $0.width / scale, height: $0.height / scale) }
+        loaded = .image(shown, scale: scale)
+    }
 
     /// How much a picture is enlarged to fit at most: an SVG up to the size its row shows it at.
     static func largestFit(_ svgSize: CGSize?, opening drawn: CGSize?) -> CGFloat {
@@ -388,20 +401,21 @@ struct MediaViewer: View {
 
     private func load(_ item: ViewedMedia) {
         pause()
-        (loaded, failed, fraction, playerReady, file, checker, svgSize) = (nil, false, nil, false, nil, nil, nil)
+        (loaded, failed, fraction, playerReady, file, checker, svgSize, pictureSize) = (nil, false, nil, false, nil, nil, nil, nil)
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        showRowPicture(item, scale: scale)
         let show = { (file: URL?) in
             guard viewing.item == item else { return }
             guard let file else { return failed = true }
             self.file = file
             guard item.video else {
-                let scale = NSScreen.main?.backingScaleFactor ?? 2
                 return Pictures.decode(file, id: "view:\(file.path)", maxPixels: 8192) { image in
                     guard viewing.item == item else { return }
                     let id = "view:\(file.path)"
                     checker = Pictures.isSeenThrough(id) ? Pictures.checker(behind: id) : nil
                     svgSize = Pictures.svgSize(id)
-                    loaded = image.map { .image($0, scale: scale) }
-                    failed = image == nil
+                    loaded = image.map { .image($0, scale: scale) } ?? loaded
+                    failed = loaded == nil
                 }
             }
             // A video the Mac's player can't play opens in the app the Mac has for it.
@@ -492,7 +506,7 @@ struct ZoomableImage: NSViewRepresentable {
     var markup: MarkupSession?
     /// The checkerboard all of the view shows behind it, with a frame at its edges.
     var checker: Pictures.Checker?
-    /// How far past its edges it scrolls once it is larger than the view, at least its margin.
+    /// How far past its top and bottom it scrolls once it is taller than the view, at least its margin.
     var edgeRoom: CGFloat = 0
 
     func makeNSView(context: Context) -> ZoomingScrollView {
@@ -583,11 +597,11 @@ final class ZoomingScrollView: NSScrollView {
         didSet { placeEdges() }
     }
 
-    /// A picture larger than the view scrolls past each of its edges, so that every edge can be
-    /// brought clear of the buttons over the view.
+    /// A picture taller than the view scrolls past its top and bottom, so that they can be brought
+    /// clear of the buttons over the view.
     private func placeEdges() {
-        let (across, down) = (max(margin.width, edgeRoom), max(margin.height, edgeRoom))
-        contentInsets = NSEdgeInsets(top: down, left: across, bottom: down, right: across)
+        let down = max(margin.height, edgeRoom)
+        contentInsets = NSEdgeInsets(top: down, left: 0, bottom: down, right: 0)
     }
 
     /// Zooms out to a quarter of fitting, or of its real size if that is smaller, and in to eight
@@ -634,9 +648,11 @@ final class ZoomingScrollView: NSScrollView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
+    /// Shows the picture, fitted, or in place of one of the same size without moving or zooming.
     func show(_ image: AnyObject, size: CGSize) {
         guard picture.layer?.contents as AnyObject? !== image else { return }
         picture.layer?.contents = image
+        guard picture.frame.size != size else { return }
         picture.setFrameSize(size)
         limitZoom()
         magnification = fit

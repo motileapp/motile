@@ -13,7 +13,7 @@ use gpui_kit::prelude::*;
 use gpui_kit::*;
 
 use super::markup::MarkupSession;
-use super::pictures::{Picture, Pictures};
+use super::pictures::{Picture, Pictures, Shown};
 use crate::theme::{ControlSize, DARK, Surface, TextSize, colors};
 use crate::transcript::canvas::{Palette, paint_stretched};
 use crate::ui::Spinner;
@@ -34,7 +34,11 @@ type ClickedBeside = Rc<dyn Fn(&mut Window, &mut App)>;
 type RightClicked = Rc<dyn Fn(Point<Pixels>, &mut Window, &mut App)>;
 
 pub struct ZoomableImage {
-    file: PathBuf,
+    /// Its file, once it is on this device.
+    file: Option<PathBuf>,
+    /// What is shown until the file's own picture is decoded: the picture a row has already, and
+    /// the size in pixels of the file's.
+    first: Option<(Shown, Option<(u32, u32)>)>,
     /// The room it leaves around it when it fits.
     margin: Size<f32>,
     radius: f32,
@@ -42,7 +46,7 @@ pub struct ZoomableImage {
     largest_fit: f32,
     /// The size in points it opens at, when not fitted as usual: an SVG's row's.
     opens_at: Option<f32>,
-    /// The least room it can be moved past each of its edges: `room_past_edges`.
+    /// The least room it can be moved past its top and bottom edges: `room_past_edges`.
     past_edges: f32,
     /// It lies over a picture's darkness, as in the viewer, where a picture with see-through parts
     /// lies on its checkerboard, framed.
@@ -71,6 +75,11 @@ pub struct ZoomableImage {
     _markup_changes: Option<Subscription>,
 }
 
+/// The file's own picture, decoded as large as zooming in wants it.
+fn sharp(file: &Path, cx: &mut App) -> Picture {
+    Pictures::load_file(&format!("view:{}", file.display()), file, MAX_PIXELS, cx)
+}
+
 /// The image whose keys ⌘+, ⌘−, ⌘0 and ⌘9 are, when one has them.
 #[derive(Default)]
 struct ZoomKeys(Option<WeakEntity<ZoomableImage>>);
@@ -78,9 +87,10 @@ struct ZoomKeys(Option<WeakEntity<ZoomableImage>>);
 impl Global for ZoomKeys {}
 
 impl ZoomableImage {
-    pub fn new(file: &Path, margin: Size<f32>, radius: f32) -> Self {
+    pub fn new(file: Option<&Path>, margin: Size<f32>, radius: f32) -> Self {
         Self {
-            file: file.to_path_buf(),
+            file: file.map(Path::to_path_buf),
+            first: None,
             margin,
             radius,
             largest_fit: 1.,
@@ -104,8 +114,8 @@ impl ZoomableImage {
         }
     }
 
-    /// The least room it can be moved past each edge of its own when zoomed in, clear of what lies
-    /// at the room's edges, when that is more than its margin.
+    /// The least room it can be moved past its top and bottom edges when zoomed in, clear of what
+    /// lies at the room's edges, when that is more than its margin.
     pub fn room_past_edges(mut self, room: f32) -> Self {
         self.past_edges = room;
         self
@@ -137,13 +147,23 @@ impl ZoomableImage {
         self
     }
 
-    /// The picture's pixels as it was decoded, once it is.
+    /// Shows `shown` at once, as large as a picture of `pixels` is, until the file's own picture
+    /// is decoded.
+    pub fn showing_first(mut self, shown: Shown, pixels: Option<(u32, u32)>) -> Self {
+        self.first = Some((shown, pixels));
+        self
+    }
+
+    /// Takes its file, whose picture replaces the first one where it lies once it is decoded.
+    pub fn set_file(&mut self, file: PathBuf, cx: &mut Context<Self>) {
+        self.file = Some(file);
+        cx.notify();
+    }
+
+    /// The file's own picture's pixels as it was decoded, once it is.
     pub fn picture_size(image: &Entity<Self>, cx: &mut App) -> Option<(u32, u32)> {
-        let file = image.read(cx).file.clone();
-        let Picture::Ready(shown) = Pictures::load_file(&format!("view:{}", file.display()), &file, MAX_PIXELS, cx)
-        else {
-            return None;
-        };
+        let file = image.read(cx).file.clone()?;
+        let Picture::Ready(shown) = sharp(&file, cx) else { return None };
         Some((shown.width, shown.height))
     }
 
@@ -224,12 +244,20 @@ impl ZoomableImage {
     }
 
     /// The picture, and its size in points: an SVG's own, or its pixels at the display's scale.
+    /// The first picture stands in for the file's own until that is decoded.
     fn picture(&self, cx: &mut App) -> (Picture, Size<f32>) {
-        let picture = Pictures::load_file(&format!("view:{}", self.file.display()), &self.file, MAX_PIXELS, cx);
-        let Picture::Ready(shown) = &picture else { return (picture, size(0., 0.)) };
+        let sharp = self.file.as_ref().map(|file| sharp(file, cx));
         let scale = self.pixels_per_point;
-        let points = shown.svg_size.unwrap_or(size(shown.width as f32 / scale, shown.height as f32 / scale));
-        (picture, points)
+        if let Some(Picture::Ready(shown)) = &sharp {
+            let points = shown.svg_size.unwrap_or(size(shown.width as f32 / scale, shown.height as f32 / scale));
+            return (Picture::Ready(shown.clone()), points);
+        }
+        if let Some((shown, pixels)) = &self.first {
+            let (width, height) = pixels.unwrap_or((shown.width, shown.height));
+            let points = shown.svg_size.unwrap_or(size(width as f32 / scale, height as f32 / scale));
+            return (Picture::Ready(shown.clone()), points);
+        }
+        (sharp.unwrap_or(Picture::Loading), size(0., 0.))
     }
 
     /// The scale at which the image fits its room, never larger than `largest_fit`.
@@ -298,14 +326,15 @@ impl ZoomableImage {
         cx.notify();
     }
 
-    /// Keeps the picture centred while it and its margin fit in the room, and otherwise lets it
-    /// move until each edge is its margin clear of the room's, past what lies at the room's edges.
+    /// Keeps the picture centred while it fits in the room, with its margin above and below, and
+    /// otherwise lets it move until its sides meet the room's and its top and bottom are its margin
+    /// clear of the room's, past what lies there.
     fn clamp_offset(&mut self, points: Size<f32>) {
         let room = self.bounds.get().size;
         let scale = self.scale.unwrap_or(self.fit(points));
         let spare =
             |length: f32, margin: f32, room: Pixels| ((length * scale + 2. * margin - f32::from(room)) / 2.).max(0.);
-        let spare_x = spare(points.width, self.margin.width.max(self.past_edges), room.width);
+        let spare_x = spare(points.width, 0., room.width);
         let spare_y = spare(points.height, self.margin.height.max(self.past_edges), room.height);
         self.offset.x = self.offset.x.clamp(px(-spare_x), px(spare_x));
         self.offset.y = self.offset.y.clamp(px(-spare_y), px(spare_y));
@@ -406,7 +435,7 @@ impl Render for ZoomableImage {
             .relative()
             .overflow_hidden()
             .when(self.markup.is_some(), |zoomable| zoomable.cursor(CursorStyle::Crosshair))
-            .when_some(checker, |zoomable, checker| zoomable.child(checker.board(0., c)))
+            .when_some(checker, |zoomable, checker| zoomable.child(checker.viewer_board(c)))
             .child(tracked)
             // A press anywhere drags the picture, or draws while it is marked up; a double click on
             // it zooms, and a click beside it that didn't drag says so.

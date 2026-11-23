@@ -115,7 +115,7 @@ class RowModel(
     val mediaShown: ViewedMedia?
         get() {
             val media = (kind as? Kind.Media)?.content ?: return null
-            return ViewedMedia(media.name, media.video, ViewedMedia.Source.Media(media.id), drawnSize = media.svgSize)
+            return ViewedMedia(media.name, media.video, ViewedMedia.Source.Media(media.id), drawnSize = media.svgSize, pixels = media.pixels)
         }
 
     fun applySpans(spans: IntArray) {

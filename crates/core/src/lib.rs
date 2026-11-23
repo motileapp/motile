@@ -33,5 +33,6 @@ pub mod ricrac;
 pub mod search;
 pub mod skills;
 pub mod snooze;
+pub mod svg;
 pub mod sync;
 pub mod usage;
