@@ -34,7 +34,7 @@ use crate::models::{ComposerPickerPart, ThreadInfo, access_label, section_label}
 use crate::store::Store;
 use crate::theme::{self, ControlSize, IconSize, Surface, TextSize, colors};
 use crate::ui::control::Look;
-use crate::ui::menu::Anchor;
+use crate::ui::menu::{Anchor, Menu};
 use crate::ui::{ActionButton, GatewayMark, Variant, edges, icons, logos, text_width};
 
 pub const RADIUS: f32 = theme::Radius::XXL;
@@ -612,9 +612,9 @@ impl Composer {
         )
     }
 
-    /// Stops the turn that runs, and sends what is written or queues it behind that turn. While the
-    /// client tries to reach the server neither works, and the last of them waits for it, sending
-    /// signals.
+    /// Stops the turn that runs, and sends what is written or queues it behind that turn; a right
+    /// click sends it the other way. While the client tries to reach the server neither works, and
+    /// the last of them waits for it, sending signals.
     fn send_buttons(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let c = colors(cx);
         let store = self.store.read(cx);
@@ -637,7 +637,7 @@ impl Composer {
                 None => what.into(),
             }
         });
-        let (stop, send) = (self.store.clone(), self.store.clone());
+        let (stop, send, alternate) = (self.store.clone(), self.store.clone(), self.store.clone());
         div()
             .flex()
             .items_center()
@@ -674,6 +674,18 @@ impl Composer {
                         .surface(Surface::Composer)
                         .margin(margin(4., 8.))
                         .disabled(!can_send)
+                        .context_menu(move |_| {
+                            let alternate = alternate.clone();
+                            Menu::new().when(running, |menu| {
+                                let (title, symbol) = if steers { ("Queue", "clock") } else { ("Steer", "zap") };
+                                menu.symbol_item(title, symbol, move |_, cx| {
+                                    alternate.update(cx, |store, cx| {
+                                        store.send_message(true, cx);
+                                        cx.notify();
+                                    })
+                                })
+                            })
+                        })
                         .on_click(move |_, _, cx| {
                             send.update(cx, |store, cx| {
                                 store.send_message(false, cx);

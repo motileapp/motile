@@ -541,8 +541,12 @@ fun ControlButton(
     stretches: Boolean = false,
     /** Rings move out from it, while what it does waits for something else. */
     signals: Boolean = false,
+    /** What a long press offers besides what it does. With none it offers nothing. */
+    menu: (MenuBuilder.() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
+    val held = if (menu != null) rememberMenuState() else null
+    val opensMenu: (() -> Unit)? = held?.takeIf { menu != null && MenuBuilder().apply(menu).entries.isNotEmpty() }?.let { state -> { state.open() } }
     val enabled = LocalEnabled.current && !disabled
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
@@ -567,7 +571,7 @@ fun ControlButton(
                 indication = null,
                 enabled = enabled && !pending,
                 role = role,
-                onLongClick = onLongClick,
+                onLongClick = opensMenu ?: onLongClick,
                 onClick = onClick,
             )
             .padding(margin)
@@ -577,6 +581,7 @@ fun ControlButton(
         contentAlignment = Alignment.Center,
     ) {
         CompositionLocalProvider(LocalForeground provides shown.foreground(palette), content = content)
+        if (held != null && menu != null) MenuPopup(held, menu)
     }
 }
 
@@ -675,6 +680,8 @@ fun ActionButton(
     /** Rings move out from it, while what it does waits for something else. */
     signals: Boolean = false,
     onLongClick: (() -> Unit)? = null,
+    /** What a long press offers besides what it does. With none it offers nothing. */
+    menu: (MenuBuilder.() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     val words = title?.takeIf { it.isNotEmpty() }
@@ -690,7 +697,7 @@ fun ActionButton(
     if (!inline) {
         return ControlButton(
             look, onClick, modifier, pending, disabled, margin, words?.let { listOfNotNull(it, tinted).joinToString(" ") } ?: help, onLongClick,
-            stretches = stretches, signals = signals, content = label,
+            stretches = stretches, signals = signals, menu = menu, content = label,
         )
     }
     val line = with(LocalDensity.current) { rememberTextMeasurer().measure("M", size.font).size.height.toDp() }
@@ -706,7 +713,7 @@ fun ActionButton(
         start = margin.calculateStartPadding(direction), top = margin.calculateTopPadding() + lightInset,
         end = margin.calculateEndPadding(direction), bottom = margin.calculateBottomPadding() + lightInset,
     )
-    ControlButton(look, onClick, modifier.bleeding(leading, vertical), pending, disabled, around, words ?: help, onLongClick) {
+    ControlButton(look, onClick, modifier.bleeding(leading, vertical), pending, disabled, around, words ?: help, onLongClick, menu = menu) {
         Box(Modifier.bleeding(0.dp, lightInset)) { label() }
     }
 }

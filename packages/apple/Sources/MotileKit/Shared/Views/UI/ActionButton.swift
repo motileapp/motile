@@ -579,6 +579,8 @@ struct ActionButton: View {
     /// It stands in a line of text: its symbol or words start where the line does, and it is no
     /// taller than its words, so that nothing moves for it. Its light and its press reach around.
     private var inline = false
+    /// What a long press, or a right click on the Mac, offers besides what it does.
+    private var menuItems: [MenuItem]?
     private let action: () -> Void
 
     init(
@@ -648,6 +650,14 @@ struct ActionButton: View {
         return button
     }
 
+    /// Offers `items` on a long press, or a right click on the Mac. With none it offers nothing,
+    /// and keeps being the same view, so that what it shows changing doesn't start it over.
+    func menu(_ items: [MenuItem]) -> ActionButton {
+        var button = self
+        button.menuItems = items
+        return button
+    }
+
     private var words: String? { title?.isEmpty == true ? nil : title }
 
     var body: some View {
@@ -657,23 +667,53 @@ struct ActionButton: View {
             light.top += inlineVertical - Self.inlineLightRoom
             light.bottom += inlineVertical - Self.inlineLightRoom
         }
-        return Button(action: action) {
-            ControlLabel(
-                title: words, icon: icon, size: look.size, chevron: chevron, chevronTurned: open,
-                chevronColor: look.foreground == .themeForeground ? .themeMutedForeground : .themeMutedStrongerForeground, pending: pending,
-                pendingTitle: pendingTitle, fills: fills,
-                alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding, detail: detail, detailMark: detailMark, place: place,
-                tinted: look.tint.flatMap { tint in tinted.map { (words: $0, color: tint) } }, proxied: proxied,
-                pinned: pinned, centered: look.round
-            )
-            .padding(reach.around)
+        let label = ControlLabel(
+            title: words, icon: icon, size: look.size, chevron: chevron, chevronTurned: open,
+            chevronColor: look.foreground == .themeForeground ? .themeMutedForeground : .themeMutedStrongerForeground, pending: pending,
+            pendingTitle: pendingTitle, fills: fills,
+            alignment: alignment, symbolSize: symbolSize, gap: gap, padding: padding, detail: detail, detailMark: detailMark, place: place,
+            tinted: look.tint.flatMap { tint in tinted.map { (words: $0, color: tint) } }, proxied: proxied,
+            pinned: pinned, centered: look.round
+        )
+        .padding(reach.around)
+        return pressable(label, style: ControlButtonStyle(look: look, pending: pending, signals: signals, margin: light))
+            .padding(reach.outset)
+            .padding(inline ? inlineBleed : EdgeInsets())
+            .allowsHitTesting(!pending)
+            .tooltip(help ?? "")
+            .accessibilityLabel(words.map { [$0, tinted].compactMap { $0 }.joined(separator: " ") } ?? help ?? "")
+    }
+
+    /// The button, or on iOS with a menu one that opens it in place on a long press. The Mac opens
+    /// it on a right click.
+    @ViewBuilder
+    private func pressable(_ label: some View, style: ControlButtonStyle) -> some View {
+        #if os(iOS)
+        if let menuItems {
+            Menu {
+                ForEach(menuItems.indices, id: \.self) { menuItems[$0] }
+            } label: {
+                label
+            } primaryAction: {
+                action()
+            }
+            .menuStyle(.button)
+            .menuOrder(.fixed)
+            .menuIndicator(.hidden)
+            .buttonStyle(style)
+            .tint(Color.themeForeground)
+        } else {
+            Button(action: action) { label }.buttonStyle(style)
         }
-        .buttonStyle(ControlButtonStyle(look: look, pending: pending, signals: signals, margin: light))
-        .padding(reach.outset)
-        .padding(inline ? inlineBleed : EdgeInsets())
-        .allowsHitTesting(!pending)
-        .tooltip(help ?? "")
-        .accessibilityLabel(words.map { [$0, tinted].compactMap { $0 }.joined(separator: " ") } ?? help ?? "")
+        #else
+        if let menuItems {
+            Button(action: action) { label }
+                .buttonStyle(style)
+                .contextMenu { ForEach(menuItems.indices, id: \.self) { menuItems[$0] } }
+        } else {
+            Button(action: action) { label }.buttonStyle(style)
+        }
+        #endif
     }
 
     /// How far an inline button's light reaches above and below its words.
