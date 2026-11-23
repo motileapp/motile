@@ -12,6 +12,12 @@ final class MarkupCanvas: PlatformView {
     let session: MarkupSession
     /// Told after the marks or the selected pin change.
     var changed: () -> Void = {}
+    /// Where the whole image lies in the canvas's own points, when the canvas covers only the part
+    /// of it on screen.
+    var image: CGRect? {
+        didSet { if image != oldValue { repaint() } }
+    }
+    private var imageRect: CGRect { image ?? bounds }
     private var scene: CanvasScene? {
         didSet { repaint() }
     }
@@ -40,19 +46,27 @@ final class MarkupCanvas: PlatformView {
 
     /// A point in the canvas's own points, in the image's pixels.
     func pixel(_ point: CGPoint) -> CGPoint {
-        guard bounds.width > 0, bounds.height > 0 else { return point }
-        return CGPoint(x: point.x * session.width / bounds.width, y: point.y * session.height / bounds.height)
+        let image = imageRect
+        guard image.width > 0, image.height > 0 else { return point }
+        return CGPoint(x: (point.x - image.minX) * session.width / image.width, y: (point.y - image.minY) * session.height / image.height)
     }
 
     /// A point in the image's pixels, in the canvas's own points.
     func point(_ pixel: CGPoint) -> CGPoint {
-        CGPoint(x: pixel.x * bounds.width / session.width, y: pixel.y * bounds.height / session.height)
+        let image = imageRect
+        return CGPoint(x: image.minX + pixel.x * image.width / session.width, y: image.minY + pixel.y * image.height / session.height)
+    }
+
+    /// A length in the image's pixels, in the canvas's own points.
+    func points(_ pixels: CGFloat) -> CGFloat {
+        pixels * imageRect.width / session.width
     }
 
     /// A length on the screen, in the image's pixels, with the canvas zoomed by `zoom`.
     func pixels(_ length: CGFloat, zoom: CGFloat) -> CGFloat {
-        guard bounds.width > 0, zoom > 0 else { return length }
-        return length / zoom * session.width / bounds.width
+        let image = imageRect
+        guard image.width > 0, zoom > 0 else { return length }
+        return length / zoom * session.width / image.width
     }
 
     override func draw(_ rect: CGRect) {
@@ -62,7 +76,9 @@ final class MarkupCanvas: PlatformView {
         let context = UIGraphicsGetCurrentContext()
         #endif
         guard let scene, scene.width > 0, scene.height > 0, let context else { return }
-        context.scaleBy(x: bounds.width / scene.width, y: bounds.height / scene.height)
+        let image = imageRect
+        context.translateBy(x: image.minX, y: image.minY)
+        context.scaleBy(x: image.width / scene.width, y: image.height / scene.height)
         CanvasPainter.paint(scene, in: context, palette: palette)
     }
 

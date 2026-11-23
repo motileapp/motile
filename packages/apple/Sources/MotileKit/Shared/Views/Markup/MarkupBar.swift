@@ -18,7 +18,6 @@ struct MarkupBar: View {
         .barPadding()
         .barSurface()
         .environment(\.surface, Self.surface)
-        .environment(\.colorScheme, .dark)
         .animation(.snappy(duration: 0.2), value: session.selected)
     }
 

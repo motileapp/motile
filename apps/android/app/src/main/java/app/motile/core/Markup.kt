@@ -173,12 +173,13 @@ class MarkupSession private constructor(
         private var lastTool = MarkupTool.Pen
         private var lastInk = "red"
         /** What the core reads; anything else, like HEIC, is written out as a PNG for it first. */
-        private val decodable = setOf("png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff")
+        private val decodable = setOf("png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "svg")
 
         /** `width` and `height` are the pixels of the picture shown; `saved` goes on from an earlier markup. */
         fun open(source: File, name: String, attachment: String?, width: Int, height: Int, saved: SavedMarkup?): MarkupSession? {
             val session = MarkupSession(source, name, attachment)
-            val open = json("op" to "open", "width" to width, "height" to height, "marks" to saved?.marks)
+            val read = source.path.takeIf { source.extension.lowercase() in decodable }
+            val open = json("op" to "open", "width" to width, "height" to height, "marks" to saved?.marks, "source" to read)
             return session.takeIf { it.apply(ask(open)) }
         }
 

@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use std::path::{Path as FilePath, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
+use std::thread::JoinHandle;
 
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader, RgbaImage};
 use kurbo::Affine;
@@ -588,10 +589,15 @@ fn draw_svg(source: &FilePath) -> Result<RgbaImage, String> {
     RgbaImage::from_raw(width, height, pixels.collect()).ok_or_else(|| "The image couldn't be drawn.".to_string())
 }
 
-/// Writes `source` with `scene` painted over it into a new folder under `folder`, as a JPEG when
-/// it was one and a PNG otherwise, and answers where.
-fn flatten(scene: &Scene, source: &FilePath, folder: &FilePath, name: &str) -> Result<PathBuf, String> {
-    let picture = decode(source)?;
+/// Writes `picture`, read from `source`, with `scene` painted over it into a new folder under
+/// `folder`, as a JPEG when it was one and a PNG otherwise, and answers where.
+fn flatten(
+    scene: &Scene,
+    picture: RgbaImage,
+    source: &FilePath,
+    folder: &FilePath,
+    name: &str,
+) -> Result<PathBuf, String> {
     let (width, height) = picture.dimensions();
     let mut pixmap = tiny_skia::Pixmap::new(width, height).ok_or("The image is empty.")?;
     for (pixel, rgba) in pixmap.pixels_mut().iter_mut().zip(picture.pixels()) {
@@ -627,15 +633,48 @@ fn sessions() -> &'static Mutex<HashMap<u64, Markup>> {
     SESSIONS.get_or_init(Mutex::default)
 }
 
+type Reading = (PathBuf, JoinHandle<Result<RgbaImage, String>>);
+
+/// The pictures read while their marks are drawn, so that writing them out doesn't wait for a
+/// large photo or an SVG's filters.
+fn readings() -> &'static Mutex<HashMap<u64, Reading>> {
+    static READINGS: OnceLock<Mutex<HashMap<u64, Reading>>> = OnceLock::new();
+    READINGS.get_or_init(Mutex::default)
+}
+
+fn start_reading(id: u64, source: PathBuf) {
+    let path = source.clone();
+    let Ok(reading) = std::thread::Builder::new().name("markup-read".into()).spawn(move || decode(&path)) else {
+        return;
+    };
+    if let Ok(mut readings) = readings().lock() {
+        readings.insert(id, (source, reading));
+    }
+}
+
+/// The picture at `source`, read since the session opened if it was told then, or now.
+fn read(id: u64, source: &FilePath) -> Result<RgbaImage, String> {
+    let reading = readings().lock().ok().and_then(|mut readings| readings.remove(&id));
+    match reading {
+        Some((path, reading)) if path == source => {
+            reading.join().map_err(|_| "The image couldn't be read.".to_string())?
+        }
+        _ => decode(source),
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 enum Ask {
-    /// `marks` are what an earlier `flatten` answered, to go on with them.
+    /// `marks` are what an earlier `flatten` answered, to go on with them. `source` is read
+    /// meanwhile, for `flatten`.
     Open {
         width: f64,
         height: f64,
         #[serde(default)]
         marks: Option<String>,
+        #[serde(default)]
+        source: Option<PathBuf>,
     },
     /// `slop` is how far, in the image's pixels, a touch may land from a pin and still take it.
     Down {
@@ -738,14 +777,21 @@ fn answer(ask: Ask) -> Value {
     }
     let (id, markup) = match ask {
         Ask::PlaceNotes { .. } => return json!({}),
-        Ask::Open { width, height, marks } => {
+        Ask::Open { width, height, marks, source } => {
             let id = NEXT.fetch_add(1, Ordering::Relaxed);
+            if let Some(source) = source {
+                start_reading(id, source);
+            }
             let mut markup = Markup::new(width, height);
             markup.marks = marks.and_then(|marks| serde_json::from_str(&marks).ok()).unwrap_or_default();
             return sessions.entry(id).or_insert(markup).state(id);
         }
         Ask::Close { id } => {
             sessions.remove(&id);
+            drop(sessions);
+            if let Ok(mut readings) = readings().lock() {
+                readings.remove(&id);
+            }
             return json!({});
         }
         Ask::Flatten { id, source, folder, name } => {
@@ -753,7 +799,7 @@ fn answer(ask: Ask) -> Value {
             let (scene, notes) = (markup.scene(true), markup.notes(&name));
             let marks = serde_json::to_string(&markup.marks).unwrap_or_default();
             drop(sessions);
-            return match flatten(&scene, &source, &folder, &name) {
+            return match read(id, &source).and_then(|picture| flatten(&scene, picture, &source, &folder, &name)) {
                 Ok(file) => json!({ "file": file, "notes": notes, "marks": marks }),
                 Err(error) => json!({ "error": error }),
             };
@@ -911,12 +957,12 @@ mod tests {
     }
 
     #[test]
-    fn an_svg_is_drawn_large_enough_to_mark_up_and_written_as_a_png() {
+    fn an_svg_read_while_it_is_marked_is_drawn_large_enough_and_written_as_a_png() {
         let folder = tempfile::tempdir().unwrap();
         let source = folder.path().join("icon.svg");
         let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="12" fill="#0000ff"/></svg>"##;
         std::fs::write(&source, svg).unwrap();
-        let id = open(24, 24);
+        let id = ask(json!({ "op": "open", "width": 24, "height": 24, "source": source }))["id"].as_u64().unwrap();
         stroke(id, "box", [14.0, 14.0], [20.0, 20.0]);
 
         let answer = ask(json!({
