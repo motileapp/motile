@@ -39,7 +39,7 @@ final class TableContent: NSObject {
         columnWidths = widths
         rowHeights = cells.map { row in
             let tallest = row.enumerated().map { column, cell in
-                ceil(cell.bounds(width: widths[column] - 2 * Self.sidePadding).height)
+                TextMeasure.height(of: cell, width: widths[column] - 2 * Self.sidePadding)
             }.max() ?? 0
             return tallest + 2 * Self.rowPadding + 1
         }
@@ -160,6 +160,7 @@ final class TableView: FlippedView {
 
     private final class Grid: FlippedView {
         var table: TableContent?
+        private let text = TextSystem()
 
         override func draw(_ rect: CGRect) {
             guard let table else { return }
@@ -171,13 +172,24 @@ final class TableView: FlippedView {
                     let box = CGRect(
                         x: x + TableContent.sidePadding, y: y + TableContent.rowPadding,
                         width: width - 2 * TableContent.sidePadding, height: table.rowHeights[row] - 2 * TableContent.rowPadding)
-                    cell.draw(with: box, options: [.usesLineFragmentOrigin], context: nil)
+                    draw(cell, in: box)
                     x += width
                 }
                 y += table.rowHeights[row]
                 (row < table.headers ? Theme.border : Theme.border).setFill()
                 CGRect(x: 0, y: y - 1, width: table.size.width, height: 1).fillCurrent()
             }
+        }
+
+        /// Through the transcript's text system, which draws inline code on its box.
+        private func draw(_ cell: NSAttributedString, in box: CGRect) {
+            guard cell.length > 0 else { return }
+            text.storage.setAttributedString(cell)
+            _ = text.height(forWidth: box.width)
+            let glyphs = text.layout.glyphRange(for: text.container)
+            let origin = CGPoint(x: box.minX - text.container.lineFragmentPadding, y: box.minY)
+            text.layout.drawBackground(forGlyphRange: glyphs, at: origin)
+            text.layout.drawGlyphs(forGlyphRange: glyphs, at: origin)
         }
     }
 }

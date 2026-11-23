@@ -153,27 +153,8 @@ final class DecoratingLayoutManager: NSLayoutManager {
         drawCodeBoxes(in: characters, storage: storage, at: origin)
 
         storage.enumerateAttribute(.backgroundColor, in: characters) { value, range, _ in
-            guard (value as? PlatformColor) === Typesetter.inlineCodeBackground,
-                let font = storage.attribute(.font, at: range.location, effectiveRange: nil) as? PlatformFont
-            else { return }
-            let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            let unselected = NSRange(location: NSNotFound, length: 0)
-            Typesetter.inlineCodeBackground.setFill()
-            // A line's rect is as tall as the line and the space under it, which the last line
-            // doesn't have. The font's height around the baseline is the same on every line.
-            enumerateLineFragments(forGlyphRange: glyphs) { line, _, container, lineGlyphs, _ in
-                guard let onLine = lineGlyphs.intersection(glyphs), onLine.length > 0 else { return }
-                let baseline = line.minY + self.location(forGlyphAt: onLine.location).y
-                let top = (baseline - font.ascender).rounded()
-                let bottom = (baseline - font.descender).rounded()
-                // The room after the code is the kern of its last character, inside its rect.
-                let ends = NSMaxRange(self.characterRange(forGlyphRange: onLine, actualGlyphRange: nil)) == NSMaxRange(range)
-                let room = ends ? storage.attribute(.kern, at: NSMaxRange(range) - 1, effectiveRange: nil) as? CGFloat ?? 0 : 0
-                self.enumerateEnclosingRects(forGlyphRange: onLine, withinSelectedGlyphRange: unselected, in: container) { rect, _ in
-                    let box = CGRect(x: rect.minX - RowTextView.overhang, y: top, width: rect.width - room + 2 * RowTextView.overhang, height: bottom - top)
-                    RoundedBox.fill(box.offsetBy(dx: origin.x, dy: origin.y), radius: Radius.xs)
-                }
-            }
+            guard (value as? PlatformColor) === Typesetter.inlineCodeBackground else { return }
+            drawInlineCode(range, at: origin)
         }
 
         drawFound(in: characters, storage: storage, at: origin)
@@ -249,6 +230,32 @@ final class DecoratingLayoutManager: NSLayoutManager {
             RoundedBox.fill(frame, radius: Radius.lg)
             Theme.border.setStroke()
             RoundedBox.stroke(frame, radius: Radius.lg)
+        }
+    }
+}
+
+extension NSLayoutManager {
+    /// Inline code on its rounded box, as tall as its font around the baseline on every line and
+    /// `RowTextView.overhang` past its glyphs, which the text beside it keeps room for.
+    func drawInlineCode(_ range: NSRange, at origin: CGPoint) {
+        guard let storage = textStorage, range.length > 0, NSMaxRange(range) <= storage.length,
+            let font = storage.attribute(.font, at: range.location, effectiveRange: nil) as? PlatformFont
+        else { return }
+        let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        let unselected = NSRange(location: NSNotFound, length: 0)
+        Typesetter.inlineCodeBackground.setFill()
+        enumerateLineFragments(forGlyphRange: glyphs) { line, _, container, lineGlyphs, _ in
+            guard let onLine = lineGlyphs.intersection(glyphs), onLine.length > 0 else { return }
+            let baseline = line.minY + self.location(forGlyphAt: onLine.location).y
+            let top = (baseline - font.ascender).rounded()
+            let bottom = (baseline - font.descender).rounded()
+            // The room after the code is the kern of its last character, inside its rect.
+            let ends = NSMaxRange(self.characterRange(forGlyphRange: onLine, actualGlyphRange: nil)) == NSMaxRange(range)
+            let room = ends ? storage.attribute(.kern, at: NSMaxRange(range) - 1, effectiveRange: nil) as? CGFloat ?? 0 : 0
+            self.enumerateEnclosingRects(forGlyphRange: onLine, withinSelectedGlyphRange: unselected, in: container) { rect, _ in
+                let box = CGRect(x: rect.minX - RowTextView.overhang, y: top, width: rect.width - room + 2 * RowTextView.overhang, height: bottom - top)
+                RoundedBox.fill(box.offsetBy(dx: origin.x, dy: origin.y), radius: Radius.xs)
+            }
         }
     }
 }
