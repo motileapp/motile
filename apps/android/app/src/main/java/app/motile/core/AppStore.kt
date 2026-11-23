@@ -860,7 +860,7 @@ class AppStore(private val context: Context) {
             if (server.id in dismissedOutages) continue
             val current = toast
             if (current != null && current.serverID != server.id && (current.failed || current.pending)) continue
-            val title = "Couldn't reach ${server.name}"
+            val title = "Couldn't reach ${server.shortName}"
             if (current?.serverID == server.id && current.title == title && current.description == error) continue
             toast = Toast(serverID = server.id, title = title, description = error, failed = true)
         }
@@ -1095,7 +1095,7 @@ class AppStore(private val context: Context) {
     /** What the right panel says in place of what it can't show of a removed server. */
     private fun removedNote(serverID: String): String? {
         if (!isRemoved(serverID)) return null
-        return "“${server(serverID)?.name ?: "Its server"}” is unlinked, so this thread is read-only."
+        return "“${server(serverID)?.shortName ?: "Its server"}” is unlinked, so this thread is read-only."
     }
 
     /** The server the open thread was on, once it was removed from the account. The thread then ends with the way to go on elsewhere, in place of the composer. */
@@ -1169,7 +1169,7 @@ class AppStore(private val context: Context) {
             val target = panelTarget ?: return null
             val server = server(target.serverID) ?: return null
             removedNote(server.id)?.let { return it }
-            if (server.protocolVersion < 8) return "Update ${server.name} to see pull requests here."
+            if (server.protocolVersion < 8) return "Update ${server.shortName} to see pull requests here."
             return if (target.repository) null else "This folder isn't a git repository."
         }
 
@@ -1230,7 +1230,7 @@ class AppStore(private val context: Context) {
             removedNote(target.serverID)?.let { return it }
             val server = server(target.serverID)
             if (server == null || server.state != Server.State.Connected) return "Your server isn't connected."
-            return if (server.protocolVersion >= 7) null else "Update ${server.name} to see files and changes."
+            return if (server.protocolVersion >= 7) null else "Update ${server.shortName} to see files and changes."
         }
 
     /** The server the composer is talking to: the open thread's, or the open draft's project's. */
@@ -1808,7 +1808,7 @@ class AppStore(private val context: Context) {
             val target = panelTarget ?: return null
             val server = server(target.serverID) ?: return null
             removedNote(server.id)?.let { return it }
-            return if (server.protocolVersion >= 12) null else "Update ${server.name} to connect it to Linear."
+            return if (server.protocolVersion >= 12) null else "Update ${server.shortName} to connect it to Linear."
         }
 
     /** The panel's server is connected to a Linear workspace. */
@@ -1826,7 +1826,7 @@ class AppStore(private val context: Context) {
             val target = panelTarget ?: return null
             val server = server(target.serverID) ?: return null
             removedNote(server.id)?.let { return it }
-            return if (server.protocolVersion >= 29) null else "Update ${server.name} to connect it to Ricrac."
+            return if (server.protocolVersion >= 29) null else "Update ${server.shortName} to connect it to Ricrac."
         }
 
     /** The panel's server is connected to a Ricrac workspace. */
@@ -1878,7 +1878,7 @@ class AppStore(private val context: Context) {
 
     /** Clones the repository while the toast says so, and opens a thread in it once it is there. Someone who has gone elsewhere meanwhile is offered the thread instead. */
     fun clone(repo: String, serverID: String) {
-        val into = server(serverID)?.let { " on ${it.name}" } ?: ""
+        val into = server(serverID)?.let { " on ${it.shortName}" } ?: ""
         show(Toast(title = "Cloning $repo", description = "Into ~/projects$into", pending = true))
         val from = selection
         add(mapOf("type" to "clone_repo", "repo" to repo), serverID, arrived = { project ->

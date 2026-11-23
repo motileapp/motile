@@ -37,7 +37,7 @@ struct AgentAccountSheet: View {
     private var isNew: Bool { account.id.isEmpty }
     private var title: String {
         #if os(macOS)
-        isNew ? "New Account on \(server.name)" : "\(account.agent.name) Account on \(server.name)"
+        isNew ? "New Account on \(server.shortName)" : "\(account.agent.name) Account on \(server.shortName)"
         #else
         isNew ? "New Account" : "\(account.agent.name) Account"
         #endif
@@ -74,7 +74,7 @@ struct AgentAccountSheet: View {
     private var signInCaption: String {
         if signingIn { return "Sign in on the page, then paste the code it shows." }
         if savedAsIs { return "Signing in saved the account." }
-        return "Opens Claude's sign-in page. Signing in saves the account on \(server.name)."
+        return "Opens Claude's sign-in page. Signing in saves the account on \(server.shortName)."
     }
 
     var body: some View {
@@ -190,7 +190,7 @@ struct AgentAccountSheet: View {
         } header: {
             Text("Variables")
         } footer: {
-            Text("Given to its agent: an API key or a router. A sensitive value stays on \(server.name) and is never shown again.")
+            Text("Given to its agent: an API key or a router. A sensitive value stays on \(server.shortName) and is never shown again.")
                 .foregroundStyle(Color.themeMutedForeground)
         }
         if signsInHere {
@@ -282,7 +282,7 @@ struct AgentAccountSheet: View {
         } header: {
             Text("Sign In")
         } footer: {
-            Text("Run it in a terminal on \(server.name). Who is signed in shows in the list once the agent says.")
+            Text("Run it in a terminal on \(server.shortName). Who is signed in shows in the list once the agent says.")
                 .foregroundStyle(Color.themeMutedForeground)
         }
     }
@@ -305,7 +305,7 @@ struct AgentAccountSheet: View {
                 .font(.system(.subheadline, design: .monospaced))
             }
             ActionButton(
-                icon: variable.sensitive ? .eyeOff : .eye, help: variable.sensitive ? "Sensitive: hidden and kept on \(server.name)" : "Shown: mark it sensitive",
+                icon: variable.sensitive ? .eyeOff : .eye, help: variable.sensitive ? "Sensitive: hidden and kept on \(server.shortName)" : "Shown: mark it sensitive",
                 selected: variable.sensitive
             ) {
                 edited.wrappedValue.variable.sensitive.toggle()
@@ -345,7 +345,7 @@ struct AgentAccountSheet: View {
                     Switch(isOn: $account.sharesSessions)
                 }
             }
-            field("Variables", caption: "Given to its agent: an API key or a router. A sensitive value stays on \(server.name) and is never shown again.") {
+            field("Variables", caption: "Given to its agent: an API key or a router. A sensitive value stays on \(server.shortName) and is never shown again.") {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach($variables) { $edited in
                         variableRow($edited)
@@ -364,7 +364,7 @@ struct AgentAccountSheet: View {
         if signsInHere {
             field("Sign In", caption: signInCaption, failure: signIn.error) { signInSteps }
         } else {
-            field("Sign In", caption: "Run it in a terminal on \(server.name). Who is signed in shows in the list once the agent says.") {
+            field("Sign In", caption: "Run it in a terminal on \(server.shortName). Who is signed in shows in the list once the agent says.") {
                 CommandBox(command: account.signInCommand)
             }
         }
@@ -408,7 +408,7 @@ struct AgentAccountSheet: View {
             InputField(kept ? "••••••••" : "value", text: edited.variable.value, size: .small, monospaced: true, secure: variable.sensitive)
             HStack(spacing: 0) {
                 ActionButton(
-                    icon: variable.sensitive ? .eyeOff : .eye, help: variable.sensitive ? "Sensitive: hidden and kept on \(server.name)" : "Shown: mark it sensitive",
+                    icon: variable.sensitive ? .eyeOff : .eye, help: variable.sensitive ? "Sensitive: hidden and kept on \(server.shortName)" : "Shown: mark it sensitive",
                     size: .small, selected: variable.sensitive, margin: .beside(trailing: 3)
                 ) {
                     edited.wrappedValue.variable.sensitive.toggle()

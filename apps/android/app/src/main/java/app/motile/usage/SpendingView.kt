@@ -138,7 +138,7 @@ fun SpendingView(report: UsageReport, measure: Measure, onMeasure: (Measure) -> 
                 }
                 Lines(report, measure, stacked = width < stackWidth)
             }
-            for (server in outdated) Text("Update ${server.name} to see what its agents spend.", size = TextSize.Xs, color = palette.mutedForeground)
+            for (server in outdated) Text("Update ${server.shortName} to see what its agents spend.", size = TextSize.Xs, color = palette.mutedForeground)
         }
     }
 }

@@ -574,7 +574,7 @@ impl Store {
             let outage = Toast {
                 server_id: Some(server.id.clone()),
                 serial: if own { serial } else { serial + 1 },
-                ..Toast::failure(format!("Couldn't reach {}", server.name), error)
+                ..Toast::failure(format!("Couldn't reach {}", server.short_name), error)
             };
             if toast.as_ref() != Some(&outage) {
                 toast = Some(outage);

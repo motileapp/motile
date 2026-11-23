@@ -12,6 +12,8 @@ use motile_protocol::wire::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::core::short_name;
+
 /// What a server said of its agents' accounts.
 pub struct Read {
     pub server_id: String,
@@ -31,7 +33,9 @@ pub struct Section {
     /// Who is signed in.
     pub account: Option<String>,
     pub plan: Option<String>,
-    /// The servers with this account.
+    /// The servers with this account, by id.
+    pub server_ids: Vec<String>,
+    /// Their names, in the same order.
     pub servers: Vec<String>,
     pub windows: Vec<Row>,
     /// Why there are no windows.
@@ -120,7 +124,7 @@ pub enum Pace {
 /// marked as the gateway's. The servers' Gateway accounts have none: they are the gateway's accounts.
 pub fn sections(reads: Vec<Read>, accounts: &[GatewayAccount], now: f64) -> Vec<Section> {
     let mut sections: Vec<Section> = Vec::new();
-    let mut failed: Vec<Vec<String>> = Vec::new();
+    let mut failed: Vec<Vec<(String, String)>> = Vec::new();
     let mut reads: Vec<Read> = reads.into_iter().filter(|read| !read.gateway).collect();
     reads.sort_by_key(|read| {
         (read.limits.agent != Agent::Claude, read.limits.error.is_some(), read.limits.windows.is_empty())
@@ -135,21 +139,24 @@ pub fn sections(reads: Vec<Read>, accounts: &[GatewayAccount], now: f64) -> Vec<
                 }
         });
         let Some(index) = same else {
-            failed.push(if unread { vec![server.clone()] } else { Vec::new() });
-            let target = account_id.map(|account_id| ResetTarget::Server { server_id, account_id });
-            sections.push(section(server, limits, target, now));
+            failed.push(if unread { vec![(server_id.clone(), server.clone())] } else { Vec::new() });
+            let target = account_id.map(|account_id| ResetTarget::Server { server_id: server_id.clone(), account_id });
+            sections.push(section(server_id, server, limits, target, now));
             continue;
         };
-        if !sections[index].servers.contains(&server) {
-            sections[index].servers.push(server.clone());
+        let section = &mut sections[index];
+        if !section.server_ids.contains(&server_id) {
+            section.server_ids.push(server_id.clone());
+            section.servers.push(server.clone());
         }
-        if unread {
-            failed[index].push(server);
+        if unread && !failed[index].iter().any(|(id, _)| *id == server_id) {
+            failed[index].push((server_id, server));
         }
     }
     for (section, failed) in sections.iter_mut().zip(&failed) {
         if section.windows.is_empty() && failed.len() > 1 {
-            section.note = Some(format!("Couldn't read the limits on {}.", listed(failed)));
+            let failed: Vec<String> = failed.iter().map(|(_, name)| short_name(name)).collect();
+            section.note = Some(format!("Couldn't read the limits on {}.", listed(&failed)));
         }
     }
     for account in accounts {
@@ -175,6 +182,7 @@ pub fn sections(reads: Vec<Read>, accounts: &[GatewayAccount], now: f64) -> Vec<
             name: Some(account.name.clone()).filter(|name| account.email.as_ref() != Some(name)),
             account: account.email.clone(),
             plan: account.plan.clone(),
+            server_ids: Vec::new(),
             servers: Vec::new(),
             note: account_note(account, &windows),
             windows,
@@ -195,7 +203,7 @@ fn listed(names: &[String]) -> String {
     }
 }
 
-fn section(server: String, limits: AgentLimits, target: Option<ResetTarget>, now: f64) -> Section {
+fn section(server_id: String, server: String, limits: AgentLimits, target: Option<ResetTarget>, now: f64) -> Section {
     let note = note(&server, &limits);
     let windows = limits.windows.iter().map(|window| row(window, now)).collect();
     let resets = target.and_then(|target| resets(&limits.resets, target, now));
@@ -205,6 +213,7 @@ fn section(server: String, limits: AgentLimits, target: Option<ResetTarget>, now
         name,
         account: limits.account,
         plan: limits.plan,
+        server_ids: vec![server_id],
         servers: vec![server],
         windows,
         note,
@@ -225,6 +234,7 @@ pub(crate) fn account_note(account: &GatewayAccount, windows: &[Row]) -> Option<
 }
 
 fn note(server: &str, limits: &AgentLimits) -> Option<String> {
+    let server = short_name(server);
     if let Some(error) = &limits.error {
         return Some(format!("Couldn't read the limits on {server}. {error}"));
     }
@@ -720,6 +730,16 @@ mod tests {
         let shown = section.resets.as_ref().unwrap();
         assert_eq!((shown.title.as_str(), shown.detail.as_deref()), ("1 reset", None));
         assert_eq!(shown.target, ResetTarget::Server { server_id: "studio-key".into(), account_id: "codex".into() });
+    }
+
+    #[test]
+    fn servers_of_the_same_name_are_each_listed() {
+        let mut other = read("ubuntu", Agent::Claude, Some("a"), vec![]);
+        other.server_id = "other-key".into();
+        let reads = vec![read("ubuntu", Agent::Claude, Some("a"), vec![]), other];
+        let [section] = &sections(reads, &[], 1000.0)[..] else { panic!("one section") };
+        assert_eq!(section.server_ids, ["ubuntu-key", "other-key"]);
+        assert_eq!(section.servers, ["ubuntu", "ubuntu"]);
     }
 
     #[test]

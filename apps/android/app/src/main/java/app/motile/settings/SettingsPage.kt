@@ -539,7 +539,7 @@ internal fun ProjectSettingsPage(projectID: String) {
                 }
             }
             val server = store.server(project.serverID)
-            group { if (server != null) row { SettingsLabeled("Server", server.name) } }
+            group { if (server != null) row { SettingsLabeled("Server", server.shortName) } }
             group {
                 row { SettingsLink({ navigator.push(SettingsRoute.ProjectIcon(project.id)) }) { SettingsActionLabel("Choose an Icon", Symbol.Image) } }
                 if ((server?.protocolVersion ?: 0) >= 6) row {

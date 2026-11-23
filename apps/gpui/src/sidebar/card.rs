@@ -177,7 +177,11 @@ impl Sidebar {
                         logos::agent_icon(thread.agent, ICON, cx).into_any_element(),
                     ))
                     .when_some(server, |lines, server| {
-                        lines.child(line(server.name.clone(), false, icons::symbol("server", ICON).into_any_element()))
+                        lines.child(line(
+                            server.short_name.clone(),
+                            false,
+                            icons::symbol("server", ICON).into_any_element(),
+                        ))
                     }),
             )
             .when_some(pull_request, |card, pull_request| {

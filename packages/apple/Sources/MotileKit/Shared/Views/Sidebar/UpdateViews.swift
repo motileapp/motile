@@ -119,13 +119,13 @@ struct ServerUpdateStatus<Otherwise: View>: View {
                     .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedForeground)
                 ActionButton(
-                    "Restart Now", help: "Stop the agents on \(server.name) and restart it. Their threads continue once it is back.",
+                    "Restart Now", help: "Stop the agents on \(server.shortName) and restart it. Their threads continue once it is back.",
                     variant: variant, size: size, margin: margin
                 ) {
                     store.update(server, when: .now)
                 }
             }
-            .tooltip("\(server.name) restarts once its agents have finished")
+            .tooltip("\(server.shortName) restarts once its agents have finished")
         } else if let update = store.serverUpdate(of: server) {
             HStack(spacing: 6) {
                 Text(progress(of: update))
@@ -138,7 +138,7 @@ struct ServerUpdateStatus<Otherwise: View>: View {
             .padding(margin)
         } else if store.isOutdated(server), store.isBusy(server), store.canChooseRestart(server) {
             ActionMenu(
-                "Update", help: "Agents are working on \(server.name). Update it once they finish, or now: they stop and continue once it is back.",
+                "Update", help: "Agents are working on \(server.shortName). Update it once they finish, or now: they stop and continue once it is back.",
                 variant: variant, size: size, margin: margin
             ) {
                 Button("Update when agents finish") { store.update(server, when: .idle) }
@@ -155,8 +155,8 @@ struct ServerUpdateStatus<Otherwise: View>: View {
 
     private var updateHelp: String {
         let version = store.updater.latest ?? ""
-        guard store.canChooseRestart(server) else { return "Install version \(version) on \(server.name). It restarts, and no agent may be working." }
-        return "Install version \(version) on \(server.name). It restarts once no agent works there."
+        guard store.canChooseRestart(server) else { return "Install version \(version) on \(server.shortName). It restarts, and no agent may be working." }
+        return "Install version \(version) on \(server.shortName). It restarts once no agent works there."
     }
 
     private func progress(of update: ServerUpdate) -> String {

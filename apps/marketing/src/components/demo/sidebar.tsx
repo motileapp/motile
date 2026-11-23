@@ -22,6 +22,7 @@ import { AgentIcon, ProjectIcon } from "./icons"
 import {
   archivedThreads,
   servers,
+  shortName,
   snoozedThreads,
   type ShelvedThread,
   type Thread,
@@ -268,7 +269,7 @@ export function Sidebar({
                 className="mx-2 flex h-8 items-center gap-[7px] px-2"
               >
                 <StateRing />
-                <span className="text-(length:--type-xs) font-medium">{server.name}</span>
+                <span className="text-(length:--type-xs) font-medium">{shortName(server)}</span>
                 <span className="ml-auto text-(length:--type-xs) text-muted-stronger-foreground tabular-nums">
                   {server.path} · {server.ms} ms
                 </span>
@@ -667,7 +668,7 @@ function ThreadRow({
           )}
           <span className="flex items-center gap-[3px] text-(length:--type-xs)">
             <ServerIcon className="size-3.5" />
-            {thread.server.name}
+            {shortName(thread.server)}
           </span>
           <AgentIcon agent={thread.agent} size={14} />
         </span>

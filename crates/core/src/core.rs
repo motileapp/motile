@@ -1799,7 +1799,7 @@ impl Core {
     fn link(&self, server_id: &str) -> Result<Arc<Link>, String> {
         let server = self.servers.iter().find(|server| server.device.public_key == server_id);
         if let Some(server) = server.filter(|server| server.removed) {
-            let name = &server.device.name;
+            let name = short_name(&server.device.name);
             return Err(format!(
                 "“{name}” is unlinked, so its threads are read-only. You can delete “{name}” in settings to remove them."
             ));
@@ -1878,7 +1878,7 @@ impl Core {
             Some(server) => match self.bucket_holder(server_id) {
                 Some(link) => link,
                 None => {
-                    let only_there = format!("Only “{}” had this, and it's unlinked.", server.device.name);
+                    let only_there = format!("Only “{}” had this, and it's unlinked.", short_name(&server.device.name));
                     return self.reply(id, Err(only_there));
                 }
             },
@@ -3179,7 +3179,7 @@ impl Core {
             }
             let protocol = server.info.as_ref().map_or(0, |info| info.protocol);
             if !message.can_send_again(protocol) {
-                let name = &server.device.name;
+                let name = short_name(&server.device.name);
                 let error = format!(
                     "Your message may not have reached {name}, which is too old to be sent it again safely, so it's back where you wrote it. Update {name}."
                 );
@@ -4261,17 +4261,17 @@ impl Core {
                 for server in chosen {
                     let Some(info) = server.info.as_ref() else { continue };
                     let name = server.device.name.clone();
+                    let server_id = server.device.public_key.clone();
                     for account in &info.agent_accounts {
-                        let key = (server.device.public_key.clone(), account.agent, account.name.clone());
-                        account_ids.insert(key, account.id.clone());
+                        account_ids
+                            .insert((server_id.clone(), account.agent, account.name.clone()), account.id.clone());
                     }
                     let proxies = info.agent_accounts.iter().filter(|account| account.gateway);
-                    proxied.extend(proxies.map(|account| (name.clone(), account.agent, account.name.clone())));
+                    proxied.extend(proxies.map(|account| (server_id.clone(), account.agent, account.name.clone())));
                     if info.protocol < LIMITS_PROTOCOL {
-                        notes.push(format!("Update {name} to see its limits."));
+                        notes.push(format!("Update {} to see its limits.", short_name(&name)));
                         continue;
                     }
-                    let server_id = server.device.public_key.clone();
                     let Some(link) = server.link.clone().filter(|_| !kept) else {
                         let agents = self.limits_read(&server_id).map(|(_, agents)| agents).unwrap_or_default();
                         reads.extend(agents.into_iter().map(|limits| (server_id.clone(), name.clone(), limits)));
@@ -4302,14 +4302,15 @@ impl Core {
                 });
                 tokio::spawn(async move {
                     while let Some(Ok((server_id, server, answer))) = asked.join_next().await {
+                        let shown = short_name(&server);
                         let agents = match answer {
                             Ok(Message::Limits { agents }) => agents,
                             Ok(other) => {
-                                notes.push(format!("Couldn't read the limits on {server}. {}", unexpected(&other)));
+                                notes.push(format!("Couldn't read the limits on {shown}. {}", unexpected(&other)));
                                 continue;
                             }
                             Err(error) => {
-                                notes.push(format!("Couldn't read the limits on {server}. {}", error_text(error)));
+                                notes.push(format!("Couldn't read the limits on {shown}. {}", error_text(error)));
                                 continue;
                             }
                         };
@@ -4321,7 +4322,7 @@ impl Core {
                         .into_iter()
                         .map(|(server_id, server, limits)| {
                             let gateway =
-                                proxied.contains(&(server.clone(), limits.agent, limits.account_name.clone()));
+                                proxied.contains(&(server_id.clone(), limits.agent, limits.account_name.clone()));
                             let key = (server_id.clone(), limits.agent, limits.account_name.clone());
                             let account_id = account_ids.get(&key).cloned();
                             limits::Read { server_id, server, account_id, limits, gateway }
@@ -4842,8 +4843,8 @@ fn project_key(server_id: &str, project: &Project, projects: &[Project]) -> Stri
     if clones > 1 { format!("{origin}#{}", project.name) } else { origin.clone() }
 }
 
-fn short_name(name: &str) -> String {
-    let short: String = name.chars().take(10).collect();
+pub(crate) fn short_name(name: &str) -> String {
+    let short: String = name.chars().take(8).collect();
     short.trim_end().to_string()
 }
 
@@ -4994,7 +4995,7 @@ struct Names<'a>(&'a [Server]);
 
 impl gateway::Naming for Names<'_> {
     fn server(&self, key: &str) -> Option<String> {
-        self.0.iter().find(|server| server.device.public_key == key).map(|server| server.device.name.clone())
+        self.0.iter().find(|server| server.device.public_key == key).map(|server| short_name(&server.device.name))
     }
 
     fn thread(&self, server: &str, thread: &str) -> Option<String> {
@@ -5212,11 +5213,11 @@ mod tests {
     }
 
     #[test]
-    fn a_long_server_name_is_cut_to_ten_characters() {
+    fn a_long_server_name_is_cut_to_eight_characters() {
         assert_eq!(short_name("studio"), "studio");
-        assert_eq!(short_name("build-box1"), "build-box1");
-        assert_eq!(short_name("Yektas-MacBook-Pro"), "Yektas-Mac");
-        assert_eq!(short_name("my server one"), "my server");
+        assert_eq!(short_name("build-box1"), "build-bo");
+        assert_eq!(short_name("Yektas-MacBook-Pro"), "Yektas-M");
+        assert_eq!(short_name("my server one"), "my serve");
     }
 
     #[test]

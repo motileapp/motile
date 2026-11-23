@@ -414,7 +414,7 @@ struct CommandPanel: View {
     }
 
     private func serverName(_ id: String) -> String {
-        store.server(id)?.name ?? "your server"
+        store.server(id)?.shortName ?? "your server"
     }
 
     /// The projects, each once, the one the open thread works in first, then by when a thread
@@ -475,7 +475,7 @@ struct CommandPanel: View {
         return servers.map(\.element).map { server in
             let projects = store.projects.filter { $0.serverID == server.id }.count
             let detail = server.state != .connected ? "Offline" : projects == 1 ? "1 project" : "\(projects) projects"
-            var item = PanelItem(id: "server-\(server.id)", title: server.name, detail: detail, icon: .symbol(.server), keepsOpen: true) {
+            var item = PanelItem(id: "server-\(server.id)", title: server.shortName, detail: detail, icon: .symbol(.server), keepsOpen: true) {
                 open(.sources(server.id))
             }
             item.off = server.state != .connected
@@ -665,13 +665,13 @@ struct CommandPanel: View {
         store.servers.filter { store.isOutdated($0) && store.serverUpdate(of: $0) == nil }.flatMap { server in
             let detail = "From version \(server.version) to \(store.updater.latest ?? "")"
             guard store.isBusy(server), store.canChooseRestart(server) else {
-                return [PanelItem(id: "update-\(server.id)", title: "Update \(server.name)", detail: detail, icon: .symbol(.circleArrowDown)) { store.update(server) }]
+                return [PanelItem(id: "update-\(server.id)", title: "Update \(server.shortName)", detail: detail, icon: .symbol(.circleArrowDown)) { store.update(server) }]
             }
             return [
-                PanelItem(id: "update-\(server.id)", title: "Update \(server.name) when agents finish", detail: detail, icon: .symbol(.circleArrowDown)) {
+                PanelItem(id: "update-\(server.id)", title: "Update \(server.shortName) when agents finish", detail: detail, icon: .symbol(.circleArrowDown)) {
                     store.update(server, when: .idle)
                 },
-                PanelItem(id: "update-now-\(server.id)", title: "Update \(server.name) now", detail: "Its agents stop and continue once it is back", icon: .symbol(.circleArrowDown)) {
+                PanelItem(id: "update-now-\(server.id)", title: "Update \(server.shortName) now", detail: "Its agents stop and continue once it is back", icon: .symbol(.circleArrowDown)) {
                     store.update(server, when: .now)
                 },
             ]

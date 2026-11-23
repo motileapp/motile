@@ -597,7 +597,7 @@ impl Sidebar {
                     .text_size(TextSize::Xs)
                     .font_weight(FontWeight::MEDIUM)
                     .truncate()
-                    .child(server.name.clone()),
+                    .child(server.short_name.clone()),
             )
             .child(div().flex_1().min_w(px(4.)))
             .child(

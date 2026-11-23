@@ -19,7 +19,7 @@ import {
   MenuChevron,
   ProjectIcon,
 } from "./icons"
-import type { Thread } from "./threads"
+import { shortName, type Thread } from "./threads"
 import { cn } from "@/lib/utils"
 
 export function Composer({
@@ -179,7 +179,7 @@ export function Composer({
       <Strip edge="bottom">
         <span className="ml-3.5 flex items-center gap-1.5 font-medium">
           <ServerIcon className="size-3.5" />
-          {thread.server.name}
+          {shortName(thread.server)}
         </span>
         <span className="mx-2.5 h-3 w-px bg-border-composer-stronger" />
         <span className="flex items-center gap-1.5 font-medium">

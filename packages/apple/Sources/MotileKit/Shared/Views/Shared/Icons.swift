@@ -242,7 +242,7 @@ struct ServerLabel: View {
                 .lineLimit(1)
         }
         .foregroundStyle(Color.themeMutedStrongerForeground)
-        .tooltip("On \(server.name)")
+        .tooltip("On \(server.shortName)")
     }
 }
 

@@ -91,7 +91,7 @@ fun ThreadCard(threadID: String, modifier: Modifier = Modifier) {
                     CardLine(shortenedFolder(thread.cwd, home), middle = true) { Icon(Symbol.Folder, ThreadCard.iconSize) }
                 }
                 CardLine(store.modelLabel(thread), proxied = store.modelProxied(thread), pinned = store.modelPinned(thread)) { AgentIcon(thread.agent, size = ThreadCard.iconSize) }
-                store.server(thread.serverID)?.let { server -> CardLine(server.name) { Icon(Symbol.Server, ThreadCard.iconSize) } }
+                store.server(thread.serverID)?.let { server -> CardLine(server.shortName) { Icon(Symbol.Server, ThreadCard.iconSize) } }
             }
             val pullRequest = project?.pullRequest(thread) ?: return@Column
             ThemeDivider(Modifier.padding(vertical = 10.dp))

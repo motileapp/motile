@@ -1281,7 +1281,7 @@ impl Store {
     /// What the right panel says in place of what it can't show of an unlinked server.
     pub fn removed_note(&self, server_id: &str) -> Option<String> {
         let server = self.server(Some(server_id)).filter(|server| server.removed)?;
-        Some(format!("“{}” is unlinked, so this thread is read-only.", server.name))
+        Some(format!("“{}” is unlinked, so this thread is read-only.", server.short_name))
     }
 
     /// Why the right panel has nothing to show here, when it hasn't.
@@ -1293,7 +1293,7 @@ impl Store {
         let Some(server) = self.server(Some(&target.server_id)).filter(|server| server.connected()) else {
             return Some("Your server isn't connected.".into());
         };
-        (server.protocol_version < 7).then(|| format!("Update {} to see files and changes.", server.name))
+        (server.protocol_version < 7).then(|| format!("Update {} to see files and changes.", server.short_name))
     }
 
     /// The server the composer is talking to: the open thread's, or the open draft's project's.

@@ -250,7 +250,7 @@ struct ComposerView: View {
         guard let server = store.composerServer else { return "Ask anything" }
         if store.selectedThread?.isArchived == true { return "Message to bring it back" }
         if store.selectedThread?.section == .snoozed { return "Message to wake it" }
-        if server.state != .connected { return "Waiting for \(server.name)" }
+        if server.state != .connected { return "Waiting for \(server.shortName)" }
         if server.models.isEmpty && server.known { return "Install Claude Code or Codex" }
         if store.asking != nil { return "Type your own answer" }
         if store.activity.running { return "Send a follow-up" }

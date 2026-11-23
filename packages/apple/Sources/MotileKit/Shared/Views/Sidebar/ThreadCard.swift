@@ -35,7 +35,7 @@ struct ThreadCard: View {
                 let pinned = server?.runsPinned(thread.agentAccount, of: thread.agent) ?? false
                 CardLine(text: store.modelLabel(of: thread), proxied: proxied, pinned: pinned) { AgentIcon(agent: thread.agent, size: Self.iconSize) }
                 if let server = store.server(thread.serverID) {
-                    CardLine(text: server.name) { Image(.server, size: Self.iconSize) }
+                    CardLine(text: server.shortName) { Image(.server, size: Self.iconSize) }
                 }
             }
             .padding(.top, 10)

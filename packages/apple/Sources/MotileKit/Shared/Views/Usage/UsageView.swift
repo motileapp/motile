@@ -138,12 +138,12 @@ final class UsageModel {
     func serversLabel(among all: [Server]) -> String {
         guard let chosen = picked(among: all) else { return "All Servers" }
         let named = all.filter { chosen.contains($0.id) }
-        return named.count == 1 ? named[0].name : "\(named.count) servers"
+        return named.count == 1 ? named[0].shortName : "\(named.count) servers"
     }
 
     func serverChecks(among all: [Server]) -> [Check] {
         all.map { server in
-            Check(id: server.id, title: server.name, checked: servers.contains(server.id)) { [weak self] in
+            Check(id: server.id, title: server.shortName, checked: servers.contains(server.id)) { [weak self] in
                 self?.toggle(server, among: all)
             }
         }

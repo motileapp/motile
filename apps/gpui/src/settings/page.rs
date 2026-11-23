@@ -68,8 +68,8 @@ enum Removal {
 impl Removal {
     fn title(&self) -> String {
         match self {
-            Removal::Server(server) => format!("Unlink “{}”?", server.name),
-            Removal::ServerCompletely(server) => format!("Delete “{}”?", server.name),
+            Removal::Server(server) => format!("Unlink “{}”?", server.short_name),
+            Removal::ServerCompletely(server) => format!("Delete “{}”?", server.short_name),
             Removal::Project(project) => format!("Remove “{}”?", project.name),
             Removal::Account(pair) => format!("Remove “{} · {}”?", agent_name(pair.0.agent), pair.0.name),
             Removal::Backup => "Turn Off the Backup?".into(),
@@ -81,20 +81,20 @@ impl Removal {
         match self {
             Removal::Server(server) => format!(
                 "Your account lets go of {}. Its threads stay readable, and can go on, from the copies your other servers keep. If it is your only server, nothing is kept. What is on it stays there.",
-                server.name
+                server.short_name
             ),
             Removal::ServerCompletely(server) => format!(
                 "{name} leaves your account and every copy of its threads is deleted, on all your servers and clients{backup}. What is on {name} itself stays there.",
-                name = server.name,
+                name = server.short_name,
                 backup = if store.backup.as_ref().is_some_and(|backup| backup.bucket.is_some()) { " and in your backup" } else { "" },
             ),
             Removal::Project(project) => {
-                let server = store.server(Some(&project.server_id)).map_or("its server", |server| server.name.as_str());
+                let server = store.server(Some(&project.server_id)).map_or("its server", |server| server.short_name.as_str());
                 format!("{} leaves your clients. Its folder stays on {server} with everything in it.", project.name)
             }
             Removal::Account(pair) => format!(
                 "Its threads move to the default account on {}. Its folder and its sign-in stay there.",
-                pair.1.name
+                pair.1.short_name
             ),
             Removal::Backup => "Your servers stop backing up to the bucket and sync through your clients again. What is in the bucket stays there.".into(),
             Removal::Relay => "Every device of your account goes back to iroh's public relays when it can't connect directly.".into(),

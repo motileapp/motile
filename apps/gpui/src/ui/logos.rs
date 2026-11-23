@@ -218,7 +218,7 @@ pub fn server_label(server: &Server, size: TextSize, shows_state: bool, cx: &App
         .text_color(muted)
         .child(icons::symbol("server", IconSize::text(size)).text_color(tint))
         .child(div().text_size(size).truncate().child(server.short_name.clone()))
-        .tooltip(tooltip(format!("On {}", server.name)))
+        .tooltip(tooltip(format!("On {}", server.short_name)))
 }
 
 /// The symbol of what became of a pull request.

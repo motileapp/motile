@@ -441,7 +441,7 @@ impl Render for SpendingView {
             .servers
             .iter()
             .filter(|server| server.connected() && server.protocol_version < 10)
-            .map(|server| server.name.clone())
+            .map(|server| server.short_name.clone())
             .collect();
         let body: Vec<AnyElement> = if report.tokens == 0 && !report.loading {
             vec![super::note(

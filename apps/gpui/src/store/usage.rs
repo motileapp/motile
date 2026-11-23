@@ -623,7 +623,7 @@ impl Store {
         let Some(picked) = self.counted_servers() else { return "All Servers".into() };
         let named: Vec<&Server> = self.servers.iter().filter(|server| picked.contains(&server.id)).collect();
         match named.as_slice() {
-            [one] => one.name.clone(),
+            [one] => one.short_name.clone(),
             _ => format!("{} servers", named.len()),
         }
     }
@@ -855,6 +855,7 @@ mod tests {
             outcomes: vec![Line {
                 name: "Finished".into(),
                 agent: Some(Agent::Codex),
+                server_id: None,
                 server: None,
                 turns: 1,
                 detail: "2m on average".into(),

@@ -220,7 +220,7 @@ val Project?.menuSymbol: Symbol get() = if (this?.noProject == true) Symbol.Mess
 fun ServerLabel(server: Server, modifier: Modifier = Modifier, size: TextSize = TextSize.Xs, weight: FontWeight = FontWeight.Normal, showsState: Boolean = false) {
     val muted = LocalPalette.current.mutedStrongerForeground
     Row(
-        modifier.semantics { contentDescription = "On ${server.name}" },
+        modifier.semantics { contentDescription = "On ${server.shortName}" },
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

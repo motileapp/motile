@@ -137,7 +137,7 @@ class UsageModel {
     fun serversLabel(all: List<Server>): String {
         val chosen = picked(all) ?: return "All Servers"
         val named = all.filter { it.id in chosen }
-        return if (named.size == 1) named[0].name else "${named.size} servers"
+        return if (named.size == 1) named[0].shortName else "${named.size} servers"
     }
 
     /** Shows what the core kept for the tab at once, then asks the servers. */

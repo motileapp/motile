@@ -71,7 +71,7 @@ private fun ColumnScope.ServerLines(sender: MessageSender, threadID: String) {
     val server = thread?.let { store.server(it.serverID) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(Symbol.Server, ThreadCard.iconSize, color = palette.foreground)
-        Title(server?.name ?: "The server")
+        Title(server?.shortName ?: "The server")
     }
     Text(sender.note, size = TextSize.Xs, color = palette.mutedForeground, modifier = Modifier.padding(top = 4.dp))
     if (!sender.pullRequest || thread == null) return

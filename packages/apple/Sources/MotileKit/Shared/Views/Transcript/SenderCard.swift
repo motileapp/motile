@@ -56,7 +56,7 @@ struct SenderCard: View {
             Image(.server, size: ThreadCard.iconSize)
                 .foregroundStyle(Color.themeForeground)
                 .levelWithFirstLine(.sm)
-            title(server?.name ?? "The server")
+            title(server?.shortName ?? "The server")
         }
         Text(sender.note)
             .font(.ui(.xs))

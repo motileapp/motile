@@ -1697,6 +1697,8 @@ data class UsageReport(
     data class Line(
         val name: String,
         val agent: Agent?,
+        /** The server of a server's, a project's or an account's line. */
+        val serverID: String?,
         /** The project's server, when more than one server spent. */
         val server: String?,
         val tokens: Long,
@@ -1705,7 +1707,7 @@ data class UsageReport(
         /** An account that runs through the gateway, which its symbol after the name says. */
         val gateway: Boolean = false,
     ) {
-        val id: String get() = "${agent?.raw ?: ""}/${server ?: ""}/$name"
+        val id: String get() = "${agent?.raw ?: ""}/${serverID ?: ""}/$name"
     }
 
     companion object {
@@ -1715,6 +1717,7 @@ data class UsageReport(
             fun line(line: JSON, share: Double?) = Line(
                 name = line.string("name"),
                 agent = Agent.of(line.optionalString("agent")),
+                serverID = line.optionalString("server_id"),
                 server = line.optionalString("server"),
                 tokens = line.long("tokens"),
                 costUSD = line.optionalDouble("cost_usd"),
@@ -1825,6 +1828,7 @@ data class LimitsReport(
         /** Who is signed in. */
         val account: String?,
         val plan: String?,
+        val serverIDs: List<String>,
         val servers: List<String>,
         val windows: List<Window>,
         /** Why there are no windows. */
@@ -1833,7 +1837,7 @@ data class LimitsReport(
         val gateway: Boolean = false,
         val resets: LimitResets? = null,
     ) {
-        val id: String get() = "${agent.raw}/${name ?: ""}/${account ?: servers.joinToString(",")}/${note ?: ""}"
+        val id: String get() = "${agent.raw}/${name ?: ""}/${account ?: serverIDs.joinToString(",")}/${note ?: ""}"
     }
 
     data class Window(
@@ -1868,6 +1872,7 @@ data class LimitsReport(
                     name = section.optionalString("name"),
                     account = section.optionalString("account"),
                     plan = section.optionalString("plan"),
+                    serverIDs = section.strings("server_ids"),
                     servers = section.strings("servers"),
                     windows = section.objects("windows").map(::Window),
                     note = section.optionalString("note"),

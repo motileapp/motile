@@ -90,7 +90,7 @@ struct ActivityView: View {
                 if !report.features.isEmpty || !report.agentFeatures.isEmpty { features }
             }
             ForEach(outdated) { server in
-                Text("Update \(server.name) to see what was done on it.")
+                Text("Update \(server.shortName) to see what was done on it.")
                     .font(.ui(.xxs))
                     .foregroundStyle(Color.themeMutedForeground)
             }

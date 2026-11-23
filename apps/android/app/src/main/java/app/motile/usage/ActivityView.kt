@@ -175,7 +175,7 @@ fun ActivityView(report: ActivityReport, period: UsageModel.Period) {
                 if (report.outcomes.isNotEmpty()) Turns(report, beside)
                 if (report.features.isNotEmpty() || report.agentFeatures.isNotEmpty()) Features(report, beside)
             }
-            for (server in outdated) Text("Update ${server.name} to see what was done on it.", size = TextSize.Xxs, color = palette.mutedForeground)
+            for (server in outdated) Text("Update ${server.shortName} to see what was done on it.", size = TextSize.Xxs, color = palette.mutedForeground)
         }
     }
 }

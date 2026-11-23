@@ -94,7 +94,7 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
     val signInCaption = when {
         step is AccountSignIn.Step.Waiting -> "Sign in on the page, then paste the code it shows."
         savedAsIs -> "Signing in saved the account."
-        else -> "Opens Claude's sign-in page. Signing in saves the account on ${server.name}."
+        else -> "Opens Claude's sign-in page. Signing in saves the account on ${server.shortName}."
     }
 
     LaunchedEffect(account.folder, account.agent) { signIn.cancel(store) }
@@ -163,7 +163,7 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
             }
             group(
                 header = "Variables",
-                footer = "Given to its agent: an API key or a router. A sensitive value stays on ${server.name} and is never shown again.",
+                footer = "Given to its agent: an API key or a router. A sensitive value stays on ${server.shortName} and is never shown again.",
             ) {
                 for (edited in variables) row {
                     VariableRow(edited, kept = edited.variable.sensitive && account.variables.any { it.name == edited.variable.name && it.sensitive }, server) {
@@ -216,7 +216,7 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
                         }
                     }
                 }
-            } else group(header = "Sign In", footer = "Run it in a terminal on ${server.name}. Who is signed in shows in the list once the agent says.") {
+            } else group(header = "Sign In", footer = "Run it in a terminal on ${server.shortName}. Who is signed in shows in the list once the agent says.") {
                 row {
                     SettingsRow {
                         SelectionContainer(Modifier.weight(1f)) {
@@ -261,7 +261,7 @@ private fun VariableRow(edited: EditedVariable, kept: Boolean, server: Server, r
         Row {
             ActionButton(
                 icon = if (variable.sensitive) Symbol.EyeOff else Symbol.Eye,
-                help = if (variable.sensitive) "Sensitive: hidden and kept on ${server.name}" else "Shown: mark it sensitive",
+                help = if (variable.sensitive) "Sensitive: hidden and kept on ${server.shortName}" else "Shown: mark it sensitive",
                 selected = variable.sensitive, margin = beside(end = 12.dp),
             ) { edited.variable = variable.copy(sensitive = !variable.sensitive) }
             ActionButton(icon = Symbol.X, help = "Remove the variable", onClick = remove)

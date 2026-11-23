@@ -868,7 +868,7 @@ impl Render for ActivityView {
             .servers
             .iter()
             .filter(|server| server.connected() && server.protocol_version < 40)
-            .map(|server| server.name.clone())
+            .map(|server| server.short_name.clone())
             .collect();
         let body: Vec<AnyElement> = if report.empty {
             vec![super::note(

@@ -774,7 +774,7 @@ impl Store {
             return Some(note);
         }
         if server.protocol_version < 8 {
-            return Some(format!("Update {} to see pull requests here.", server.name));
+            return Some(format!("Update {} to see pull requests here.", server.short_name));
         }
         (!target.repository).then(|| "This folder isn't a git repository.".to_string())
     }

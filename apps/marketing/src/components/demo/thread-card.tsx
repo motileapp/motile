@@ -7,7 +7,7 @@ import {
 import { useRef, useState, type ReactNode, type RefObject } from "react"
 import { Dotted } from "./composer"
 import { AgentIcon, ProjectIcon } from "./icons"
-import type { ShelvedThread, Thread } from "./threads"
+import { shortName, type ShelvedThread, type Thread } from "./threads"
 import { cn } from "@/lib/utils"
 
 type CardThread = Pick<
@@ -112,7 +112,7 @@ function ThreadCard({
           <Dotted text={thread.model} />
         </Line>
         <Line icon={<ServerIcon className="size-3.5" />}>
-          {thread.server.name}
+          {shortName(thread.server)}
         </Line>
       </div>
       {thread.pullRequest && (

@@ -56,7 +56,7 @@ struct UnlinkedThreadBar: View {
     /// inside an edge.
     private var nameChip: some View {
         let shape = RoundedRectangle(cornerRadius: SkillChip.radius, style: .continuous)
-        return Text(server.name)
+        return Text(server.shortName)
             .font(.ui(.sm, weight: .medium))
             .lineLimit(1)
             .padding(.horizontal, scaled(SkillChip.padding))
@@ -68,7 +68,7 @@ struct UnlinkedThreadBar: View {
     private var buttons: some View {
         HStack(spacing: 0) {
             ActionButton(
-                "Settings", help: "Delete “\(server.name)” and its threads in Settings", round: true, glass: true,
+                "Settings", help: "Delete “\(server.shortName)” and its threads in Settings", round: true, glass: true,
                 margin: ComposerView.margin(trailing: 4)
             ) { store.openSettings(.servers) }
             ActionButton(

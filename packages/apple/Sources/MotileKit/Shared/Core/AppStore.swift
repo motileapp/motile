@@ -868,7 +868,7 @@ final class AppStore {
             }
             guard server.state != .connecting, let error = server.error, !dismissedOutages.contains(server.id) else { continue }
             if let toast, toast.serverID != server.id, toast.failed || toast.pending { continue }
-            let unreachable = Toast(title: "Couldn't reach \(server.name)", description: error, failed: true, serverID: server.id)
+            let unreachable = Toast(title: "Couldn't reach \(server.shortName)", description: error, failed: true, serverID: server.id)
             if toast != unreachable { toast = unreachable }
         }
     }
@@ -1149,7 +1149,7 @@ final class AppStore {
     /// What the right panel says in place of what it can't show of a removed server.
     private func removedNote(_ serverID: String) -> String? {
         guard isRemoved(serverID) else { return nil }
-        return "“\(server(serverID)?.name ?? "Its server")” is unlinked, so this thread is read-only."
+        return "“\(server(serverID)?.shortName ?? "Its server")” is unlinked, so this thread is read-only."
     }
 
     /// The server the open thread was on, once it was removed from the account. The thread then
@@ -1219,7 +1219,7 @@ final class AppStore {
     var pullRequestsUnavailable: String? {
         guard let target = panelTarget, let server = server(target.serverID) else { return nil }
         if let note = removedNote(server.id) { return note }
-        guard server.protocolVersion >= 8 else { return "Update \(server.name) to see pull requests here." }
+        guard server.protocolVersion >= 8 else { return "Update \(server.shortName) to see pull requests here." }
         return target.repository ? nil : "This folder isn't a git repository."
     }
 
@@ -1282,7 +1282,7 @@ final class AppStore {
         guard let target = panelTarget else { return "Add a project to see its files." }
         if let note = removedNote(target.serverID) { return note }
         guard let server = server(target.serverID), server.state == .connected else { return "Your server isn't connected." }
-        return server.protocolVersion >= 7 ? nil : "Update \(server.name) to see files and changes."
+        return server.protocolVersion >= 7 ? nil : "Update \(server.shortName) to see files and changes."
     }
 
     /// The server the composer is talking to: the open thread's, or the open draft's project's.
@@ -1886,7 +1886,7 @@ final class AppStore {
     var linearUnavailable: String? {
         guard let target = panelTarget, let server = server(target.serverID) else { return nil }
         if let note = removedNote(server.id) { return note }
-        return server.protocolVersion >= 12 ? nil : "Update \(server.name) to connect it to Linear."
+        return server.protocolVersion >= 12 ? nil : "Update \(server.shortName) to connect it to Linear."
     }
 
     /// The panel's server is connected to a Linear workspace.
@@ -1899,7 +1899,7 @@ final class AppStore {
     var ricracUnavailable: String? {
         guard let target = panelTarget, let server = server(target.serverID) else { return nil }
         if let note = removedNote(server.id) { return note }
-        return server.protocolVersion >= 29 ? nil : "Update \(server.name) to connect it to Ricrac."
+        return server.protocolVersion >= 29 ? nil : "Update \(server.shortName) to connect it to Ricrac."
     }
 
     /// The panel's server is connected to a Ricrac workspace.
@@ -1951,7 +1951,7 @@ final class AppStore {
     /// Clones the repository while the toast says so, and opens a thread in it once it is
     /// there. Someone who has gone elsewhere meanwhile is offered the thread instead.
     func clone(_ repo: String, on serverID: String) {
-        let into = server(serverID).map { " on \($0.name)" } ?? ""
+        let into = server(serverID).map { " on \($0.shortName)" } ?? ""
         show(Toast(title: "Cloning \(repo)", description: "Into ~/projects\(into)", pending: true))
         let from = selection
         add(["type": "clone_repo", "repo": repo], on: serverID, arrived: { [weak self] project in

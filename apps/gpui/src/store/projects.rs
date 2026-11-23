@@ -230,7 +230,7 @@ impl Store {
     /// Clones the repository while the toast says so, and opens a thread in it once it is there.
     /// Someone who has gone elsewhere meanwhile is offered the thread instead.
     pub fn clone_repo(&mut self, repo: String, server_id: &str, cx: &mut Context<Self>) {
-        let into = self.server(Some(server_id)).map(|server| format!(" on {}", server.name)).unwrap_or_default();
+        let into = self.server(Some(server_id)).map(|server| format!(" on {}", server.short_name)).unwrap_or_default();
         let cloning = Toast::new(format!("Cloning {repo}"), Some(format!("Into ~/projects{into}")));
         self.show_toast(Toast { pending: true, ..cloning }, cx);
         let from = self.selection.clone();

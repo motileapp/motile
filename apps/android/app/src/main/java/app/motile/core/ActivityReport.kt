@@ -117,8 +117,8 @@ data class ActivityReport(
         }
     }
 
-    data class Line(val name: String, val agent: Agent?, val server: String?, val turns: Int, val detail: String, val share: Double) {
-        val id: String get() = "${agent?.raw ?: ""}/${server ?: ""}/$name"
+    data class Line(val name: String, val agent: Agent?, val serverID: String?, val server: String?, val turns: Int, val detail: String, val share: Double) {
+        val id: String get() = "${agent?.raw ?: ""}/${serverID ?: ""}/$name"
     }
 
     data class Fact(val label: String, val value: String, val detail: String)
@@ -132,8 +132,8 @@ data class ActivityReport(
         operator fun invoke(json: JSON): ActivityReport {
             fun lines(key: String) = json.objects(key).map { line ->
                 Line(
-                    line.string("name"), Agent.of(line.optionalString("agent")), line.optionalString("server"), line.int("turns"),
-                    line.string("detail"), line.double("share"),
+                    line.string("name"), Agent.of(line.optionalString("agent")), line.optionalString("server_id"), line.optionalString("server"),
+                    line.int("turns"), line.string("detail"), line.double("share"),
                 )
             }
             fun legend(json: JSON?) = Legend(json?.string("total") ?: "", json?.strings("points") ?: emptyList(), json?.strings("shapes") ?: emptyList())

@@ -354,7 +354,7 @@ impl Composer {
             return "Message to wake it".into();
         }
         if !server.connected() {
-            return format!("Waiting for {}", server.name);
+            return format!("Waiting for {}", server.short_name);
         }
         if server.models.is_empty() && server.known {
             return "Install Claude Code or Codex".into();

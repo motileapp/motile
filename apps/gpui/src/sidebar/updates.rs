@@ -311,7 +311,7 @@ impl RenderOnce for ServerUpdateStatus {
                     ActionButton::new(id("restart-now"), "Restart Now")
                         .help(format!(
                             "Stop the agents on {} and restart it. Their threads continue once it is back.",
-                            server.name
+                            server.short_name
                         ))
                         .variant(self.variant)
                         .size(self.size)
@@ -319,7 +319,7 @@ impl RenderOnce for ServerUpdateStatus {
                         .margin(beside(0., margin.right))
                         .on_click(move |_, window, cx| restart(window, cx)),
                 )
-                .tooltip(tooltip(format!("{} restarts once its agents have finished", server.name)))
+                .tooltip(tooltip(format!("{} restarts once its agents have finished", server.short_name)))
                 .into_any_element();
         }
         if let Some(update) = update {
@@ -357,7 +357,7 @@ impl RenderOnce for ServerUpdateStatus {
                 button
                     .help(format!(
                         "Agents are working on {}. Update it once they finish, or now: they stop and continue once it is back.",
-                        server.name
+                        server.short_name
                     ))
                     .variant(self.variant)
                     .size(self.size)
@@ -366,9 +366,9 @@ impl RenderOnce for ServerUpdateStatus {
             .into_any_element();
         }
         let help = if server.can_choose_restart() {
-            format!("Install version {version} on {}. It restarts once no agent works there.", server.name)
+            format!("Install version {version} on {}. It restarts once no agent works there.", server.short_name)
         } else {
-            format!("Install version {version} on {}. It restarts, and no agent may be working.", server.name)
+            format!("Install version {version} on {}. It restarts, and no agent may be working.", server.short_name)
         };
         let update = self.update(RestartWhen::Idle);
         ActionButton::new(id("update"), "Update")

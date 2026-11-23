@@ -120,7 +120,7 @@ struct ContextStrip: View {
         if copies.isEmpty {
             label(server.shortName, icon: .picture(symbol))
                 .padding(ComposerStrip.firstMargin)
-                .tooltip("On \(server.name)")
+                .tooltip("On \(server.shortName)")
         } else {
             ActionButton(
                 server.shortName, picture: symbol, help: store.shortcuts.help("The server the thread starts on", "composer.server"),
@@ -132,7 +132,7 @@ struct ContextStrip: View {
                     choices: copies.map { copy in
                         let server = store.server(copy.serverID)
                         return DropdownChoice(
-                            id: copy.id, title: server?.name ?? "",
+                            id: copy.id, title: server?.shortName ?? "",
                             icon: server.map { .picture(AnyView(ServerSymbol(server: $0, size: DropdownList.symbol))) },
                             chosen: store.selectedDraft?.projectID == copy.id
                         ) { store.setNewThreadProject(copy.id) }
@@ -179,7 +179,7 @@ struct ContextStrip: View {
                 }
             } else {
                 branchLabel(branch)
-                    .tooltip(server?.known == true ? "Update \(server?.name ?? "your server") to switch branches from here" : "The branch checked out there")
+                    .tooltip(server?.known == true ? "Update \(server?.shortName ?? "your server") to switch branches from here" : "The branch checked out there")
             }
         }
     }

@@ -663,7 +663,7 @@ async fn a_removed_servers_threads_stay_readable_from_the_copies_until_it_is_del
         shown: serde_json::Value::Null,
     };
     let refused =
-        "“build-box” is unlinked, so its threads are read-only. You can delete “build-box” in settings to remove them.";
+        "“build-bo” is unlinked, so its threads are read-only. You can delete “build-bo” in settings to remove them.";
     assert_eq!(client.ask(more).await.unwrap_err(), refused);
 
     // The search finds it on the server that keeps its copy.

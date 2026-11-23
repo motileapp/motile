@@ -690,7 +690,7 @@ private fun ServerErrors(servers: List<Server>) {
     for (server in failing) {
         val error = server.error ?: continue
         Text(
-            if (servers.size == 1) error else "${server.name}: $error",
+            if (servers.size == 1) error else "${server.shortName}: $error",
             Modifier.fillMaxWidth().padding(start = sidebarEdge + 16.dp, end = sidebarEdge, bottom = 10.dp),
             size = TextSize.Xs,
             color = Theme.colors.mutedStrongerForeground,

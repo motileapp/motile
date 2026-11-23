@@ -445,7 +445,7 @@ private fun CaptureThreadSheet() {
             if (threads.isEmpty()) return@SettingsList note(if (query.isBlank()) "No threads yet" else "No matches")
             group {
                 for (thread in threads) row {
-                    SettingsPressRow({ capture(thread) }) { SettingsItem(thread.title, servers[thread.serverID]?.name ?: "") }
+                    SettingsPressRow({ capture(thread) }) { SettingsItem(thread.title, servers[thread.serverID]?.shortName ?: "") }
                 }
             }
         }

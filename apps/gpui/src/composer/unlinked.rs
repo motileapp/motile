@@ -26,14 +26,14 @@ pub fn unlinked_box(store: &Entity<Store>, server: &Server, cx: &App) -> impl In
         .text_color(c.warning)
         .child(icons::symbol("unlink", IconSize::Sm))
         .child(div().flex_none().text_size(TEXT_SIZE).font_weight(FontWeight::MEDIUM).child("Read-only:"))
-        .child(name_chip(server.name.clone(), cx))
+        .child(name_chip(server.short_name.clone(), cx))
         .child(div().min_w_0().text_size(TEXT_SIZE).font_weight(FontWeight::MEDIUM).truncate().child("is unlinked"));
     let buttons = div()
         .flex()
         .justify_end()
         .child(
             ActionButton::new("unlinked-settings", "Settings")
-                .help(format!("Delete “{}” and its threads in Settings", server.name))
+                .help(format!("Delete “{}” and its threads in Settings", server.short_name))
                 .round(true)
                 .surface(Surface::Composer)
                 .margin(margin(1., 4.))

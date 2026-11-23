@@ -93,6 +93,9 @@ pub struct Kind {
 pub struct Line {
     pub name: String,
     pub agent: Option<Agent>,
+    /// The server it is on, by id, for the lines of a server, a project or an account.
+    pub server_id: Option<String>,
+    /// The server's name, shown when more than one server spent.
     pub server: Option<String>,
     pub tokens: u64,
     /// Missing when none of it has a known price.
@@ -133,13 +136,25 @@ pub fn view(
     let mut projects: Vec<Line> = Vec::new();
     let mut servers: Vec<Line> = Vec::new();
     let mut accounts: Vec<Line> = Vec::new();
-    let add = |lines: &mut Vec<Line>, name: &str, agent: Option<Agent>, server: Option<&str>, spent: &UsageBucket| {
+    let add = |lines: &mut Vec<Line>,
+               name: &str,
+               agent: Option<Agent>,
+               server: Option<(&str, Option<&str>)>,
+               spent: &UsageBucket| {
         let (tokens, cost_usd) = (total(&spent.tokens), spent.cost_usd);
-        let same = |line: &Line| line.name == name && line.agent == agent && line.server.as_deref() == server;
+        let server_id = server.map(|(id, _)| id);
+        let same = |line: &Line| line.name == name && line.agent == agent && line.server_id.as_deref() == server_id;
         let index = lines.iter().position(same).unwrap_or_else(|| {
-            let server = server.map(str::to_string);
-            let line =
-                Line { name: name.to_string(), agent, server, tokens: 0, cost_usd: None, share: 0.0, gateway: false };
+            let line = Line {
+                name: name.to_string(),
+                agent,
+                server_id: server_id.map(str::to_string),
+                server: server.and_then(|(_, name)| name).map(str::to_string),
+                tokens: 0,
+                cost_usd: None,
+                share: 0.0,
+                gateway: false,
+            };
             lines.push(line);
             lines.len() - 1
         });
@@ -191,17 +206,23 @@ pub fn view(
         add(&mut models, model, Some(bucket.agent), None, bucket);
         let server = server_names.get(server_id).map(String::as_str).unwrap_or(UNKNOWN_SERVER);
         let project = project_names.get(&(server_id.clone(), bucket.project_id.clone()));
-        add(&mut projects, project.map(String::as_str).unwrap_or(REMOVED_PROJECT), None, Some(server), bucket);
-        add(&mut servers, server, None, None, bucket);
+        add(
+            &mut projects,
+            project.map(String::as_str).unwrap_or(REMOVED_PROJECT),
+            None,
+            Some((server_id, Some(server))),
+            bucket,
+        );
+        add(&mut servers, server, None, Some((server_id, None)), bucket);
         let account = if bucket.account_name.is_empty() { DEFAULT_ACCOUNT } else { &bucket.account_name };
         let pinned = proxied.get(&(server_id.clone(), bucket.agent, account.to_string()));
         let account = if pinned == Some(&false) { agent_name(bucket.agent) } else { account };
-        let index = add(&mut accounts, account, Some(bucket.agent), Some(server), bucket);
+        let index = add(&mut accounts, account, Some(bucket.agent), Some((server_id, Some(server))), bucket);
         accounts[index].gateway |= pinned.is_some();
     }
 
     let several = |line: &Line| {
-        accounts.iter().filter(|other| other.agent == line.agent && other.server == line.server).count() > 1
+        accounts.iter().filter(|other| other.agent == line.agent && other.server_id == line.server_id).count() > 1
     };
     if !accounts.iter().any(several) {
         accounts.clear();
@@ -343,6 +364,22 @@ mod tests {
         let accounts = view(&all, window, &HashMap::new(), &servers, &proxied).accounts;
         let named: Vec<_> = accounts.iter().map(|line| (line.name.as_str(), line.gateway)).collect();
         assert_eq!(named, [("Claude Code", true), ("Work", true), ("Default", false)]);
+    }
+
+    #[test]
+    fn servers_of_the_same_name_are_kept_apart() {
+        let window = Window { since: 0.0, until: DAY, bucket_secs: 86400, utc_offset_secs: 0 };
+        let all = [
+            spent("one", "api", Agent::Claude, "claude-opus", 0.0, Some(1.0)),
+            spent("two", "api", Agent::Claude, "claude-opus", 0.0, Some(3.0)),
+        ];
+        let servers =
+            HashMap::from([("one".to_string(), "ubuntu".to_string()), ("two".to_string(), "ubuntu".to_string())]);
+        let view = view(&all, window, &HashMap::new(), &servers, &HashMap::new());
+        let ids = |lines: &[Line]| lines.iter().map(|line| line.server_id.clone().unwrap()).collect::<Vec<_>>();
+        assert_eq!(ids(&view.servers), ["two", "one"]);
+        assert_eq!(ids(&view.projects), ["two", "one"]);
+        assert_eq!(view.projects[0].server.as_deref(), Some("ubuntu"));
     }
 
     #[test]

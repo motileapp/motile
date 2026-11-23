@@ -291,6 +291,9 @@ impl Grid {
 pub struct Line {
     pub name: String,
     pub agent: Option<Agent>,
+    /// The server a project's line is on, by id.
+    pub server_id: Option<String>,
+    /// The server's name, shown when the projects are on more than one.
     pub server: Option<String>,
     pub turns: u32,
     /// How long they worked, on average.
@@ -646,6 +649,7 @@ pub fn view(done: &[Done], window: Window, grid: Grid, names: &Names, local: &[S
             .map(|(name, agent, server, sums)| Line {
                 name,
                 agent,
+                server_id: None,
                 server,
                 turns: sums.turns,
                 detail: format!("{} on average", duration(sums.seconds / f64::from(sums.turns.max(1)))),
@@ -867,6 +871,7 @@ fn projects(turns: &[(&str, &TurnBucket)], spans: &[Span], names: &Names, turn_c
             let line = Line {
                 name: name.unwrap_or_else(|| "Removed project".into()),
                 agent: None,
+                server_id: Some(server_id),
                 server,
                 turns: sums.turns,
                 detail: detail.join(" · "),

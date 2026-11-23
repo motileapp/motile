@@ -68,7 +68,7 @@ impl UsageRoute {
             .iter()
             .map(|server| {
                 let (handle, id) = (self.store.clone(), server.id.clone());
-                Check::new(server.name.clone(), store.usage_server_picked(&server.id), move |_, cx| {
+                Check::new(server.short_name.clone(), store.usage_server_picked(&server.id), move |_, cx| {
                     handle.update(cx, |store, cx| {
                         store.toggle_usage_server(&id);
                         cx.notify();

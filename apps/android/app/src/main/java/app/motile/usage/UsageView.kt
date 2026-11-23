@@ -34,7 +34,7 @@ import app.motile.ui.edgeFade
 
 /** The servers as the menu that picks them lists them, each checked when it is picked. */
 fun UsageModel.serverChecks(all: List<Server>): List<Check> =
-    all.map { server -> Check(server.id, server.name, server.id in servers) { toggle(server, all) } }
+    all.map { server -> Check(server.id, server.shortName, server.id in servers) { toggle(server, all) } }
 
 /** What the open tab shows, in a column that doesn't grow past a width. The page fades under what is pinned over it. */
 @Composable

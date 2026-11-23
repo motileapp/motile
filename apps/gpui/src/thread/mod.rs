@@ -399,7 +399,7 @@ impl ThreadPane {
     fn removal(&self, project: &Project, cx: &mut Context<Self>) -> Modal {
         let store = self.store.read(cx);
         let server =
-            store.server(Some(&project.server_id)).map_or("its server".to_string(), |server| server.name.clone());
+            store.server(Some(&project.server_id)).map_or("its server".to_string(), |server| server.short_name.clone());
         let message =
             format!("{} leaves your clients. Its folder stays on {server} with everything in it.", project.name);
         let (remove, cancel, removed) = (self.store.clone(), self.store.clone(), project.clone());

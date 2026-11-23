@@ -238,7 +238,7 @@ impl Store {
         if let Some(note) = self.removed_note(&server.id) {
             return Some(note);
         }
-        (server.protocol_version < 12).then(|| format!("Update {} to connect it to Linear.", server.name))
+        (server.protocol_version < 12).then(|| format!("Update {} to connect it to Linear.", server.short_name))
     }
 
     /// The panel's server is connected to a Linear workspace.

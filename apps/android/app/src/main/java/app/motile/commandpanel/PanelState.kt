@@ -292,7 +292,7 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
         return item.title.contains(query, ignoreCase = true) || item.detail.contains(query, ignoreCase = true)
     }
 
-    private fun serverName(id: String): String = store.server(id)?.name ?: "your server"
+    private fun serverName(id: String): String = store.server(id)?.shortName ?: "your server"
 
     /** The projects, each once, the one the open thread works in first, then by when a thread last started. */
     private val projects: List<Project>
@@ -342,7 +342,7 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
                 val count = store.projects.count { it.serverID == server.id }
                 val offline = server.state != Server.State.Connected
                 val detail = if (offline) "Offline" else if (count == 1) "1 project" else "$count projects"
-                PanelItem("server-${server.id}", server.name, detail, PanelIcon.Glyph(Symbol.Server), keepsOpen = true) {
+                PanelItem("server-${server.id}", server.shortName, detail, PanelIcon.Glyph(Symbol.Server), keepsOpen = true) {
                     open(PanelPage.Sources(server.id))
                 }.apply { off = offline }
             }
@@ -486,11 +486,11 @@ internal class PanelState(start: PanelPage, private val store: AppStore, private
             val detail = "From version ${server.version} to ${store.updater.latest ?: ""}"
             val symbol = PanelIcon.Glyph(Symbol.CircleArrowDown)
             if (!store.isBusy(server) || !store.canChooseRestart(server)) {
-                return@flatMap listOf(PanelItem("update-${server.id}", "Update ${server.name}", detail, symbol) { store.update(server) })
+                return@flatMap listOf(PanelItem("update-${server.id}", "Update ${server.shortName}", detail, symbol) { store.update(server) })
             }
             listOf(
-                PanelItem("update-${server.id}", "Update ${server.name} when agents finish", detail, symbol) { store.update(server, RestartWhen.Idle) },
-                PanelItem("update-now-${server.id}", "Update ${server.name} now", "Its agents stop and continue once it is back", symbol) {
+                PanelItem("update-${server.id}", "Update ${server.shortName} when agents finish", detail, symbol) { store.update(server, RestartWhen.Idle) },
+                PanelItem("update-now-${server.id}", "Update ${server.shortName} now", "Its agents stop and continue once it is back", symbol) {
                     store.update(server, RestartWhen.Now)
                 },
             )

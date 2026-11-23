@@ -30,8 +30,8 @@ enum Removal: Identifiable {
 
     var title: String {
         switch self {
-        case .server(let server): "Unlink “\(server.name)”?"
-        case .serverCompletely(let server): "Delete “\(server.name)”?"
+        case .server(let server): "Unlink “\(server.shortName)”?"
+        case .serverCompletely(let server): "Delete “\(server.shortName)”?"
         case .project(let project): "Remove “\(project.name)”?"
         case .account(let account, _): "Remove “\(account.agent.name) · \(account.name)”?"
         case .gateway: "Remove Your Gateway?"
@@ -45,13 +45,13 @@ enum Removal: Identifiable {
     func message(_ store: AppStore) -> String {
         switch self {
         case .server(let server):
-            "Your account lets go of \(server.name). Its threads stay readable, and can go on, from the copies your other servers keep. If it is your only server, nothing is kept. What is on it stays there."
+            "Your account lets go of \(server.shortName). Its threads stay readable, and can go on, from the copies your other servers keep. If it is your only server, nothing is kept. What is on it stays there."
         case .serverCompletely(let server):
-            "\(server.name) leaves your account and every copy of its threads is deleted, on all your servers and clients\(store.backup.bucket == nil ? "" : " and in your backup"). What is on \(server.name) itself stays there."
+            "\(server.shortName) leaves your account and every copy of its threads is deleted, on all your servers and clients\(store.backup.bucket == nil ? "" : " and in your backup"). What is on \(server.shortName) itself stays there."
         case .project(let project):
-            "\(project.name) leaves your clients. Its folder stays on \(store.server(project.serverID)?.name ?? "its server") with everything in it."
+            "\(project.name) leaves your clients. Its folder stays on \(store.server(project.serverID)?.shortName ?? "its server") with everything in it."
         case .account(_, let server):
-            "Its threads move to the default account on \(server.name). Its folder and its sign-in stay there."
+            "Its threads move to the default account on \(server.shortName). Its folder and its sign-in stay there."
         case .gateway(let name):
             "“\(name)” leaves your account, and your servers stop using it. Its threads move to your default accounts."
         case .gatewayAccount:

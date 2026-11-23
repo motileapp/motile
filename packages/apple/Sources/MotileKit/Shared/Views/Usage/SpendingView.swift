@@ -62,7 +62,7 @@ struct SpendingView: View {
                 lines
             }
             ForEach(outdated) { server in
-                Text("Update \(server.name) to see what its agents spend.")
+                Text("Update \(server.shortName) to see what its agents spend.")
                     .font(.ui(.xxs))
                     .foregroundStyle(Color.themeMutedForeground)
             }

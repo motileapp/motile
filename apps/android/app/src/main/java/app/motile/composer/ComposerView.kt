@@ -173,7 +173,7 @@ private fun placeholder(store: AppStore): String {
     val server = store.composerServer ?: return "Ask anything"
     if (store.selectedThread?.isArchived == true) return "Message to bring it back"
     if (store.selectedThread?.section == ThreadSection.Snoozed) return "Message to wake it"
-    if (server.state != Server.State.Connected) return "Waiting for ${server.name}"
+    if (server.state != Server.State.Connected) return "Waiting for ${server.shortName}"
     if (server.models.isEmpty() && server.known) return "Install Claude Code or Codex"
     if (store.asking != null) return "Type your own answer"
     if (store.activity.running) return "Send a follow-up"

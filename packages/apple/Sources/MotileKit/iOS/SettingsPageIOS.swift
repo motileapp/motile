@@ -666,7 +666,7 @@ private struct ProjectSettingsPage: View {
                 }
                 Section {
                     if let server = store.server(project.serverID) {
-                        LabeledContent("Server", value: server.name)
+                        LabeledContent("Server", value: server.shortName)
                     }
                 }
                 Section {

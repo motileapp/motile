@@ -123,12 +123,13 @@ struct ActivityReport {
     struct Line: Identifiable {
         let name: String
         let agent: Agent?
+        let serverID: String?
         let server: String?
         let turns: Int
         let detail: String
         let share: Double
 
-        var id: String { "\(agent?.rawValue ?? "")/\(server ?? "")/\(name)" }
+        var id: String { "\(agent?.rawValue ?? "")/\(serverID ?? "")/\(name)" }
     }
 
     struct Fact: Identifiable {
@@ -212,7 +213,8 @@ struct ActivityReport {
             json.objects(key).map { line in
                 Line(
                     name: line.string("name"), agent: line.optionalString("agent").flatMap(Agent.init(rawValue:)),
-                    server: line.optionalString("server"), turns: line.int("turns"), detail: line.string("detail"),
+                    serverID: line.optionalString("server_id"), server: line.optionalString("server"), turns: line.int("turns"),
+                    detail: line.string("detail"),
                     share: line.double("share"))
             }
         }

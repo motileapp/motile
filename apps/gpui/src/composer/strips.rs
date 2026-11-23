@@ -702,7 +702,7 @@ pub fn context_strip(
             let server = state.server(Some(&copy.server_id));
             ServerCopy {
                 id: copy.id.clone(),
-                name: server.map(|server| server.name.clone()).unwrap_or_default(),
+                name: server.map(|server| server.short_name.clone()).unwrap_or_default(),
                 tint: server.and_then(|server| server.down_tint(&c)),
                 current: copy.id == project.id,
             }
@@ -905,7 +905,7 @@ pub fn context_strip(
             .id("strip-server")
             .flex_shrink_0()
             .pl(px(14.))
-            .tooltip(crate::ui::tooltip(format!("On {}", server.name)))
+            .tooltip(crate::ui::tooltip(format!("On {}", server.short_name)))
             .child(part(title, icons::symbol("server", mark).text_color(tint).into_any_element(), cx))
             .into_any_element()
     });
@@ -948,7 +948,7 @@ pub fn context_strip(
             "The branch of this thread's worktree".to_string()
         } else {
             match server {
-                Some(server) if server.known => format!("Update {} to switch branches from here", server.name),
+                Some(server) if server.known => format!("Update {} to switch branches from here", server.short_name),
                 _ => "The branch checked out there".to_string(),
             }
         };

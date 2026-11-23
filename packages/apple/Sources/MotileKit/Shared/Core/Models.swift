@@ -1729,6 +1729,8 @@ struct UsageReport {
     struct Line: Identifiable {
         let name: String
         let agent: Agent?
+        /// The server of a server's, a project's or an account's line.
+        let serverID: String?
         /// The project's server, when more than one server spent.
         let server: String?
         let tokens: Int
@@ -1737,7 +1739,7 @@ struct UsageReport {
         /// An account that runs through the gateway, which its symbol after the name says.
         let gateway: Bool
 
-        var id: String { "\(agent?.rawValue ?? "")/\(server ?? "")/\(name)" }
+        var id: String { "\(agent?.rawValue ?? "")/\(serverID ?? "")/\(name)" }
     }
 
     /// Only the period's points, while the servers are asked.
@@ -1776,7 +1778,8 @@ struct UsageReport {
         let line = { (line: JSON, share: Double?) in
             Line(
                 name: line.string("name"), agent: line.optionalString("agent").flatMap(Agent.init(rawValue:)),
-                server: line.optionalString("server"), tokens: line.int("tokens"), costUSD: line.optionalDouble("cost_usd"),
+                serverID: line.optionalString("server_id"), server: line.optionalString("server"), tokens: line.int("tokens"),
+                costUSD: line.optionalDouble("cost_usd"),
                 share: share ?? line.double("share"), gateway: line.bool("gateway"))
         }
         let (cost, tokens) = (costUSD, tokens)
@@ -1801,6 +1804,7 @@ struct LimitsReport {
         /// Who is signed in.
         let account: String?
         let plan: String?
+        let serverIDs: [String]
         let servers: [String]
         let windows: [Window]
         /// Why there are no windows.
@@ -1809,7 +1813,7 @@ struct LimitsReport {
         let gateway: Bool
         let resets: LimitResets?
 
-        var id: String { "\(agent.rawValue)/\(name ?? "")/\(account ?? servers.joined(separator: ","))/\(note ?? "")" }
+        var id: String { "\(agent.rawValue)/\(name ?? "")/\(account ?? serverIDs.joined(separator: ","))/\(note ?? "")" }
     }
 
     struct Window: Identifiable, Equatable {
@@ -1849,7 +1853,7 @@ struct LimitsReport {
             Section(
                 agent: Agent(rawValue: section.string("agent")) ?? .claude, name: section.optionalString("name"),
                 account: section.optionalString("account"),
-                plan: section.optionalString("plan"), servers: section.strings("servers"),
+                plan: section.optionalString("plan"), serverIDs: section.strings("server_ids"), servers: section.strings("servers"),
                 windows: section.objects("windows").map(Window.init(json:)),
                 note: section.optionalString("note"), gateway: section.bool("gateway"),
                 resets: section.object("resets").map(LimitResets.init(json:)))

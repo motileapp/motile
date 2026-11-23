@@ -252,7 +252,7 @@ impl CommandPanel {
     }
 
     fn server_name(&self, id: &str, cx: &App) -> String {
-        self.store.read(cx).server(Some(id)).map_or("your server".into(), |server| server.name.clone())
+        self.store.read(cx).server(Some(id)).map_or("your server".into(), |server| server.short_name.clone())
     }
 
     /// What is offered has changed: it is worked out again when it is next needed.
@@ -483,7 +483,7 @@ impl CommandPanel {
                 let id = server.id.clone();
                 let mut item = Item::new(
                     format!("server-{}", server.id),
-                    server.name.clone(),
+                    server.short_name.clone(),
                     detail,
                     ItemIcon::Symbol("server"),
                     move |this, window, cx| this.open(PanelPage::Sources(id.clone()), window, cx),
@@ -851,7 +851,7 @@ impl CommandPanel {
             .filter(|server| store.is_outdated(server) && store.server_update(server).is_none())
             .flat_map(|server| {
                 let detail = format!("From version {} to {latest}", server.version);
-                let (id, name) = (format!("update-{}", server.id), &server.name);
+                let (id, name) = (format!("update-{}", server.id), &server.short_name);
                 if !store.is_busy(server) || !server.can_choose_restart() {
                     return vec![update(id, format!("Update {name}"), detail, server, RestartWhen::Idle)];
                 }

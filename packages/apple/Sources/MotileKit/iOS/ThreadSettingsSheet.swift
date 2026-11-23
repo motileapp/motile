@@ -191,12 +191,12 @@ struct ThreadSettingsSheet: View {
             if !copies.isEmpty {
                 Picker("Server", selection: Binding(get: { project.id }, set: { store.setNewThreadProject($0) })) {
                     ForEach(copies) { copy in
-                        Text(store.server(copy.serverID)?.name ?? "").tag(copy.id)
+                        Text(store.server(copy.serverID)?.shortName ?? "").tag(copy.id)
                     }
                 }
                 .tint(Color.themePrimary)
             } else if let server = store.server(project.serverID) {
-                LabeledContent("Server", value: server.name)
+                LabeledContent("Server", value: server.shortName)
             }
             LabeledContent("Project", value: project.name)
             if project.worktree != nil {

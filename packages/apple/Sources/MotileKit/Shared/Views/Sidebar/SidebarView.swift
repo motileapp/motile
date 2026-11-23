@@ -1371,7 +1371,7 @@ struct ServerErrors: View {
         if !failing.isEmpty {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(failing, id: \.0.id) { server, error in
-                    Text(servers.count > 1 ? "\(server.name): \(error)" : error)
+                    Text(servers.count > 1 ? "\(server.shortName): \(error)" : error)
                         .font(.ui(.xs))
                         .foregroundStyle(Color.themeMutedStrongerForeground)
                         .lineLimit(3)
@@ -1393,7 +1393,7 @@ struct ServerLine: View {
     var body: some View {
         HStack(spacing: 7) {
             ShelfLineMark { StateRing(tint: server.stateTint ?? .themeSuccess) }
-            Text(server.name)
+            Text(server.shortName)
                 .font(.ui(.xs, weight: .medium))
                 .lineLimit(1)
             Spacer(minLength: 4)

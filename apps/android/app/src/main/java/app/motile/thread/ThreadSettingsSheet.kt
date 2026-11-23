@@ -273,7 +273,7 @@ private fun Workspace(project: Project) {
         Group(buildList {
             when {
                 store.draftProjectCopies.isNotEmpty() -> add { ServerPicker(project) }
-                else -> store.server(project.serverID)?.let { server -> add { Labeled("Server", server.name) } }
+                else -> store.server(project.serverID)?.let { server -> add { Labeled("Server", server.shortName) } }
             }
             add { Labeled("Project", project.name) }
             when {
@@ -330,12 +330,12 @@ private fun ServerPicker(project: Project) {
         Menu(
             items = {
                 store.draftProjectCopies.forEach { copy ->
-                    toggle(store.server(copy.serverID)?.name ?: "", isOn = copy.id == project.id) { store.setNewThreadProject(copy.id) }
+                    toggle(store.server(copy.serverID)?.shortName ?: "", isOn = copy.id == project.id) { store.setNewThreadProject(copy.id) }
                 }
             },
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(store.server(project.serverID)?.name ?: "", size = rowText, color = palette.primary)
+                Text(store.server(project.serverID)?.shortName ?: "", size = rowText, color = palette.primary)
                 Icon(Symbol.ChevronDown, rowChevron, color = palette.primary)
             }
         }

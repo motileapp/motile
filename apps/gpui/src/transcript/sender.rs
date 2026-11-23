@@ -198,7 +198,7 @@ fn server_lines(card: Div, sender: &MessageSender, thread_id: Option<&str>, stor
     let store = store.read(cx);
     let thread = thread_id.and_then(|id| store.threads.get(id));
     let server = thread.and_then(|thread| store.server(Some(&thread.server_id)));
-    let name = server.map(|server| server.name.clone()).unwrap_or_else(|| "The server".into());
+    let name = server.map(|server| server.short_name.clone()).unwrap_or_else(|| "The server".into());
     let pull_request = thread.filter(|_| sender.pull_request).and_then(|thread| {
         store
             .project(Some(&thread.project_id))

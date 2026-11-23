@@ -265,7 +265,7 @@ impl AccountSheet {
         if self.saved_as_is(cx) {
             return "Signing in saved the account.".into();
         }
-        format!("Opens Claude's sign-in page. Signing in saves the account on {}.", self.server.name)
+        format!("Opens Claude's sign-in page. Signing in saves the account on {}.", self.server.short_name)
     }
 
     fn start_sign_in(&mut self, cx: &mut Context<Self>) {
@@ -419,7 +419,7 @@ impl AccountSheet {
     }
 
     fn variable_row(&self, index: usize, edited: &EditedVariable, cx: &mut Context<Self>) -> AnyElement {
-        let server = &self.server.name;
+        let server = &self.server.short_name;
         let (sensitive, id) = (edited.sensitive, edited.id);
         let help = if sensitive {
             format!("Sensitive: hidden and kept on {server}")
@@ -514,7 +514,7 @@ impl Render for AccountSheet {
         }
         let c = colors(cx);
         let account = self.edited(cx);
-        let server = self.server.name.clone();
+        let server = self.server.short_name.clone();
         let installed = self.installed();
         let title = if self.is_new() {
             format!("New Account on {server}")

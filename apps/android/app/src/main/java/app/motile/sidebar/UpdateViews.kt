@@ -58,13 +58,13 @@ fun ServerUpdateStatus(
     val update = store.serverUpdate(server)
     when {
         update != null && update.waiting && !update.restarting -> Row(
-            Modifier.semantics { contentDescription = "${server.name} restarts once its agents have finished" },
+            Modifier.semantics { contentDescription = "${server.shortName} restarts once its agents have finished" },
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text("Waiting", size = TextSize.Xs, color = muted)
             ActionButton(
-                "Restart Now", help = "Stop the agents on ${server.name} and restart it. Their threads continue once it is back.",
+                "Restart Now", help = "Stop the agents on ${server.shortName} and restart it. Their threads continue once it is back.",
                 variant = variant, size = size,
             ) {
                 store.update(server, RestartWhen.Now)
@@ -81,9 +81,9 @@ fun ServerUpdateStatus(
         store.isOutdated(server) -> {
             val version = store.updater.latest ?: ""
             val help = if (store.canChooseRestart(server)) {
-                "Install version $version on ${server.name}. It restarts once no agent works there."
+                "Install version $version on ${server.shortName}. It restarts once no agent works there."
             } else {
-                "Install version $version on ${server.name}. It restarts, and no agent may be working."
+                "Install version $version on ${server.shortName}. It restarts, and no agent may be working."
             }
             ActionButton("Update", help = help, variant = variant, size = size) { store.update(server) }
         }

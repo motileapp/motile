@@ -4,6 +4,10 @@ export type Project = { name: string; color: string }
 
 export type Server = { name: string; path: string; ms: number }
 
+export function shortName(server: Server) {
+  return server.name.slice(0, 8).trimEnd()
+}
+
 export type Tool = "search" | "read" | "edit" | "run" | "check"
 
 export type Item =

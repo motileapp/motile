@@ -32,8 +32,8 @@ sealed interface Removal {
 
     val title: String
         get() = when (this) {
-            is OfServer -> "Unlink “${server.name}”?"
-            is OfServerCompletely -> "Delete “${server.name}”?"
+            is OfServer -> "Unlink “${server.shortName}”?"
+            is OfServerCompletely -> "Delete “${server.shortName}”?"
             is OfProject -> "Remove “${project.name}”?"
             is OfAccount -> "Remove “${account.agent.title} · ${account.name}”?"
             is OfGateway -> "Remove Your Gateway?"
@@ -45,11 +45,11 @@ sealed interface Removal {
 
     fun message(store: AppStore): String = when (this) {
         is OfServer ->
-            "Your account lets go of ${server.name}. Its threads stay readable, and can go on, from the copies your other servers keep. If it is your only server, nothing is kept. What is on it stays there."
+            "Your account lets go of ${server.shortName}. Its threads stay readable, and can go on, from the copies your other servers keep. If it is your only server, nothing is kept. What is on it stays there."
         is OfServerCompletely ->
-            "${server.name} leaves your account and every copy of its threads is deleted, on all your servers and clients${if (store.backup.bucket == null) "" else " and in your backup"}. What is on ${server.name} itself stays there."
-        is OfProject -> "${project.name} leaves your clients. Its folder stays on ${store.server(project.serverID)?.name ?: "its server"} with everything in it."
-        is OfAccount -> "Its threads move to the default account on ${server.name}. Its folder and its sign-in stay there."
+            "${server.shortName} leaves your account and every copy of its threads is deleted, on all your servers and clients${if (store.backup.bucket == null) "" else " and in your backup"}. What is on ${server.shortName} itself stays there."
+        is OfProject -> "${project.name} leaves your clients. Its folder stays on ${store.server(project.serverID)?.shortName ?: "its server"} with everything in it."
+        is OfAccount -> "Its threads move to the default account on ${server.shortName}. Its folder and its sign-in stay there."
         is OfGateway ->
             "“$name” leaves your account, and your servers stop using it. Its threads move to your default accounts."
         is OfGatewayAccount -> "Your gateway forgets its sign-in, and its threads move to your other accounts."
