@@ -927,11 +927,10 @@ impl SettingsPage {
         }
         let mut rows = Vec::new();
         for (index, server) in naming.iter().enumerate() {
-            if naming.len() > 1 {
-                rows.push(row(vec![server_label(server, cx)], Vec::new()).into_any_element());
-            }
             if let Some(editor) = self.branch_editors.get(&server.id) {
-                rows.push(editor.clone().into_any_element());
+                let label = (naming.len() > 1).then(|| div().pb(px(4.)).child(server_label(server, cx)));
+                let block = div().p(px(INSET)).flex().flex_col().gap(px(6.)).children(label).child(editor.clone());
+                rows.push(block.into_any_element());
             }
             if index + 1 < naming.len() {
                 rows.push(divider_on(Surface::Card, cx).into_any_element());
@@ -1336,7 +1335,7 @@ impl Render for BranchInstructions {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let changed = self.changed(cx);
         let unchanged = self.server.branch_instructions == self.server.default_branch_instructions && !changed;
-        div().p(px(INSET)).flex().flex_col().gap(px(6.)).child(TextArea::new(&self.text).surface(Surface::Card)).child(
+        div().flex().flex_col().gap(px(6.)).child(TextArea::new(&self.text).surface(Surface::Card)).child(
             div()
                 .flex()
                 .justify_end()

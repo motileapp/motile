@@ -359,14 +359,7 @@ struct SettingsPage: View {
             if !naming.isEmpty {
                 SettingsGroup("branch-names", "Branch names", caption: "How the writer is told to name the branches it makes") {
                     ForEach(naming) { server in
-                        if naming.count > 1 {
-                            SettingsRow {
-                                serverName(server)
-                            } trailing: {
-                                EmptyView()
-                            }
-                        }
-                        BranchInstructionsEditor(server: server)
+                        BranchInstructionsEditor(server: server, named: naming.count > 1)
                         if server.id != naming.last?.id { ThemeDivider() }
                     }
                 }
@@ -555,12 +548,18 @@ func rowOutset(for height: CGFloat, in row: CGFloat = settingsRowHeight) -> CGFl
 private struct BranchInstructionsEditor: View {
     @Environment(AppStore.self) private var store
     let server: Server
+    /// Shows whose instructions these are, when there are several servers.
+    let named: Bool
     @State private var text = ""
 
     private var changed: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines) != server.branchInstructions }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            if named {
+                SettingsLabel(server.name, description: server.deleting ? "Deleting" : nil, icon: .server)
+                    .padding(.bottom, 4)
+            }
             TextArea("How to name a branch", text: $text, maxLines: 16)
             HStack(spacing: 0) {
                 Spacer()
