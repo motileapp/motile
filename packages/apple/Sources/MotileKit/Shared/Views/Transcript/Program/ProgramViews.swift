@@ -143,13 +143,17 @@ final class ProgramTextView: FlippedView, ProgramSelectable {
             #if os(iOS)
             if let selected, NSMaxRange(selected) > selectableText.length { clearSelection() }
             #endif
-            redraw()
+            canvas.redraw()
             hasLinks = part.map { Self.hasLinks($0.text) } ?? false
+            hasCode = part.map { ProgramText.hasCode($0.text) } ?? false
         }
     }
     var onLink: ((URL) -> Void)?
     var selected: NSRange?
     private var laid: (width: CGFloat, storage: NSTextStorage, geometry: TextGeometry)?
+    /// Draws the text, wider than the view by the room inline code's box reaches past its glyphs.
+    private let canvas = TextCanvas()
+    private var hasCode = false
     private var hasLinks = false {
         didSet {
             #if os(iOS)
@@ -166,13 +170,20 @@ final class ProgramTextView: FlippedView, ProgramSelectable {
 
     override init(frame: CGRect) {
         super.init(frame: frame)
+        canvas.frame = bounds.insetBy(dx: -RowTextView.overhang, dy: 0)
+        canvas.drawing = { [weak self] in self?.drawText() }
+        addSubview(canvas)
         #if os(iOS)
         addTextInteraction()
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: Self, _: UITraitCollection) in view.redraw() }
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: Self, _: UITraitCollection) in view.canvas.redraw() }
         #endif
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func layoutNow() {
+        canvas.frame = bounds.insetBy(dx: -RowTextView.overhang, dy: 0)
+    }
 
     #if os(macOS)
     /// Outside a row, as in a popover's panel, a click on a link opens it; in one the row does.
@@ -198,14 +209,20 @@ final class ProgramTextView: FlippedView, ProgramSelectable {
     }
     #endif
 
-    override func draw(_ rect: CGRect) {
-        guard let part else { return }
+    private func drawText() {
+        guard let part, let context = Platform.drawing else { return }
+        context.saveGState()
+        defer { context.restoreGState() }
+        context.translateBy(x: RowTextView.overhang, y: 0)
         #if os(macOS)
-        if let selected, let geometry = textGeometry, let context = Platform.drawing {
+        if let selected, let geometry = textGeometry {
             context.setFillColor(NSColor.selectedTextBackgroundColor.cgColor)
             context.fill(geometry.rects(of: selected))
         }
         #endif
+        if hasCode, let geometry = textGeometry {
+            ProgramText.codeRanges(in: part.text).forEach { geometry.layout.drawInlineCode($0, at: geometry.origin) }
+        }
         let area = CGRect(x: 0, y: -part.lift, width: bounds.width, height: bounds.height + part.lift)
         guard part.oneLine || part.maxLines != nil else {
             return part.text.draw(with: area, options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil)
@@ -235,7 +252,7 @@ final class ProgramTextView: FlippedView, ProgramSelectable {
     func showSelected(_ range: NSRange?) {
         guard range != selected else { return }
         selected = range
-        redraw()
+        canvas.redraw()
     }
     #endif
 
@@ -263,6 +280,31 @@ final class ProgramTextView: FlippedView, ProgramSelectable {
             stop.pointee = true
         }
         return found
+    }
+}
+
+/// Draws what its owner does, in a view that reaches past the owner's sides.
+final class TextCanvas: FlippedView {
+    var drawing: (() -> Void)?
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        #if os(macOS)
+        autoresizingMask = [.width, .height]
+        #else
+        autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        isUserInteractionEnabled = false
+        #endif
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    #if os(macOS)
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    #endif
+
+    override func draw(_ rect: CGRect) {
+        drawing?()
     }
 }
 

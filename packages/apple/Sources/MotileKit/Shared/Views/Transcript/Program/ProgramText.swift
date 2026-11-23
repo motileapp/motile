@@ -6,6 +6,11 @@ import AppKit
 import UIKit
 #endif
 
+extension NSAttributedString.Key {
+    /// Inline code of a program's text, drawn on a box by its view rather than as a background.
+    static let motileInlineCode = NSAttributedString.Key("motile.inlineCode")
+}
+
 /// Sets a program's text as the core resolved it: its style, its runs of bold, italic, code,
 /// struck and linked text, on lines of a fixed height. Safe to call from any thread.
 enum ProgramText {
@@ -39,7 +44,8 @@ enum ProgramText {
             let style = run[2]
             if style & code != 0 {
                 let mono = PlatformFont.uiMono(.xs, weight: style & bold != 0 ? .semibold : .regular)
-                result.addAttributes([.font: mono, .foregroundColor: Theme.foreground, .backgroundColor: Typesetter.inlineCodeBackground], range: range)
+                result.addAttributes([.font: mono, .foregroundColor: Theme.foreground, .motileInlineCode: true], range: range)
+                Typesetter.makeRoom(aroundCode: range, in: result)
             } else if style & (bold | italicBit) != 0 {
                 var font = style & bold != 0 ? PlatformFont.systemFont(ofSize: base.pointSize, weight: .semibold) : base
                 if options.digits || style & bold != 0 && base.isDigits { font = font.digits }
@@ -57,6 +63,20 @@ enum ProgramText {
             result.addAttributes([.link: url, .foregroundColor: Theme.primary], range: range)
         }
         return result
+    }
+
+    static func hasCode(_ text: NSAttributedString) -> Bool {
+        !codeRanges(in: text).isEmpty
+    }
+
+    /// Where the text's inline code is, which its view draws on a box.
+    static func codeRanges(in text: NSAttributedString) -> [NSRange] {
+        var ranges: [NSRange] = []
+        text.enumerateAttribute(.motileInlineCode, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            guard value != nil else { return }
+            ranges.append(range)
+        }
+        return ranges
     }
 
     static func plain(_ text: String, look: ProgramStyle.Look, color: PlatformColor, options: Options = Options()) -> NSAttributedString {
