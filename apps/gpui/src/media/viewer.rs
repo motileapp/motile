@@ -120,6 +120,7 @@ impl MediaViewer {
         self.end_markup(cx);
         self.shown = item.clone();
         self.file = None;
+        markup::read(None);
         self.failed = false;
         #[cfg(target_os = "macos")]
         {
@@ -151,6 +152,7 @@ impl MediaViewer {
         };
         self.file = Some(file.clone());
         if !item.video {
+            markup::read(Some(&file));
             match &self.image {
                 Some(image) => image.update(cx, |image, cx| image.set_file(file, cx)),
                 None => self.image = Some(self.zoomable(Some(&file), None, cx)),

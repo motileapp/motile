@@ -263,6 +263,12 @@ impl Drop for MarkupSession {
 }
 
 /// Keeps the image as it was beside the marked one, to be marked up again.
+/// Has the core read the image the viewer shows in full from now on, so that marking it up doesn't
+/// wait for it; `None` lets the last one go.
+pub fn read(image: Option<&Path>) {
+    markup_json(&json!({ "op": "read", "source": image }).to_string());
+}
+
 fn result(answer: &Value, source: &Path, name: String) -> Option<MarkupResult> {
     let file = PathBuf::from(answer["file"].as_str()?);
     let marks = answer["marks"].as_str()?.to_string();

@@ -139,6 +139,7 @@ struct MediaViewer: View {
             endMarkup()
             load(item)
         }
+        .onChange(of: file) { MarkupSession.read(item.video ? nil : file) }
         .onReceive(NotificationCenter.default.publisher(for: .mediaProgress)) { note in
             guard case .media(let id) = item.source, note.userInfo?["id"] as? String == id else { return }
             fraction = note.userInfo?["fraction"] as? Double
@@ -153,6 +154,7 @@ struct MediaViewer: View {
             keys = nil
             pause()
             markup?.close()
+            MarkupSession.read(nil)
         }
     }
 

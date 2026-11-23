@@ -189,6 +189,11 @@ class MarkupSession private constructor(
             return answer?.optionalString("text") ?: text
         }
 
+        /** Has the core read the image the viewer shows in full from now on, so that marking it up doesn't wait for it; null lets the last one go. */
+        fun read(image: File?) {
+            ask(json("op" to "read", "source" to image?.takeIf { it.extension.lowercase() in decodable }?.path))
+        }
+
         private fun ask(input: JsonObject): JSON? = parseJSON(Native.markup(input.toString()))?.takeIf { it["error"] == null }
 
         private fun readable(source: File, folder: File): File? {

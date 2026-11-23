@@ -87,7 +87,11 @@ struct MediaViewer: View {
         }
         .onChange(of: viewing.index) { endMarkup() }
         .onChange(of: store.markupStep) { follow(store.markupStep) }
-        .onDisappear { markup?.close() }
+        .onChange(of: shared) { MarkupSession.read(viewing.item.video ? nil : shared) }
+        .onDisappear {
+            markup?.close()
+            MarkupSession.read(nil)
+        }
         .simultaneousGesture(pull)
         .preferredColorScheme(checker == .light ? .light : .dark)
         .statusBarHidden(!buttonsShown(item))
@@ -461,7 +465,7 @@ private struct MediaPage: View {
         checker = Pictures.isSeenThrough(id) ? Pictures.checker(behind: id) : nil
         svgSize = Pictures.svgSize(id)
         pictureSize = item.pixels.map { CGSize(width: $0.width / scale, height: $0.height / scale) }
-        if shown { shownChecker = checker }
+        if shown { (shownChecker, picture) = (checker, row) }
         loaded = .image(row, scale: scale)
     }
 }

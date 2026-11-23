@@ -6,8 +6,7 @@
 use std::collections::HashMap;
 use std::path::{Path as FilePath, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
-use std::thread::JoinHandle;
+use std::sync::{Arc, Mutex, OnceLock};
 
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader, RgbaImage};
 use kurbo::Affine;
@@ -576,11 +575,31 @@ fn is_svg(source: &FilePath) -> bool {
     source.extension().is_some_and(|extension| extension.eq_ignore_ascii_case("svg"))
 }
 
-fn draw_svg(source: &FilePath) -> Result<RgbaImage, String> {
-    let tree = crate::svg::tree(&std::fs::read(source).map_err(|e| e.to_string())?)?;
+fn svg_tree(source: &FilePath) -> Result<resvg::usvg::Tree, String> {
+    crate::svg::tree(&std::fs::read(source).map_err(|e| e.to_string())?)
+}
+
+fn svg_scale(tree: &resvg::usvg::Tree) -> f32 {
     let longer = tree.size().width().max(tree.size().height());
-    let pixmap =
-        crate::svg::draw_tree(&tree, longer.clamp(SVG_SIDE, SVG_LARGEST_SIDE) / longer).ok_or("The image is empty.")?;
+    longer.clamp(SVG_SIDE, SVG_LARGEST_SIDE) / longer
+}
+
+/// How many pixels `source` is read as, from its header or its SVG's size alone.
+fn pixels(source: &FilePath) -> Option<u64> {
+    let (width, height) = match is_svg(source) {
+        true => {
+            let tree = svg_tree(source).ok()?;
+            let size = tree.size().to_int_size().scale_by(svg_scale(&tree))?;
+            (size.width(), size.height())
+        }
+        false => ImageReader::open(source).ok()?.with_guessed_format().ok()?.into_dimensions().ok()?,
+    };
+    Some(u64::from(width) * u64::from(height))
+}
+
+fn draw_svg(source: &FilePath) -> Result<RgbaImage, String> {
+    let tree = svg_tree(source)?;
+    let pixmap = crate::svg::draw_tree(&tree, svg_scale(&tree)).ok_or("The image is empty.")?;
     let (width, height) = (pixmap.width(), pixmap.height());
     let pixels = pixmap.pixels().iter().flat_map(|pixel| {
         let color = pixel.demultiply();
@@ -593,7 +612,7 @@ fn draw_svg(source: &FilePath) -> Result<RgbaImage, String> {
 /// `folder`, as a JPEG when it was one and a PNG otherwise, and answers where.
 fn flatten(
     scene: &Scene,
-    picture: RgbaImage,
+    picture: &RgbaImage,
     source: &FilePath,
     folder: &FilePath,
     name: &str,
@@ -633,41 +652,62 @@ fn sessions() -> &'static Mutex<HashMap<u64, Markup>> {
     SESSIONS.get_or_init(Mutex::default)
 }
 
-type Reading = (PathBuf, JoinHandle<Result<RgbaImage, String>>);
+type Picture = Result<Arc<RgbaImage>, String>;
+/// The picture read ahead, or nothing when it is too large to hold while it is only looked at.
+type Reading = Option<(PathBuf, Arc<OnceLock<Option<Picture>>>)>;
 
-/// The pictures read while their marks are drawn, so that writing them out doesn't wait for a
-/// large photo or an SVG's filters.
-fn readings() -> &'static Mutex<HashMap<u64, Reading>> {
-    static READINGS: OnceLock<Mutex<HashMap<u64, Reading>>> = OnceLock::new();
-    READINGS.get_or_init(Mutex::default)
+/// The most pixels read ahead of being marked up: a 12-megapixel photo, an SVG or a screenshot
+/// is; a larger photo is read once its marks are written out.
+const READ_AHEAD_PIXELS: u64 = 4096 * 4096;
+
+/// The picture the viewer shows, read in full from the moment it is shown, so that writing it out
+/// with its marks doesn't wait for a large photo or an SVG's filters.
+fn reading() -> &'static Mutex<Reading> {
+    static READING: OnceLock<Mutex<Reading>> = OnceLock::new();
+    READING.get_or_init(Mutex::default)
 }
 
-fn start_reading(id: u64, source: PathBuf) {
-    let path = source.clone();
-    let Ok(reading) = std::thread::Builder::new().name("markup-read".into()).spawn(move || decode(&path)) else {
+/// Starts reading `source` in place of the picture read before, or lets that go.
+fn start_reading(source: Option<PathBuf>) {
+    let Ok(mut reading) = reading().lock() else { return };
+    if reading.as_ref().map(|(path, _)| path) == source.as_ref() {
         return;
-    };
-    if let Ok(mut readings) = readings().lock() {
-        readings.insert(id, (source, reading));
+    }
+    *reading = None;
+    let Some(source) = source else { return };
+    let picture = Arc::new(OnceLock::new());
+    let (path, read) = (source.clone(), picture.clone());
+    let started = std::thread::Builder::new().name("markup-read".into()).spawn(move || {
+        let held = pixels(&path).is_some_and(|pixels| pixels <= READ_AHEAD_PIXELS);
+        let _ = read.set(held.then(|| decode(&path).map(Arc::new)));
+    });
+    if started.is_ok() {
+        *reading = Some((source, picture));
     }
 }
 
-/// The picture at `source`, read since the session opened if it was told then, or now.
-fn read(id: u64, source: &FilePath) -> Result<RgbaImage, String> {
-    let reading = readings().lock().ok().and_then(|mut readings| readings.remove(&id));
-    match reading {
-        Some((path, reading)) if path == source => {
-            reading.join().map_err(|_| "The image couldn't be read.".to_string())?
-        }
-        _ => decode(source),
+/// The picture at `source`: the one being read if it is that, waited for, or read now.
+fn read(source: &FilePath) -> Picture {
+    let read = reading().lock().ok().and_then(|reading| {
+        let (path, picture) = reading.as_ref()?;
+        (path == source).then(|| picture.clone())
+    });
+    match read.and_then(|picture| picture.wait().clone()) {
+        Some(picture) => picture,
+        None => decode(source).map(Arc::new),
     }
 }
 
 #[derive(Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 enum Ask {
+    /// Reads `source` in full meanwhile, for `flatten`, or lets the picture read before go.
+    Read {
+        #[serde(default)]
+        source: Option<PathBuf>,
+    },
     /// `marks` are what an earlier `flatten` answered, to go on with them. `source` is read
-    /// meanwhile, for `flatten`.
+    /// meanwhile, as `read` does.
     Open {
         width: f64,
         height: f64,
@@ -771,16 +811,20 @@ pub fn markup_json(input: &str) -> String {
 
 fn answer(ask: Ask) -> Value {
     static NEXT: AtomicU64 = AtomicU64::new(1);
+    if let Ask::Read { source } = ask {
+        start_reading(source);
+        return json!({});
+    }
     let Ok(mut sessions) = sessions().lock() else { return json!({ "error": "The markup is unavailable." }) };
     if let Ask::PlaceNotes { notes, earlier, text } = &ask {
         return json!({ "text": place_notes(notes.as_deref(), earlier.as_deref(), text) });
     }
     let (id, markup) = match ask {
-        Ask::PlaceNotes { .. } => return json!({}),
+        Ask::PlaceNotes { .. } | Ask::Read { .. } => return json!({}),
         Ask::Open { width, height, marks, source } => {
             let id = NEXT.fetch_add(1, Ordering::Relaxed);
-            if let Some(source) = source {
-                start_reading(id, source);
+            if source.is_some() {
+                start_reading(source);
             }
             let mut markup = Markup::new(width, height);
             markup.marks = marks.and_then(|marks| serde_json::from_str(&marks).ok()).unwrap_or_default();
@@ -788,10 +832,6 @@ fn answer(ask: Ask) -> Value {
         }
         Ask::Close { id } => {
             sessions.remove(&id);
-            drop(sessions);
-            if let Ok(mut readings) = readings().lock() {
-                readings.remove(&id);
-            }
             return json!({});
         }
         Ask::Flatten { id, source, folder, name } => {
@@ -799,7 +839,7 @@ fn answer(ask: Ask) -> Value {
             let (scene, notes) = (markup.scene(true), markup.notes(&name));
             let marks = serde_json::to_string(&markup.marks).unwrap_or_default();
             drop(sessions);
-            return match read(id, &source).and_then(|picture| flatten(&scene, picture, &source, &folder, &name)) {
+            return match read(&source).and_then(|picture| flatten(&scene, &picture, &source, &folder, &name)) {
                 Ok(file) => json!({ "file": file, "notes": notes, "marks": marks }),
                 Err(error) => json!({ "error": error }),
             };
@@ -827,7 +867,7 @@ fn answer(ask: Ask) -> Value {
         Ask::Remove { mark, .. } => markup.remove(mark),
         Ask::Undo { .. } => markup.undo(),
         Ask::Redo { .. } => markup.redo(),
-        Ask::Open { .. } | Ask::Close { .. } | Ask::Flatten { .. } | Ask::PlaceNotes { .. } => {}
+        Ask::Open { .. } | Ask::Close { .. } | Ask::Flatten { .. } | Ask::PlaceNotes { .. } | Ask::Read { .. } => {}
     }
     markup.state(id)
 }
@@ -957,12 +997,13 @@ mod tests {
     }
 
     #[test]
-    fn an_svg_read_while_it_is_marked_is_drawn_large_enough_and_written_as_a_png() {
+    fn an_svg_read_from_when_it_is_shown_is_drawn_large_enough_and_written_as_a_png() {
         let folder = tempfile::tempdir().unwrap();
         let source = folder.path().join("icon.svg");
         let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="12" fill="#0000ff"/></svg>"##;
         std::fs::write(&source, svg).unwrap();
-        let id = ask(json!({ "op": "open", "width": 24, "height": 24, "source": source }))["id"].as_u64().unwrap();
+        ask(json!({ "op": "read", "source": source }));
+        let id = open(24, 24);
         stroke(id, "box", [14.0, 14.0], [20.0, 20.0]);
 
         let answer = ask(json!({

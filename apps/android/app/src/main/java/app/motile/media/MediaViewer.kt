@@ -247,8 +247,13 @@ private fun Viewer(viewing: Viewing) {
 
     val open by rememberUpdatedState(markup)
     DisposableEffect(Unit) {
-        onDispose { open?.close() }
+        onDispose {
+            open?.close()
+            MarkupSession.read(null)
+        }
     }
+    val shownFile = files[page]
+    LaunchedEffect(shownFile, item.video) { MarkupSession.read(shownFile.takeUnless { item.video }) }
     SideEffect {
         DemoHooks.markup = { step -> drive(step, markup, ::startMarkup, ::cancelMarkup, ::finishMarkup) }
     }
@@ -486,6 +491,7 @@ private fun MediaPage(
     LaunchedEffect(checker) { onChecker(checker) }
     var failed by remember(item) { mutableStateOf(false) }
     LaunchedEffect(item) {
+        (loaded as? Loaded.Picture)?.image?.let(onPicture)
         val file = when (val source = item.source) {
             is ViewedMedia.Source.LocalFile -> source.file
             is ViewedMedia.Source.Media -> store.mediaFile(source.id)

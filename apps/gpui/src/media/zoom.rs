@@ -160,11 +160,15 @@ impl ZoomableImage {
         cx.notify();
     }
 
-    /// The file's own picture's pixels as it was decoded, once it is.
+    /// The pixels of the picture shown: the file's own once it is decoded, the first one's before.
     pub fn picture_size(image: &Entity<Self>, cx: &mut App) -> Option<(u32, u32)> {
-        let file = image.read(cx).file.clone()?;
-        let Picture::Ready(shown) = sharp(&file, cx) else { return None };
-        Some((shown.width, shown.height))
+        let image = image.read(cx);
+        let first = image.first.as_ref().map(|(shown, pixels)| pixels.unwrap_or((shown.width, shown.height)));
+        let Some(file) = image.file.clone() else { return first };
+        match sharp(&file, cx) {
+            Picture::Ready(shown) => Some((shown.width, shown.height)),
+            _ => first,
+        }
     }
 
     pub fn set_markup(&mut self, markup: Option<Entity<MarkupSession>>, cx: &mut Context<Self>) {

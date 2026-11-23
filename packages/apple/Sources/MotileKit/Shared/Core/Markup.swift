@@ -180,6 +180,14 @@ final class MarkupSession {
         _ = Self.ask(["op": "close", "id": id])
     }
 
+    /// Has the core read the image the viewer shows in full from now on, so that marking it up
+    /// doesn't wait for it; nothing lets the last one go.
+    static func read(_ image: URL?) {
+        var input: JSON = ["op": "read"]
+        input["source"] = image?.path
+        _ = ask(input)
+    }
+
     private func commitNote() {
         guard let pin = selectedPin, pin.note != note.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
         send(["op": "note", "mark": pin.mark, "text": note])
