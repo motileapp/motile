@@ -131,6 +131,14 @@ struct SettingsPage: View {
             }
         }
 
+        SettingsGroup("turn-changes", "Transcript") {
+            SettingsRow(control: Switch.height) {
+                SettingsLabel("Turn changes", description: turnChangesDescription)
+            } trailing: {
+                Switch(isOn: Bindable(store).showsTurnChanges)
+            }
+        }
+
         SettingsGroup("storage", "Storage") {
             SettingsRow {
                 SettingsLabel("Images and videos", description: store.mediaStorageDescription)

@@ -40,6 +40,7 @@ import app.motile.core.logDescription
 import app.motile.core.matching
 import app.motile.layout.KeyboardFocus
 import app.motile.core.managesNewThreadsDescription
+import app.motile.core.turnChangesDescription
 import app.motile.core.workingShelfDescription
 import app.motile.core.pullDefaultBranchCaption
 import app.motile.onboarding.ConnectServerView
@@ -134,6 +135,14 @@ private fun SettingsGroups.general(
             SettingsRow {
                 SettingsItem("Manage new threads automatically", managesNewThreadsDescription, lines = Int.MAX_VALUE)
                 Switch(managesNewThreads, setManagesNewThreads)
+            }
+        }
+    }
+    group("turn-changes", header = "Transcript") {
+        row {
+            SettingsRow {
+                SettingsItem("Turn changes", turnChangesDescription, lines = Int.MAX_VALUE)
+                Switch(store.showsTurnChanges, store::changeShowsTurnChanges)
             }
         }
     }

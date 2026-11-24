@@ -550,6 +550,10 @@ pub enum Command {
         allow: bool,
     },
     /// Opens or closes a group of tool calls or a turn's fold.
+    /// Leaves out of every transcript the rows that say what each turn changed, or shows them again.
+    HideChanges {
+        hidden: bool,
+    },
     ToggleRow {
         thread_id: String,
         row_id: String,

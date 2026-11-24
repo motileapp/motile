@@ -37,6 +37,11 @@ object Preferences {
         get() = optionalBool("sidebar.workingShelf") ?: true
         set(on) = set("sidebar.workingShelf", on)
 
+    /** Whether a finished turn ends with the files it changed. */
+    var showsTurnChanges: Boolean
+        get() = optionalBool("transcript.turnChanges") ?: true
+        set(on) = set("transcript.turnChanges", on)
+
     /** A map of strings, kept as JSON. */
     fun strings(key: String): Map<String, String> {
         val json = string(key)?.let(::parseJSON) ?: return emptyMap()

@@ -391,6 +391,14 @@ final class AppStore {
         }
     }
     static let workingShelfKey = "sidebar.workingShelf"
+    /// Whether a finished turn ends with the files it changed.
+    var showsTurnChanges = UserDefaults.standard.object(forKey: AppStore.turnChangesKey) as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(showsTurnChanges, forKey: AppStore.turnChangesKey)
+            core.send("hide_changes", ["hidden": !showsTurnChanges])
+        }
+    }
+    static let turnChangesKey = "transcript.turnChanges"
     /// The threads the sidebar lists above its shelf, in its order.
     var listedThreads: [ThreadInfo] { activeThreads + workingThreads }
     var allThreads: [ThreadInfo] { activeThreads + workingThreads + snoozedThreads + archivedThreads }
@@ -557,6 +565,7 @@ final class AppStore {
         if !core.start(config: config) {
             errorMessage = "Motile couldn't start. Its data folder may not be writable."
         }
+        if !showsTurnChanges { core.send("hide_changes", ["hidden": true]) }
         if environment["MOTILE_DEMO"] != "1" { updater.start() }
         lifecycle.start(self)
         engagement.start(self)

@@ -87,8 +87,9 @@ pub struct SettingsEntry {
 }
 
 const WORKING_SHELF: &str = "sidebar.workingShelf";
+const TURN_CHANGES: &str = "transcript.turnChanges";
 
-const ENTRIES: [(&str, &str, SettingsSection, &str); 29] = [
+const ENTRIES: [(&str, &str, SettingsSection, &str); 30] = [
     ("account", "Account", SettingsSection::General, "signed in email sign out"),
     ("updates", "Updates", SettingsSection::General, "version check for updates release"),
     ("appearance", "Theme", SettingsSection::General, "appearance light dark system mode"),
@@ -105,6 +106,7 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 29] = [
         SettingsSection::General,
         "provider limits usage accounts switch quota rate",
     ),
+    ("turn-changes", "Turn changes", SettingsSection::General, "transcript diff files changed edits end of turn hide"),
     ("storage", "Images and videos", SettingsSection::General, "storage cache clear media disk"),
     ("log", "Log", SettingsSection::General, "troubleshooting debug problem connecting logs file"),
     (
@@ -262,6 +264,16 @@ impl Store {
     pub fn set_working_shelf(&mut self, on: bool) {
         self.prefs.set(WORKING_SHELF, on);
         self.set_threads(self.threads.clone());
+    }
+
+    /// Whether a finished turn ends with the files it changed.
+    pub fn shows_turn_changes(&self) -> bool {
+        self.prefs.get(TURN_CHANGES).unwrap_or(true)
+    }
+
+    pub fn set_shows_turn_changes(&mut self, on: bool) {
+        self.prefs.set(TURN_CHANGES, on);
+        self.send(Command::HideChanges { hidden: !on });
     }
 
     /// What the server does with pull requests by itself.

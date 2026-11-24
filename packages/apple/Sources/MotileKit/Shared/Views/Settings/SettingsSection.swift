@@ -47,6 +47,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
 /// What managing new threads does, said under its switch.
 let managesNewThreadsDescription = "Picks the account for each new thread."
 let workingShelfDescription = "Show working threads on their own shelf."
+let turnChangesDescription = "Show the files each turn changed at its end."
 
 /// What the log is, said beside the way to it.
 let logDescription = "What Motile did on this \(Platform.device), such as connecting to your servers. It helps look into a problem."
@@ -69,6 +70,7 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "messages", title: "Sent while the agent works", section: .general, keywords: "messages queue steer interrupt"),
         SettingsEntry(id: "working-shelf", title: "Working shelf", section: .general, keywords: "sidebar working threads shelf section running monitoring"),
         SettingsEntry(id: "manage-new-threads", title: "Manage new threads automatically", section: .general, keywords: "provider limits usage accounts switch quota rate"),
+        SettingsEntry(id: "turn-changes", title: "Turn changes", section: .general, keywords: "transcript diff files changed edits end of turn hide"),
         SettingsEntry(id: "storage", title: "Images and videos", section: .general, keywords: "storage cache clear media disk"),
         SettingsEntry(id: "log", title: "Log", section: .general, keywords: "troubleshooting debug problem connecting logs file"),
         SettingsEntry(id: "agent-accounts", title: "Provider Accounts", section: .accounts, keywords: "agents claude codex sign in account folder subscription plan api key router"),

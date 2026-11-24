@@ -477,6 +477,8 @@ struct Core {
     relay: Relay,
     gateway: Gateway,
     backup: Backup,
+    /// Transcripts leave out what each turn changed.
+    changes_hidden: bool,
 }
 
 /// The account's gateway, as far as the client knows it.
@@ -619,6 +621,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         search: Search::default(),
         relay: Relay::default(),
         gateway: Gateway::default(),
+        changes_hidden: false,
     };
     // Loading the syntax definitions takes a moment; better now than at the first code block.
     tokio::task::spawn_blocking(|| highlight::highlight("rust", "fn main() {}"));
@@ -2745,6 +2748,23 @@ impl Core {
         }
     }
 
+    fn hide_changes(&mut self, hidden: bool) {
+        self.changes_hidden = hidden;
+        let thread_ids: Vec<String> = self.open.keys().cloned().collect();
+        for thread_id in thread_ids {
+            let Some(open) = self.open.get_mut(&thread_id) else { continue };
+            open.find = None;
+            let splice = open.transcript.hide_changes(hidden);
+            let of_agent = open.agent.as_mut().and_then(|(_, transcript)| transcript.hide_changes(hidden));
+            if let Some(splice) = splice {
+                self.emit_rows(&thread_id, false, splice);
+            }
+            if let Some(splice) = of_agent {
+                self.emit_agent_rows(&thread_id, false, splice);
+            }
+        }
+    }
+
     /// Finds `query` in the thread, reading its rows from the cache the first time.
     fn find(&mut self, thread_id: &str, query: &str, from: Option<FindFrom>, item_id: Option<String>) {
         let Some(open) = self.open.get_mut(thread_id) else { return };
@@ -2765,8 +2785,9 @@ impl Core {
                 items.sort_by_key(|item| item.seq);
                 let (inputs, thread_id, cwd) =
                     (self.inputs.clone(), thread_id.to_string(), open.transcript.cwd().to_string());
+                let changes_hidden = open.transcript.changes_hidden();
                 tokio::task::spawn_blocking(move || {
-                    let entries = find::index(&items, &cwd);
+                    let entries = find::index(&items, &cwd, changes_hidden);
                     let _ = inputs.send(Input::FindIndexed { thread_id, entries });
                 });
                 open.find.insert(Find::default())
@@ -4452,6 +4473,10 @@ impl Core {
                 self.with_programs(&thread_id, |programs| programs.confirm(&row_id, call_id, allow));
                 self.reply(id, Ok(json!({})));
             }
+            Command::HideChanges { hidden } => {
+                self.hide_changes(hidden);
+                self.reply(id, Ok(json!({})));
+            }
             Command::ToggleRow { thread_id, row_id } => {
                 let splice = self.open.get_mut(&thread_id).and_then(|open| open.transcript.toggle(&row_id));
                 if let Some(splice) = splice {
@@ -4689,6 +4714,7 @@ impl Core {
         let agents = self.cache.agents(thread_id);
         let threads = ThreadState::of_children(&server.threads, thread_id);
         let mut transcript = Transcript::new(&cwd);
+        transcript.hide_changes(self.changes_hidden);
         transcript.set_agents(&agents, &threads);
         transcript.load(newest);
         if let Some(seq) = place {
