@@ -154,6 +154,8 @@ fun FileCard(file: SentFile, modifier: Modifier = Modifier, kept: Boolean = true
 object FileRow {
     val cardHeight = scaled(56f).dp
     val widest = scaled(420f).dp
+    /** The narrowest a card is beside another, in a message's bubble. */
+    val narrowest = scaled(220f).dp
     val tileSide = scaled(36f).dp
     val ringInset = scaled(5f).dp
 }

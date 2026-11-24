@@ -34,8 +34,6 @@ const GAP: f32 = 6.;
 /// The room between the spinner and its percentage, and the message and its button.
 const STACK_GAP: f32 = 10.;
 const LINE_HEIGHT: f32 = 16.;
-/// The room between the lines of a message's files.
-const LINE_GAP: f32 = 4.;
 const TILE: f32 = 96.;
 /// The smallest box a picture is shown in, so that a small one lies on a checkerboard that can be
 /// made out and pressed.
@@ -268,12 +266,14 @@ pub fn named_copy(file: &Path, name: &str) -> PathBuf {
     if std::fs::copy(file, &copy).is_ok() { copy } else { file.to_path_buf() }
 }
 
-/// The images, videos and files attached to a message: tiles of one size with the whole picture
-/// fitted in each, which open in the viewer, and a line for each of the others under them.
+/// The images, videos and files attached to a message `width` wide at most: tiles of one size with
+/// the whole picture fitted in each, which open in the viewer, and the others under them as cards,
+/// side by side where they fit.
 pub fn attached_files(
     row_id: &str,
     ctx: &RowContext,
     files: &[AttachedFile],
+    width: f32,
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
@@ -293,12 +293,19 @@ pub fn attached_files(
             })
         })
         .collect();
-    let named: Vec<AnyElement> = files
-        .iter()
-        .enumerate()
-        .filter(|(_, file)| !file.pictured())
-        .map(|(index, file)| {
-            file::attached_card(format!("attached-file-{row_id}-{index}"), store, file, ctx.removed, window, cx)
+    let named: Vec<(usize, &AttachedFile)> = files.iter().enumerate().filter(|(_, file)| !file.pictured()).collect();
+    let (columns, card_width) = file::card_grid(named.len(), width);
+    let card_lines: Vec<AnyElement> = named
+        .chunks(columns)
+        .map(|line| {
+            div()
+                .flex()
+                .gap(px(TILE_GAP))
+                .children(line.iter().map(|(index, file)| {
+                    let key = format!("attached-file-{row_id}-{index}");
+                    file::attached_card(key, store, file, card_width, ctx.removed, window, cx)
+                }))
+                .into_any_element()
         })
         .collect();
     div()
@@ -360,8 +367,8 @@ pub fn attached_files(
                 },
             )))
         })
-        .when(!named.is_empty(), |files| {
-            files.child(div().flex().flex_col().items_start().gap(px(LINE_GAP)).children(named))
+        .when(!card_lines.is_empty(), |files| {
+            files.child(div().flex().flex_col().items_start().gap(px(TILE_GAP)).children(card_lines))
         })
         .into_any_element()
 }

@@ -871,7 +871,7 @@ fn bubble_content(
         .flex_col()
         .gap(px(if has_files && !text.is_empty() { 8. } else { 0. }))
         .when(has_files, |bubble| {
-            bubble.child(crate::media::attached_files(&model.row.id, ctx, attachments, window, cx))
+            bubble.child(crate::media::attached_files(&model.row.id, ctx, attachments, widest, window, cx))
         })
         .when(!text.is_empty(), |bubble| {
             let id = format!("{}-text", model.row.id);

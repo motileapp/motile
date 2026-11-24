@@ -249,6 +249,8 @@ final class FileRowView: RowView {
 final class FileCard: FlippedView {
     static let height = scaled(56)
     static let widest = scaled(420)
+    /// The narrowest a card is beside another, in a message's bubble.
+    static let narrowest = scaled(220)
     private static let tileSide = scaled(36)
     private static let ringInset = scaled(5)
     private static let inset = (height - tileSide) / 2
