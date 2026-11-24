@@ -675,8 +675,7 @@ struct ActionButton: View {
             tinted: look.tint.flatMap { tint in tinted.map { (words: $0, color: tint) } }, proxied: proxied,
             pinned: pinned, centered: look.round
         )
-        .padding(reach.around)
-        return pressable(label, style: ControlButtonStyle(look: look, pending: pending, signals: signals, margin: light))
+        return pressable(label, room: reach.around, style: ControlButtonStyle(look: look, pending: pending, signals: signals, margin: light))
             .padding(reach.outset)
             .padding(inline ? inlineBleed : EdgeInsets())
             .allowsHitTesting(!pending)
@@ -684,37 +683,52 @@ struct ActionButton: View {
             .accessibilityLabel(words.map { [$0, tinted].compactMap { $0 }.joined(separator: " ") } ?? help ?? "")
     }
 
-    /// The button, or on iOS with a menu one that opens it in place on a long press. The Mac opens
-    /// it on a right click.
+    /// The button, its `room` around `label` taking presses too, or on iOS with a menu one that
+    /// opens it in place on a long press. The Mac opens it on a right click.
     @ViewBuilder
-    private func pressable(_ label: some View, style: ControlButtonStyle) -> some View {
+    private func pressable(_ label: some View, room: EdgeInsets, style: ControlButtonStyle) -> some View {
         #if os(iOS)
         if let menuItems {
-            Menu {
-                ForEach(menuItems.indices, id: \.self) { menuItems[$0] }
-            } label: {
-                label
-            } primaryAction: {
-                action()
-            }
-            .menuStyle(.button)
-            .menuOrder(.fixed)
-            .menuIndicator(.hidden)
-            .buttonStyle(style)
-            .tint(Color.themeForeground)
+            inPlaceMenu(menuItems, label: label, room: room, style: style)
         } else {
-            Button(action: action) { label }.buttonStyle(style)
+            Button(action: action) { label.padding(room) }.buttonStyle(style)
         }
         #else
         if let menuItems {
-            Button(action: action) { label }
+            Button(action: action) { label.padding(room) }
                 .buttonStyle(style)
                 .contextMenu { ForEach(menuItems.indices, id: \.self) { menuItems[$0] } }
         } else {
-            Button(action: action) { label }.buttonStyle(style)
+            Button(action: action) { label.padding(room) }.buttonStyle(style)
         }
         #endif
     }
+
+    #if os(iOS)
+    /// The menu opens out of its label and closes back into it, so its label is only what is seen,
+    /// and a tap in its room does what it does from behind.
+    private func inPlaceMenu(_ items: [MenuItem], label: some View, room: EdgeInsets, style: ControlButtonStyle) -> some View {
+        var seen = style
+        let margin = style.margin
+        seen.margin = EdgeInsets(
+            top: margin.top - room.top, leading: margin.leading - room.leading, bottom: margin.bottom - room.bottom,
+            trailing: margin.trailing - room.trailing)
+        return Menu {
+            ForEach(items.indices, id: \.self) { items[$0] }
+        } label: {
+            label
+        } primaryAction: {
+            action()
+        }
+        .menuStyle(.button)
+        .menuOrder(.fixed)
+        .menuIndicator(.hidden)
+        .buttonStyle(seen)
+        .tint(Color.themeForeground)
+        .padding(room)
+        .background { Color.clear.contentShape(Rectangle()).onTapGesture(perform: action) }
+    }
+    #endif
 
     /// How far an inline button's light reaches above and below its words.
     private static let inlineLightRoom: CGFloat = 3
