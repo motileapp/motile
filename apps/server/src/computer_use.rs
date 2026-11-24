@@ -78,6 +78,9 @@ const STDERR_KEPT: usize = 2000;
 /// Numbers each run of the driver for the agents' MCP servers, which stop with the run they reach:
 /// a new run changes what they are given, so they are started again.
 const RUN_VARIABLE: &str = "MOTILE_DRIVER_RUN";
+/// The driver last started and its program. The driver doesn't stop when its input ends, so the
+/// server that takes this one's place on an update, or starts after it crashed, stops it.
+const DRIVER_FILE: &str = "driver.pid";
 
 /// What an agent's process is given to reach the driver.
 #[derive(Clone, Debug, PartialEq)]
@@ -152,6 +155,7 @@ impl ComputerUse {
 
     /// Runs the driver while computer use is on, and starts it again when it stops.
     pub fn keep_running(self: &Arc<Self>) {
+        stop_leftover_driver(&self.folder);
         let this = self.clone();
         tokio::spawn(async move {
             let mut enabled = this.enabled.subscribe();
@@ -218,6 +222,9 @@ impl ComputerUse {
             .stderr(Stdio::piped())
             .kill_on_drop(true);
         let mut driver = driver.spawn().context("The computer use driver couldn't be started.")?;
+        if let Some(pid) = driver.id() {
+            remember_driver(&self.folder, pid, &program);
+        }
         // Held apart, since waiting for the driver would close it.
         let _input = driver.stdin.take();
         let stderr = keep_stderr(&mut driver);
@@ -320,6 +327,46 @@ fn serve_arguments(socket: &Path) -> Vec<String> {
 fn mcp_arguments(socket: &Path) -> Vec<String> {
     let socket = socket.display().to_string();
     ["mcp", "--embedded", "--socket", &socket, "--host-bundle-id", HOST_ID].map(String::from).into()
+}
+
+fn remember_driver(folder: &Path, pid: u32, program: &Path) {
+    let _ = std::fs::create_dir_all(folder);
+    let _ = std::fs::write(folder.join(DRIVER_FILE), format!("{pid}\n{}", program.display()));
+}
+
+/// Stops the driver a server before this one left running, if that process is still the driver.
+fn stop_leftover_driver(folder: &Path) {
+    let file = folder.join(DRIVER_FILE);
+    let Ok(kept) = std::fs::read_to_string(&file) else { return };
+    let _ = std::fs::remove_file(&file);
+    let Some((pid, program)) = kept.split_once('\n') else { return };
+    let Ok(pid) = pid.parse::<libc::pid_t>() else { return };
+    if pid <= 0 || pid == std::process::id() as libc::pid_t {
+        return;
+    }
+    let Ok(program) = std::fs::canonicalize(program) else { return };
+    let Some(running) = executable(pid).and_then(|path| std::fs::canonicalize(path).ok()) else { return };
+    if running != program {
+        return;
+    }
+    unsafe { libc::kill(pid, libc::SIGKILL) };
+}
+
+#[cfg(target_os = "macos")]
+fn executable(pid: libc::pid_t) -> Option<PathBuf> {
+    use std::os::unix::ffi::OsStringExt;
+    let mut buffer = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
+    let length = unsafe { libc::proc_pidpath(pid, buffer.as_mut_ptr().cast(), buffer.len() as u32) };
+    if length <= 0 {
+        return None;
+    }
+    buffer.truncate(length as usize);
+    Some(PathBuf::from(std::ffi::OsString::from_vec(buffer)))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn executable(pid: libc::pid_t) -> Option<PathBuf> {
+    std::fs::read_link(format!("/proc/{pid}/exe")).ok()
 }
 
 /// The folder of the driver's socket and the screen's session bus, removed once they stop.
@@ -450,6 +497,26 @@ mod tests {
         let elsewhere = Runtime(runtime_folder(Path::new("/elsewhere/computer-use")).unwrap());
         assert_ne!(runtime.0, elsewhere.0);
         assert!(runtime.0.join("driver.sock").as_os_str().len() < 104, "{}", runtime.0.display());
+    }
+
+    #[test]
+    fn a_driver_left_by_the_server_before_is_stopped_and_a_process_that_took_its_pid_is_not() {
+        use std::os::unix::process::ExitStatusExt;
+        let folder = tempfile::tempdir().unwrap();
+        let sleep = Path::new("/bin/sleep");
+
+        let mut left = std::process::Command::new(sleep).arg("30").spawn().unwrap();
+        remember_driver(folder.path(), left.id(), sleep);
+        stop_leftover_driver(folder.path());
+        assert_eq!(left.wait().unwrap().signal(), Some(libc::SIGKILL));
+        assert!(!folder.path().join(DRIVER_FILE).exists());
+
+        let mut other = std::process::Command::new(sleep).arg("30").spawn().unwrap();
+        remember_driver(folder.path(), other.id(), Path::new("/bin/cat"));
+        stop_leftover_driver(folder.path());
+        assert!(other.try_wait().unwrap().is_none());
+        other.kill().unwrap();
+        other.wait().unwrap();
     }
 
     #[test]
