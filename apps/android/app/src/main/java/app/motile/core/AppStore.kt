@@ -533,6 +533,7 @@ class AppStore(private val context: Context) {
         if (!core.start(context, jsonOf(config) as JSON)) {
             errorMessage = "Motile couldn't start. Its data folder may not be writable."
         }
+        if (!showsTurnChanges) core.send("hide_changes", json("hidden" to true))
         environment["MOTILE_RELEASES_URL"]?.let { updater.releases = it }
         if (environment["MOTILE_DEMO"] != "1") updater.start()
         lifecycle.start(context, this)
@@ -938,6 +939,16 @@ class AppStore(private val context: Context) {
         Preferences.workingShelf = on
         workingShelf = on
         replaceThreads(everyThread)
+    }
+
+    /** Whether a finished turn ends with the files it changed. */
+    var showsTurnChanges by mutableStateOf(Preferences.showsTurnChanges)
+        private set
+
+    fun changeShowsTurnChanges(on: Boolean) {
+        Preferences.showsTurnChanges = on
+        showsTurnChanges = on
+        core.send("hide_changes", json("hidden" to !on))
     }
 
     /** The thread in the part of the sidebar it is listed in here: a working one among the active ones while working threads have no shelf. */

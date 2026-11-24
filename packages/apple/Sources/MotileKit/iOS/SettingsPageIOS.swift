@@ -176,6 +176,16 @@ struct SettingsPage: View {
         .id("manage-new-threads")
 
         Section {
+            Toggle("Turn changes", isOn: Bindable(store).showsTurnChanges)
+        } header: {
+            Text("Transcript")
+        } footer: {
+            Text(turnChangesDescription)
+                .foregroundStyle(Color.themeMutedForeground)
+        }
+        .id("turn-changes")
+
+        Section {
             LabeledContent("Images and videos", value: store.mediaStorageUsed)
             Button("Clear Images and Videos", role: .destructive) { store.clearMedia() }
                 .foregroundStyle(Color.themeDestructive)

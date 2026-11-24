@@ -625,6 +625,8 @@ pub struct Transcript {
     queued: Vec<Queued>,
     /// Nothing more is coming, as in the transcript of an agent that has ended.
     settled: bool,
+    /// The rows that say what each turn changed are left out, though the turns still have them.
+    changes_hidden: bool,
     /// The agents the thread's agent started, as they are now.
     agents: Started,
     /// Each patch's program, by its row: the program it was merged over, the patch, and the two
@@ -685,12 +687,21 @@ impl Transcript {
 
     /// An empty transcript for something else that happened in the same folder.
     pub fn beside(&self) -> Self {
-        Self::new(&self.cwd)
+        Self { changes_hidden: self.changes_hidden, ..Self::new(&self.cwd) }
     }
 
     /// Lets go of every item.
     pub fn clear(&mut self) {
-        *self = Self::new(&self.cwd);
+        *self = self.beside();
+    }
+
+    pub fn changes_hidden(&self) -> bool {
+        self.changes_hidden
+    }
+
+    pub fn hide_changes(&mut self, hidden: bool) -> Option<Splice> {
+        self.changes_hidden = hidden;
+        self.show()
     }
 
     pub fn waiting(&self, approval: &Approval) -> Waiting {
@@ -841,6 +852,9 @@ impl Transcript {
     fn show(&mut self) -> Option<Splice> {
         self.link_programs();
         let mut shown = present(&self.items, &self.rendered, &self.opened, self.settled);
+        if self.changes_hidden {
+            shown.retain(|row| !matches!(row.kind, RowKind::Changes { .. }));
+        }
         shown.extend(queued_rows(&self.queued).into_iter().map(Cow::Owned));
         let same_start = self.rows.iter().zip(&shown).take_while(|(before, after)| *before == after.as_ref()).count();
         if same_start == self.rows.len() && same_start == shown.len() {
@@ -1504,9 +1518,10 @@ pub fn rendered(item: &Item, cwd: &str) -> Vec<Row> {
 }
 
 /// The rows of an item that finding in a thread searches, the changes a turn made among them with
-/// its folders as they first show.
-pub fn searched_rows(item: &Item, cwd: &str) -> Vec<Row> {
-    let mut rows: Vec<Row> = changes_row(item, &HashSet::new()).into_iter().collect();
+/// its folders as they first show, unless they are hidden.
+pub fn searched_rows(item: &Item, cwd: &str, changes_hidden: bool) -> Vec<Row> {
+    let changes = changes_row(item, &HashSet::new()).filter(|_| !changes_hidden);
+    let mut rows: Vec<Row> = changes.into_iter().collect();
     rows.extend(rendered(item, cwd));
     rows
 }
@@ -2826,6 +2841,28 @@ mod tests {
             listed(&transcript),
             ["apps/server/src +50", "crates/core/src/render +5", "  rows.rs +5", "README.md +1"]
         );
+    }
+
+    #[test]
+    fn hidden_changes_leave_the_turn_and_come_back_as_they_were() {
+        let file = ChangedFile { path: "a.rs".into(), from: None, change: Change::Modified, added: 1, removed: 0 };
+        let changes = TurnChanges { snapshot: "abc".into(), files: vec![file] };
+        let summary = motile_protocol::wire::TurnSummary { changes: Some(changes), ..Default::default() };
+        let mut transcript = Transcript::new("");
+        transcript.hide_changes(true);
+        transcript.load(vec![
+            item("u", 0, said("Go")),
+            assistant("a", 1, "Done."),
+            item("e", 2, ItemKind::TurnEnd { summary }),
+        ]);
+        let ids = |transcript: &Transcript| transcript.rows().iter().map(|row| row.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&transcript), ["u/0", "a/0", "e/0"]);
+        assert_eq!(ids(&transcript.beside()), Vec::<String>::new());
+        assert!(transcript.beside().changes_hidden());
+
+        let splice = transcript.hide_changes(false).unwrap();
+        assert_eq!((splice.start, splice.remove, splice.rows.len()), (2, 0, 1));
+        assert_eq!(ids(&transcript), ["u/0", "a/0", "e/changes", "e/0"]);
     }
 
     #[test]

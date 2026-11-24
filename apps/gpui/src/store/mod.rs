@@ -625,6 +625,9 @@ impl Store {
                         }
                     }
                 }));
+                if !self.shows_turn_changes() {
+                    self.send(Command::HideChanges { hidden: true });
+                }
             }
             Err(error) => {
                 tracing::error!("the core couldn't start: {error:#}");

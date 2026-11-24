@@ -46,6 +46,7 @@ enum class SettingsSection(val raw: String) {
 /** What managing new threads does, said under its switch. */
 const val managesNewThreadsDescription = "Picks the account for each new thread."
 const val workingShelfDescription = "Show working threads on their own shelf."
+const val turnChangesDescription = "Show the files each turn changed at its end."
 
 /** What the log is, said beside the way to it. */
 val logDescription get() = "What Motile did on this ${Platform.device}, such as connecting to your servers. It helps look into a problem."
@@ -69,6 +70,7 @@ data class SettingsEntry(
             SettingsEntry("messages", "Sent while the agent works", SettingsSection.General, "messages queue steer interrupt"),
             SettingsEntry("working-shelf", "Working shelf", SettingsSection.General, "sidebar working threads shelf section running monitoring"),
             SettingsEntry("manage-new-threads", "Manage new threads automatically", SettingsSection.General, "provider limits usage accounts switch quota rate"),
+            SettingsEntry("turn-changes", "Turn changes", SettingsSection.General, "transcript diff files changed edits end of turn hide"),
             SettingsEntry("storage", "Images and videos", SettingsSection.General, "storage cache clear media disk"),
             SettingsEntry("log", "Log", SettingsSection.General, "troubleshooting debug problem connecting logs file"),
             SettingsEntry("agent-accounts", "Provider Accounts", SettingsSection.Accounts, "agents claude codex sign in account folder subscription plan api key router"),

@@ -209,6 +209,7 @@ impl SettingsPage {
             self.messages(cx),
             self.sidebar(cx),
             self.provider_limits(cx),
+            self.transcript(cx),
             self.storage(cx),
             self.log(cx),
         ]
@@ -337,6 +338,22 @@ impl SettingsPage {
         let leading = label("Manage new threads automatically", Some(description.into()), None, Cut::Wraps, cx);
         let rows = vec![switch_row(vec![leading], switch).into_any_element()];
         group("manage-new-threads", "Provider Limits", None, true, rows, cx)
+    }
+
+    /// Whether a finished turn ends with the files it changed.
+    fn transcript(&self, cx: &mut Context<Self>) -> AnyElement {
+        let on = self.store.read(cx).shows_turn_changes();
+        let store = self.store.clone();
+        let switch = Switch::new("turn-changes", on).on_change(move |on, _, cx| {
+            store.update(cx, |store, cx| {
+                store.set_shows_turn_changes(on);
+                cx.notify();
+            })
+        });
+        let description = "Show the files each turn changed at its end.";
+        let leading = label("Turn changes", Some(description.into()), None, Cut::Wraps, cx);
+        let rows = vec![switch_row(vec![leading], switch).into_any_element()];
+        group("turn-changes", "Transcript", None, true, rows, cx)
     }
 
     /// The servers keep every image and video; the ones kept here only make threads open with them.

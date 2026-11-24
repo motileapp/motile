@@ -65,10 +65,10 @@ pub struct Find {
 }
 
 /// The rows of `items` that are searched, in order.
-pub fn index(items: &[Item], cwd: &str) -> Vec<Entry> {
+pub fn index(items: &[Item], cwd: &str, changes_hidden: bool) -> Vec<Entry> {
     let mut entries = Vec::new();
     for item in items.iter().filter(|item| searched(item)) {
-        for row in rows::searched_rows(item, cwd) {
+        for row in rows::searched_rows(item, cwd, changes_hidden) {
             entries.extend(entry(item.seq, &row));
         }
     }
@@ -312,7 +312,7 @@ mod tests {
 
     fn find(items: &[Item], query: &str) -> Find {
         let mut find = Find::default();
-        find.set_entries(index(items, "/tmp"));
+        find.set_entries(index(items, "/tmp", false));
         find.search(query, None, None);
         find
     }
@@ -373,7 +373,7 @@ mod tests {
     fn starts_at_the_first_match_from_where_the_client_is() {
         let items = [user("a", 1, "deploy"), user("b", 2, "deploy"), user("c", 3, "deploy")];
         let mut find = Find::default();
-        find.set_entries(index(&items, "/tmp"));
+        find.set_entries(index(&items, "/tmp", false));
         find.search("depl", Some((2, 0, 0)), None);
         assert_eq!(find.current_index(), Some(1));
         find.search("deploy", Some((1, 0, 0)), None);
@@ -386,7 +386,7 @@ mod tests {
     fn starts_where_the_client_is_in_a_long_row() {
         let items = [reply("a", 1, "not one, not two, not three"), user("b", 2, "not four")];
         let mut find = Find::default();
-        find.set_entries(index(&items, "/tmp"));
+        find.set_entries(index(&items, "/tmp", false));
         find.search("n", Some((1, 0, 9)), None);
         assert_eq!(find.current().map(|hit| hit.start), Some(9), "not the row's first match");
         find.search("no", Some((1, 0, 0)), None);
@@ -394,7 +394,7 @@ mod tests {
         find.search("not th", Some((1, 0, 0)), None);
         assert_eq!(find.current().map(|hit| hit.start), Some(18), "and moves on from it when it is gone");
         let mut find = Find::default();
-        find.set_entries(index(&items, "/tmp"));
+        find.set_entries(index(&items, "/tmp", false));
         find.search("not", Some((1, 0, 25)), None);
         assert_eq!(find.current().map(|hit| hit.row_id), Some("b/0".into()), "past the row's last match");
     }
@@ -405,7 +405,7 @@ mod tests {
         let mut find = Find::default();
         find.search("deploy", None, Some("b"));
         assert_eq!(find.current_index(), None, "it waits for the whole thread");
-        find.set_entries(index(&items, "/tmp"));
+        find.set_entries(index(&items, "/tmp", false));
         find.search("deploy", None, Some("b"));
         assert_eq!(find.current_index(), Some(1));
         find.search("deploy it", None, Some("b"));
