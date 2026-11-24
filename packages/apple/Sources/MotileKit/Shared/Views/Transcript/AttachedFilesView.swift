@@ -7,8 +7,9 @@ import UIKit
 #endif
 
 /// The files attached to a message, in its bubble: the images and videos as tiles that open in
-/// the viewer, and the others under them as the cards an agent's files are. The tiles and the cards
-/// are all one size, so the row knows its height before any picture is on this device.
+/// the viewer, and the others under them as the cards an agent's files are, side by side where
+/// they fit. The tiles and the cards are all one size, so the row knows its height before any
+/// picture is on this device.
 final class AttachedFilesView: FlippedView {
     private static let tile = CGSize(width: 96, height: 96)
     private static let gap: CGFloat = 6
@@ -33,10 +34,20 @@ final class AttachedFilesView: FlippedView {
         let columns = min(pictured, perRow)
         let tilesWidth = CGFloat(columns) * (tile.width + gap) - (columns > 0 ? gap : 0)
         let tilesHeight = CGFloat(rows) * (tile.height + gap) - (rows > 0 ? gap : 0)
-        let namesWidth = named.isEmpty ? 0 : min(width, FileCard.widest)
-        let namesHeight = named.isEmpty ? 0 : CGFloat(named.count) * (FileCard.height + gap) - gap
+        let grid = cardGrid(named.count, width: width)
+        let cardRows = (named.count + grid.columns - 1) / grid.columns
+        let namesWidth = named.isEmpty ? 0 : CGFloat(grid.columns) * (grid.width + gap) - gap
+        let namesHeight = named.isEmpty ? 0 : CGFloat(cardRows) * (FileCard.height + gap) - gap
         let between: CGFloat = rows > 0 && !named.isEmpty ? gap : 0
         return CGSize(width: max(tilesWidth, namesWidth), height: tilesHeight + between + namesHeight)
+    }
+
+    /// As many cards to a line as fit at their narrowest, each as wide as its share up to the widest.
+    private static func cardGrid(_ count: Int, width: CGFloat) -> (columns: Int, width: CGFloat) {
+        let fit = Int((width + gap) / (FileCard.narrowest + gap))
+        let columns = max(1, min(count, fit))
+        let share = ((width - gap * CGFloat(columns - 1)) / CGFloat(columns)).rounded(.down)
+        return (columns, min(share, FileCard.widest))
     }
 
     func show(_ files: [AttachedFile], owner: RowOwner?) {
@@ -82,10 +93,14 @@ final class AttachedFilesView: FlippedView {
             )
             tile.frame = CGRect(origin: origin, size: Self.tile)
         }
-        var y = tiles.last.map { $0.frame.maxY + Self.gap } ?? 0
-        for card in cards {
-            card.frame = CGRect(x: 0, y: y, width: min(width, FileCard.widest), height: FileCard.height)
-            y += FileCard.height + Self.gap
+        let top = tiles.last.map { $0.frame.maxY + Self.gap } ?? 0
+        let grid = Self.cardGrid(cards.count, width: width)
+        for (index, card) in cards.enumerated() {
+            let origin = CGPoint(
+                x: CGFloat(index % grid.columns) * (grid.width + Self.gap),
+                y: top + CGFloat(index / grid.columns) * (FileCard.height + Self.gap)
+            )
+            card.frame = CGRect(origin: origin, size: CGSize(width: grid.width, height: FileCard.height))
         }
     }
 

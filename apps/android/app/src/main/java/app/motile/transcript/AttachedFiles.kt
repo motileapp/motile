@@ -1,9 +1,11 @@
 package app.motile.transcript
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -31,8 +33,9 @@ import java.io.File
 
 /**
  * The files attached to a message, in its bubble: the images and videos as tiles that open in the
- * viewer, and the others under them as the cards an agent's files are. The tiles and the cards are
- * all one size, so the row knows its height before any picture is on this device.
+ * viewer, and the others under them as the cards an agent's files are, side by side where they fit.
+ * The tiles and the cards are all one size, so the row knows its height before any picture is on
+ * this device.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -50,9 +53,29 @@ fun AttachedFiles(files: List<AttachedFile>, modifier: Modifier = Modifier) {
                 }
             }
         }
-        for (file in files.filter { !it.pictured }) {
-            val download = file.download
-            FileCard(download ?: SentFile("", file.size, "", file.name), Modifier.width(FileRow.widest), kept = download != null)
+        val named = files.filter { !it.pictured }
+        if (named.isNotEmpty()) AttachedCards(named)
+    }
+}
+
+/** As many cards to a line as fit at their narrowest, each as wide as its share up to the widest. */
+@Composable
+private fun AttachedCards(files: List<AttachedFile>) {
+    BoxWithConstraints {
+        val gap = AttachedFiles.gap
+        val fit = ((maxWidth + gap) / (FileRow.narrowest + gap)).toInt()
+        val columns = fit.coerceIn(1, files.size)
+        val share = ((maxWidth - gap * (columns - 1)) / columns).value.toInt().dp
+        val width = minOf(share, FileRow.widest)
+        Column(verticalArrangement = Arrangement.spacedBy(gap)) {
+            for (line in files.chunked(columns)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    for (file in line) {
+                        val download = file.download
+                        FileCard(download ?: SentFile("", file.size, "", file.name), Modifier.width(width), kept = download != null)
+                    }
+                }
+            }
         }
     }
 }

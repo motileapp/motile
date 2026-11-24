@@ -23,6 +23,8 @@ use crate::ui::menu::Menu;
 const GAP: f32 = 6.;
 const CARD_HEIGHT: f32 = 56.;
 const WIDEST: f32 = 420.;
+/// The narrowest a card is beside another, in a message's bubble.
+const NARROWEST: f32 = 220.;
 const TILE_SIDE: f32 = 36.;
 const RING_INSET: f32 = 5.;
 const INSET: f32 = (CARD_HEIGHT - TILE_SIDE) / 2.;
@@ -354,11 +356,21 @@ pub fn file_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mu
         .into_any_element()
 }
 
-/// A file attached to a message, as the card a file a reply sends is, in its bubble.
+/// As many cards to a line as fit at their narrowest in `width`, each as wide as its share up to
+/// the widest.
+pub fn card_grid(count: usize, width: f32) -> (usize, f32) {
+    let fit = ((width + GAP) / (NARROWEST + GAP)) as usize;
+    let columns = fit.clamp(1, count.max(1));
+    let share = ((width - GAP * (columns - 1) as f32) / columns as f32).floor();
+    (columns, share.min(WIDEST))
+}
+
+/// A file attached to a message, as the card a file a reply sends is, `width` wide in its bubble.
 pub fn attached_card(
     key: String,
     store: &Entity<Store>,
     attached: &AttachedFile,
+    width: f32,
     removed: bool,
     window: &mut Window,
     cx: &mut App,
@@ -370,7 +382,7 @@ pub fn attached_card(
         alt: String::new(),
         name: attached.name.clone(),
     };
-    file_card(key.into(), store, &file, kept, removed, window, cx).w(px(WIDEST)).max_w_full().into_any_element()
+    file_card(key.into(), store, &file, kept, removed, window, cx).w(px(width)).max_w_full().into_any_element()
 }
 
 /// A file as a card with its name, its kind and size. Its icon says where the download is, as a
