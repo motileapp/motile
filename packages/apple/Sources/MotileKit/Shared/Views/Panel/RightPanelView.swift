@@ -192,20 +192,27 @@ struct PanelTabStrip: View {
     var edge = Self.edge
     /// Where the first tab starts.
     var leading = Self.edge
+    @State private var reorder = Reorder(.horizontal)
 
     var body: some View {
+        let ids = tabs.tabs.map(\.id)
         ScrollViewReader { strip in
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
                     if !tabs.isBlank {
                         ForEach(tabs.tabs) { tab in
                             PanelTabChip(tab: tab, active: tab == tabs.active)
+                                .reorderable(tab.id, among: ids, in: reorder) { id, index in
+                                    guard let tab = tabs.tabs.first(where: { $0.id == id }) else { return }
+                                    store.rightPanel.moveTab(tab, to: index)
+                                }
                         }
                     }
                     if store.panelUnavailable == nil, !tabs.isBlank {
                         ActionButton(icon: .plus, help: "New tab", margin: .beside(leading: PanelTabChip.margin)) { store.rightPanel.openBlank() }
                     }
                 }
+                .reorderSpace(reorder)
                 .padding(.leading, leading - PanelTabChip.margin)
                 .padding(.trailing, edge - PanelTabChip.margin)
                 .frame(maxHeight: .infinity)
@@ -302,45 +309,65 @@ private struct PanelLauncher: View {
     private static let gap: CGFloat = 2
     @Environment(AppStore.self) private var store
     let target: PanelTarget
+    @State private var reorder = Reorder(.vertical)
 
     var body: some View {
+        let shown = store.rightPanel.launcher.filter(offered)
+        let ids = shown.map(\.id)
         VStack(spacing: 12) {
             Text("Open")
                 .font(.ui(.sm, weight: .semibold))
                 .foregroundStyle(Color.themeForeground)
             VStack(spacing: 0) {
-                row(.bot, "Agents", count: store.agents.filter(\.working).count, command: "rightPanel.agents", reason: nil) {
-                    store.rightPanel.open(.agents)
-                }
-                row(.folder, "Files", command: "rightPanel.files", reason: nil) { store.rightPanel.open(.files) }
-                row(.diff, "Diff", command: "rightPanel.diff", reason: target.repository ? nil : "Available in git repositories.") {
-                    store.rightPanel.showDiff()
-                }
-                row(.gitPullRequest, "Pull Request", command: "rightPanel.pullRequest", reason: store.pullRequestsUnavailable) {
-                    store.rightPanel.open(.pullRequest)
-                }
-                if store.pullRequestsExtended {
-                    row(.list, "All Pull Requests", command: "rightPanel.pullRequests", reason: store.pullRequestsUnavailable) {
-                        store.rightPanel.open(.pullRequests)
-                    }
-                }
-                if store.isOn(.linear) {
-                    row(.linear, store.linearConnected ? "Linear" : "Connect Linear", command: Integration.linear.command, reason: store.linearUnavailable) {
-                        store.rightPanel.open(.linear)
-                    }
-                }
-                if store.isOn(.ricrac) {
-                    row(.ricrac, store.ricracConnected ? "Ricrac" : "Connect Ricrac", command: Integration.ricrac.command, reason: store.ricracUnavailable) {
-                        store.rightPanel.open(.ricrac)
-                    }
+                ForEach(shown) { tab in
+                    row(tab)
+                        .reorderable(tab.id, among: ids, in: reorder) { id, index in
+                            guard let tab = shown.first(where: { $0.id == id }) else { return }
+                            store.rightPanel.moveLauncherRow(tab, to: index, among: shown)
+                        }
                 }
             }
+            .reorderSpace(reorder)
             .frame(width: 250)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: target.serverID) {
             store.linear.read(target.serverID)
             store.ricrac.read(target.serverID)
+        }
+    }
+
+    private func offered(_ tab: PanelTab) -> Bool {
+        switch tab {
+        case .pullRequests: store.pullRequestsExtended
+        default: tab.integration.map { store.isOn($0) } ?? true
+        }
+    }
+
+    @ViewBuilder
+    private func row(_ tab: PanelTab) -> some View {
+        let panel = store.rightPanel
+        switch tab {
+        case .agents:
+            row(.bot, "Agents", count: store.agents.filter(\.working).count, command: "rightPanel.agents", reason: nil) { panel.open(.agents) }
+        case .files:
+            row(.folder, "Files", command: "rightPanel.files", reason: nil) { panel.open(.files) }
+        case .diff:
+            row(.diff, "Diff", command: "rightPanel.diff", reason: target.repository ? nil : "Available in git repositories.") { panel.showDiff() }
+        case .pullRequest:
+            row(.gitPullRequest, "Pull Request", command: "rightPanel.pullRequest", reason: store.pullRequestsUnavailable) { panel.open(.pullRequest) }
+        case .pullRequests:
+            row(.list, "All Pull Requests", command: "rightPanel.pullRequests", reason: store.pullRequestsUnavailable) { panel.open(.pullRequests) }
+        case .linear:
+            row(.linear, store.linearConnected ? "Linear" : "Connect Linear", command: Integration.linear.command, reason: store.linearUnavailable) {
+                panel.open(.linear)
+            }
+        case .ricrac:
+            row(.ricrac, store.ricracConnected ? "Ricrac" : "Connect Ricrac", command: Integration.ricrac.command, reason: store.ricracUnavailable) {
+                panel.open(.ricrac)
+            }
+        default:
+            EmptyView()
         }
     }
 

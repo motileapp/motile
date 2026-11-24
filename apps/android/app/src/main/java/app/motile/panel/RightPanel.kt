@@ -190,6 +190,13 @@ data class PanelTabs(
     /** All there is is a blank tab, as before one was opened. */
     val isBlank: Boolean get() = tabs.size == 1 && tabs[0].blankNumber != null
 
+    /** The tabs with `tab` moved to `index` among the others. */
+    fun moving(tab: PanelTab, index: Int): PanelTabs {
+        val others = tabs - tab
+        if (others.size == tabs.size) return this
+        return copy(tabs = others.toMutableList().apply { add(index.coerceIn(0, size), tab) })
+    }
+
     val json: Map<String, Any?>
         get() = mapOf(
             "tabs" to tabs.map { it.json }, "active" to active?.json, "scope" to scope?.request, "maximized" to maximized,
@@ -204,6 +211,34 @@ data class PanelTabs(
             maximized = json.optionalBool("maximized"),
             visitedAgent = json.optionalString("visited_agent"),
         )
+    }
+}
+
+/** The order of a blank tab's rows, kept on each device. */
+object LauncherOrder {
+    val default: List<PanelTab> = listOf(
+        PanelTab.Agents, PanelTab.Files, PanelTab.Diff, PanelTab.PullRequest, PanelTab.PullRequests, PanelTab.Linear, PanelTab.Ricrac,
+    )
+
+    /** The saved order without the ids it doesn't know, and with the rows it lacks after the ones they follow by default. */
+    fun of(ids: List<String>): List<PanelTab> {
+        val order = ids.distinct().mapNotNull { id -> default.firstOrNull { it.id == id } }.toMutableList()
+        default.forEachIndexed { index, tab ->
+            if (tab in order) return@forEachIndexed
+            val previous = default.getOrNull(index - 1)
+            order.add(if (previous == null) 0 else order.indexOf(previous) + 1, tab)
+        }
+        return order
+    }
+
+    /** `order` with `tab` moved to `index` among the `shown` rows without it: before the shown row it lands before, or after the last one. */
+    fun moving(order: List<PanelTab>, tab: PanelTab, index: Int, shown: List<PanelTab>): List<PanelTab> {
+        val others = shown - tab
+        val rest = order - tab
+        if (rest.size == order.size || others.isEmpty()) return order
+        val at = others.getOrNull(index.coerceAtLeast(0))?.let(rest::indexOf) ?: (rest.indexOf(others.last()) + 1)
+        if (at < 0) return order
+        return rest.toMutableList().apply { add(at, tab) }
     }
 }
 
@@ -291,6 +326,16 @@ class RightPanel {
             store?.pageChanged()
         }
 
+    /** The order of a blank tab's rows on this device, the hidden ones too. */
+    var launcherOrder by mutableStateOf(LauncherOrder.of(Preferences.stringList("panel.launcher")))
+        private set
+
+    /** Moves the row to `index` among the `shown` rows without it, and the hidden ones keep their places. */
+    fun moveLauncherRow(tab: PanelTab, index: Int, shown: List<PanelTab>) {
+        launcherOrder = LauncherOrder.moving(launcherOrder, tab, index, shown)
+        Preferences.set("panel.launcher", launcherOrder.map { it.id })
+    }
+
     private fun loadTabs(): Map<String, PanelTabs> {
         val saved = Preferences.string("panel.tabs")?.let(::parseJSON) ?: return emptyMap()
         return saved.mapNotNull { (key, value) -> (value as? JsonObject)?.let { key to PanelTabs.of(it) } }.toMap()
@@ -355,6 +400,9 @@ class RightPanel {
     }
 
     fun activate(tab: PanelTab) = change { it.copy(active = tab) }
+
+    /** Moves the tab to `index` among the others. The active tab stays the active one. */
+    fun moveTab(tab: PanelTab, index: Int) = change { it.moving(tab, index) }
 
     /** Shows the tab `offset` places from the active one, wrapping around the ends. */
     fun activate(offset: Int) {

@@ -130,6 +130,38 @@ struct PanelTabs: Equatable, Codable {
     var isBlank: Bool { tabs.count == 1 && tabs[0].blankNumber != nil }
 }
 
+/// The order of what a blank tab offers to open, as it was dragged into on this device.
+enum PanelLauncherOrder {
+    static let defaults: [PanelTab] = [.agents, .files, .diff, .pullRequest, .pullRequests, .linear, .ricrac]
+
+    /// The saved order without what isn't offered, and with what is new in its place.
+    static func loaded(_ ids: [String]) -> [PanelTab] {
+        var order = ids.compactMap { id in defaults.first { $0.id == id } }.reduce(into: [PanelTab]()) { order, tab in
+            if !order.contains(tab) { order.append(tab) }
+        }
+        for (index, tab) in defaults.enumerated() where !order.contains(tab) {
+            let before = defaults[..<index].last { order.contains($0) }
+            order.insert(tab, at: before.flatMap { order.firstIndex(of: $0) }.map { $0 + 1 } ?? 0)
+        }
+        return order
+    }
+
+    /// Moves `tab` to `index` among the `shown` rows without it. The rows that aren't shown keep
+    /// their places among the others.
+    static func moved(_ order: [PanelTab], _ tab: PanelTab, to index: Int, among shown: [PanelTab]) -> [PanelTab] {
+        let others = shown.filter { $0 != tab }
+        var order = order.filter { $0 != tab }
+        if index < others.count, let next = order.firstIndex(of: others[index]) {
+            order.insert(tab, at: next)
+        } else if let last = others.last, let place = order.firstIndex(of: last) {
+            order.insert(tab, at: place + 1)
+        } else {
+            order.append(tab)
+        }
+        return order
+    }
+}
+
 /// The folder the panel looks into: the one the open thread works in, or the project's when a
 /// thread is about to start there.
 struct PanelTarget: Equatable {
@@ -224,6 +256,10 @@ final class RightPanel {
         }
     }
     private(set) var tabsByKey: [String: PanelTabs]
+    /// The order of what a blank tab offers to open.
+    private(set) var launcher: [PanelTab] {
+        didSet { defaults.set(launcher.map(\.id), forKey: "panel.launcher") }
+    }
     /// The turns of the open thread that changed files, the first one first.
     var turns: [TurnChange] = []
     /// The agent whose transcript shows in the thread's place, read only.
@@ -273,6 +309,7 @@ final class RightPanel {
         isOpen = defaults.bool(forKey: "panel.open")
         let saved = defaults.data(forKey: "panel.tabs").flatMap { try? JSONDecoder().decode([String: PanelTabs].self, from: $0) }
         tabsByKey = saved ?? [:]
+        launcher = PanelLauncherOrder.loaded(defaults.stringArray(forKey: "panel.launcher") ?? [])
         mergeMethods = defaults.dictionary(forKey: "pullRequest.methods") as? [String: String] ?? [:]
     }
 
@@ -359,6 +396,20 @@ final class RightPanel {
             tabs.active = tabs.tabs.isEmpty ? nil : tabs.tabs[min(index, tabs.tabs.count - 1)]
         }
         contents[tab] = nil
+    }
+
+    /// Moves the tab to `index` among the others.
+    func moveTab(_ tab: PanelTab, to index: Int) {
+        change { tabs in
+            guard let from = tabs.tabs.firstIndex(of: tab) else { return }
+            tabs.tabs.remove(at: from)
+            tabs.tabs.insert(tab, at: min(max(index, 0), tabs.tabs.count))
+        }
+    }
+
+    /// Moves a row of what a blank tab offers to `index` among the `shown` ones.
+    func moveLauncherRow(_ tab: PanelTab, to index: Int, among shown: [PanelTab]) {
+        launcher = PanelLauncherOrder.moved(launcher, tab, to: index, among: shown)
     }
 
     func closeOthers(_ tab: PanelTab) {
