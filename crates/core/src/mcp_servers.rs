@@ -113,7 +113,8 @@ pub struct ToolRow {
 }
 
 pub fn rows(mcp_servers: &[McpServer]) -> Vec<McpServerRow> {
-    mcp_servers.iter().map(row).collect()
+    // The gateway sends them oldest first.
+    mcp_servers.iter().rev().map(row).collect()
 }
 
 fn row(mcp_server: &McpServer) -> McpServerRow {
@@ -550,6 +551,14 @@ mod tests {
         );
         assert_eq!(from_old.groups[0].kind, ToolKind::Other);
         assert_eq!(tint("Linear"), tint("linear"));
+    }
+
+    #[test]
+    fn the_newest_mcp_server_shows_first() {
+        let first = mcp_server(vec![], McpStatus::Ready, true);
+        let second = McpServer { id: "c2".into(), ..first.clone() };
+        let ids: Vec<String> = rows(&[first, second]).into_iter().map(|row| row.id).collect();
+        assert_eq!(ids, ["c2", "c1"]);
     }
 
     #[test]
