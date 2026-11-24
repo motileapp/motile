@@ -1,5 +1,6 @@
 package app.motile.sidebar
 
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.lazy.LazyListItemInfo
@@ -22,8 +23,9 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 /**
- * A row of the list lifted by a hold and moved by the finger. The rows it passes make way for it,
- * and the list scrolls while it is held past an end. Only rows that move can make way.
+ * A row of the list lifted by a hold and moved by the finger, down a column or along a row. The rows
+ * it passes make way for it, and the list scrolls while it is held past an end. Only rows that move
+ * can make way.
  */
 @Stable
 class Reorder(private val list: LazyListState) {
@@ -37,6 +39,8 @@ class Reorder(private val list: LazyListState) {
     private var dragged by mutableFloatStateOf(0f)
 
     private val item: LazyListItemInfo? get() = list.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }
+
+    val horizontal: Boolean get() = list.layoutInfo.orientation == Orientation.Horizontal
 
     /** How far the lifted row is drawn from its place in the list. */
     val offset: Float
@@ -124,7 +128,7 @@ fun ReorderScrolling(reorder: Reorder, list: LazyListState) {
 
 /**
  * A hold lifts the row and a move drags it; a hold that doesn't move brings up its menu, and a move
- * out of the menu still drags it. `put` is told where the row was put down.
+ * out of the menu still drags it. `lift` is told when the row is lifted, `put` where it was put down.
  */
 @Composable
 fun Modifier.reorders(
@@ -136,6 +140,7 @@ fun Modifier.reorders(
     openMenu: () -> Unit,
     closeMenu: () -> Unit,
     put: (Int) -> Unit,
+    lift: () -> Unit = {},
 ): Modifier {
     val scope = rememberCoroutineScope()
     val currentKeys by rememberUpdatedState(keys)
@@ -143,6 +148,7 @@ fun Modifier.reorders(
     val currentOpen by rememberUpdatedState(openMenu)
     val currentClose by rememberUpdatedState(closeMenu)
     val currentPut by rememberUpdatedState(put)
+    val currentLift by rememberUpdatedState(lift)
     if (!enabled) return this
     return pointerInput(key) {
         var travelled = 0f
@@ -153,6 +159,7 @@ fun Modifier.reorders(
                 travelled = 0f
                 moving = false
                 reorder.start(key, currentKeys(), currentMovable())
+                currentLift()
                 waiting = scope.launch {
                     delay(MENU_AFTER)
                     currentOpen()
@@ -166,7 +173,7 @@ fun Modifier.reorders(
                     waiting?.cancel()
                     currentClose()
                 }
-                reorder.drag(amount.y)
+                reorder.drag(if (reorder.horizontal) amount.x else amount.y)
             },
             onDragEnd = {
                 waiting?.cancel()

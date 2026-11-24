@@ -23,14 +23,13 @@ use crate::panel::pull_request::PullRequestView;
 use crate::panel::pull_request_list::PullRequestListView;
 use crate::panel::ricrac::RicracView;
 use crate::store::Store;
-use crate::store::integrations::Integration;
 use crate::theme::{self, Colors, ControlSize, IconSize, Layer, Radius, Surface, TextSize, colors};
 use crate::transcript::kit::dashed_outline;
 use crate::ui::agent_avatar::{AgentAvatar, state_color};
 use crate::ui::menu::Menu;
 use crate::ui::{
-    ActionButton, ActionMenu, GatewayMark, Highlight, KeyCaps, Spinner, TOOLBAR_WIDTH, TakesPress, Variant, beside,
-    edges, icons,
+    ActionButton, ActionMenu, GatewayMark, Highlight, KeyCaps, Reorder, Spinner, TOOLBAR_WIDTH, TakesPress, Variant,
+    beside, edges, icons,
 };
 
 /// How far the tabs keep from the strip's ends, as far as from the top bar's top and bottom.
@@ -88,6 +87,9 @@ pub struct RightPanelView {
     /// The tab the strip was last scrolled to.
     scrolled_to: Option<String>,
     hovered_tab: Option<String>,
+    /// The tabs and a blank tab's rows, which move when pulled.
+    tab_order: Reorder<PanelTab>,
+    launcher_order: Reorder<PanelTab>,
     /// The file tab whose path was just copied.
     copied: Option<PanelTab>,
     /// The change tab whose one file is closed, until another tab is shown.
@@ -195,6 +197,8 @@ impl RightPanelView {
             strip: ScrollHandle::new(),
             scrolled_to: None,
             hovered_tab: None,
+            tab_order: Reorder::new(Axis::Horizontal),
+            launcher_order: Reorder::new(Axis::Vertical),
             copied: None,
             change_closed: None,
             marks: None,
@@ -230,7 +234,7 @@ impl RightPanelView {
         cx.notify();
     }
 
-    fn tab_strip(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    fn tab_strip(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let store = self.store.read(cx);
         let tabs = store.panel_tabs();
         let available = store.panel_unavailable().is_none();
@@ -242,8 +246,26 @@ impl RightPanelView {
             self.scrolled_to = Some(active);
             self.strip.scroll_to_item(index);
         }
-        let chips: Vec<AnyElement> =
-            tabs.tabs.iter().map(|tab| self.tab_chip(tab, tabs.active.as_ref() == Some(tab), cx)).collect();
+        let count = tabs.tabs.len();
+        let chips: Vec<AnyElement> = tabs
+            .tabs
+            .iter()
+            .enumerate()
+            .map(|(index, tab)| {
+                let chip = self.tab_chip(tab, index, count, tabs.active.as_ref() == Some(tab), cx);
+                self.tab_order.place(index, chip, window)
+            })
+            .collect();
+        let follow = self.tab_order.follow_pointer(
+            cx.entity().downgrade(),
+            |this| &mut this.tab_order,
+            |this, tab, index, cx| {
+                this.store.update(cx, |store, cx| {
+                    store.move_tab(&tab, index);
+                    cx.notify();
+                })
+            },
+        );
         let leading = self.tab_inset.unwrap_or(TAB_EDGE);
         div()
             .absolute()
@@ -251,6 +273,7 @@ impl RightPanelView {
             .left_0()
             .right(px(2. * TOOLBAR_WIDTH + 14. + self.trailing_room))
             .h(px(theme::TOP_BAR))
+            .children(follow)
             .child(
                 div()
                     .id("panel-tabs")
@@ -273,17 +296,26 @@ impl RightPanelView {
             .into_any_element()
     }
 
-    fn tab_chip(&self, tab: &PanelTab, active: bool, cx: &mut Context<Self>) -> AnyElement {
+    fn tab_chip(
+        &self,
+        tab: &PanelTab,
+        index: usize,
+        count: usize,
+        active: bool,
+        cx: &mut Context<Self>,
+    ) -> Stateful<Div> {
         let c = colors(cx);
         let height = ControlSize::Regular.height();
         let close_size = ControlSize::Inset.height();
         let close_margin = ControlSize::INSET_MARGIN;
         let key = tab.id();
-        let hovering = self.hovered_tab.as_ref() == Some(&key);
+        let lifted = self.tab_order.lifted() == Some(index);
+        let hovering = lifted || self.hovered_tab.as_ref() == Some(&key);
         let lit = hovering || active;
         let group: SharedString = format!("tab-{key}").into();
         let path = tab.path().map(str::to_string);
-        let (hover_key, menu_tab, close_tab, activate_tab) = (key.clone(), tab.clone(), tab.clone(), tab.clone());
+        let (hover_key, menu_tab, close_tab, activate_tab, pressed_tab) =
+            (key.clone(), tab.clone(), tab.clone(), tab.clone(), tab.clone());
         let menu_store = self.store.clone();
         let close_help = self.store.read(cx).shortcuts.help("Close", "rightPanel.close");
         div()
@@ -303,6 +335,7 @@ impl RightPanelView {
                     .selected(active)
                     .lit(hovering)
                     .small(true)
+                    .opaque(lifted)
                     .inset(edges(0., TAB_MARGIN, 0., TAB_MARGIN))
                     .render(group, cx),
             )
@@ -326,7 +359,15 @@ impl RightPanelView {
                         .size(ControlSize::Inset)
                         .symbol_size(ControlSize::Inset.small_symbol())
                         .row(Some(if active { Layer::ControlLit } else { Layer::Control }))
-                        .on_click(act(&self.store, move |store, _| store.close_tab(&close_tab))),
+                        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                            if this.tab_order.is_lifted() {
+                                return;
+                            }
+                            this.store.update(cx, |store, cx| {
+                                store.close_tab(&close_tab);
+                                cx.notify();
+                            });
+                        })),
                 )
             }))
             .tooltip(crate::ui::tooltip(path.clone().unwrap_or_else(|| tab.title())))
@@ -339,7 +380,23 @@ impl RightPanelView {
                 cx.notify();
             }))
             .takes_press()
-            .on_click(act(&self.store, move |store, _| store.activate_tab(activate_tab.clone())))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                    this.tab_order.measure_scrolled(&this.strip);
+                    this.tab_order.press(pressed_tab.clone(), index, count, event.position);
+                    cx.notify();
+                }),
+            )
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                if this.tab_order.is_lifted() {
+                    return;
+                }
+                this.store.update(cx, |store, cx| {
+                    store.activate_tab(activate_tab.clone());
+                    cx.notify();
+                });
+            }))
             .on_mouse_down(MouseButton::Right, move |event, window, cx| {
                 let (close_tab, other_tab) = (menu_tab.clone(), menu_tab.clone());
                 let copy = path.clone();
@@ -354,7 +411,6 @@ impl RightPanelView {
                     })
                     .show(event.position, window, cx);
             })
-            .into_any_element()
     }
 
     /// What a tab says in the middle of the panel when it has nothing to show.
@@ -456,7 +512,7 @@ impl RightPanelView {
     }
 
     /// What a blank tab shows: the tabs there are to open.
-    fn launcher(&mut self, target: &PanelTarget, cx: &mut Context<Self>) -> AnyElement {
+    fn launcher(&mut self, target: &PanelTarget, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let c = colors(cx);
         let trigger = Trigger { target: target.clone(), scope: None, path: None, version: 0, asked: 0 };
         let server_id = target.server_id.clone();
@@ -464,28 +520,29 @@ impl RightPanelView {
         let server_id = target.server_id.clone();
         self.follow("ricrac", trigger, move |store| store.ricrac_read(&server_id), cx);
         let store = self.store.read(cx);
+        let shown = store.launcher_rows();
         let pull_requests_unavailable = store.pull_requests_unavailable();
-        let extended = store.pull_requests_extended();
-        let (linear_on, ricrac_on) = (store.is_on(Integration::Linear), store.is_on(Integration::Ricrac));
         let linear_unavailable = store.linear_unavailable();
-        let linear_connected = store.linear_connected();
-        let linear_title = if linear_connected { "Linear" } else { "Connect Linear" };
+        let linear_title = if store.linear_connected() { "Linear" } else { "Connect Linear" };
         let ricrac_unavailable = store.ricrac_unavailable();
-        let ricrac_connected = store.ricrac_connected();
-        let ricrac_title = if ricrac_connected { "Ricrac" } else { "Connect Ricrac" };
+        let ricrac_title = if store.ricrac_connected() { "Ricrac" } else { "Connect Ricrac" };
         let working = store.agents.iter().filter(|agent| agent.working()).count();
-        let row = |id: &'static str,
+        let lifted = self.launcher_order.lifted();
+        let row = |index: usize,
+                   tab: &PanelTab,
                    symbol: &'static str,
                    title: &'static str,
                    count: usize,
-                   command: Option<&'static str>,
-                   reason: Option<String>,
-                   open: Box<dyn Fn(&mut Store)>| {
+                   command: &'static str,
+                   reason: Option<String>| {
             let enabled = reason.is_none();
-            let keys = command.and_then(|command| store.shortcuts.caps(command));
-            let group: SharedString = format!("launch-{id}").into();
+            let keys = store.shortcuts.caps(command);
+            let group: SharedString = format!("launch-{}", tab.id()).into();
+            let inset = edges(LAUNCHER_GAP / 2., 0., LAUNCHER_GAP / 2., 0.);
+            let (pressed, opened) = (tab.clone(), tab.clone());
+            let rows = shown.len();
             div()
-                .id(id)
+                .id(group.clone())
                 .group(group.clone())
                 .relative()
                 .w_full()
@@ -494,9 +551,10 @@ impl RightPanelView {
                 .flex()
                 .items_center()
                 .gap(px(10.))
-                .when(enabled, |row| {
-                    row.child(light(group, Radius::MD, edges(LAUNCHER_GAP / 2., 0., LAUNCHER_GAP / 2., 0.), false, cx))
+                .when(lifted == Some(index), |row| {
+                    row.child(Highlight::new().inset(inset).lit(true).opaque(true).render(group.clone(), cx))
                 })
+                .when(enabled && lifted != Some(index), |row| row.child(light(group, Radius::MD, inset, false, cx)))
                 .when(!enabled, |row| row.opacity(c.opacity(theme::Opacity::Disabled)))
                 .child(
                     div()
@@ -525,8 +583,68 @@ impl RightPanelView {
                     row.child(div().relative().text_color(c.muted_foreground).child(KeyCaps::new(keys).joined(true)))
                 })
                 .when_some(reason, |row, reason| row.tooltip(crate::ui::tooltip(reason)))
-                .when(enabled, |row| row.on_click(act(&self.store, move |store, _| open(store))))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                        this.launcher_order.press(pressed.clone(), index, rows, event.position);
+                        cx.notify();
+                    }),
+                )
+                .when(enabled, |row| {
+                    row.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                        if this.launcher_order.is_lifted() {
+                            return;
+                        }
+                        this.store.update(cx, |store, cx| {
+                            match opened {
+                                PanelTab::Diff => store.show_diff(None, None),
+                                _ => store.open_tab(opened.clone()),
+                            }
+                            cx.notify();
+                        });
+                    }))
+                })
         };
+        let rows: Vec<AnyElement> = shown
+            .iter()
+            .enumerate()
+            .filter_map(|(index, tab)| {
+                let row = match tab {
+                    PanelTab::Agents => row(index, tab, "bot", "Agents", working, "rightPanel.agents", None),
+                    PanelTab::Files => row(index, tab, "folder", "Files", 0, "rightPanel.files", None),
+                    PanelTab::Diff => {
+                        let reason = (!target.repository).then(|| "Available in git repositories.".to_string());
+                        row(index, tab, "diff", "Diff", 0, "rightPanel.diff", reason)
+                    }
+                    PanelTab::PullRequest => {
+                        let reason = pull_requests_unavailable.clone();
+                        row(index, tab, "git-pull-request", "Pull Request", 0, "rightPanel.pullRequest", reason)
+                    }
+                    PanelTab::PullRequests => {
+                        let reason = pull_requests_unavailable.clone();
+                        row(index, tab, "list", "All Pull Requests", 0, "rightPanel.pullRequests", reason)
+                    }
+                    PanelTab::Linear => {
+                        row(index, tab, "linear", linear_title, 0, "rightPanel.linear", linear_unavailable.clone())
+                    }
+                    PanelTab::Ricrac => {
+                        row(index, tab, "ricrac", ricrac_title, 0, "rightPanel.ricrac", ricrac_unavailable.clone())
+                    }
+                    _ => return None,
+                };
+                Some(self.launcher_order.place(index, row, window))
+            })
+            .collect();
+        let follow = self.launcher_order.follow_pointer(
+            cx.entity().downgrade(),
+            |this| &mut this.launcher_order,
+            |this, tab, index, cx| {
+                this.store.update(cx, |store, cx| {
+                    store.move_launcher_row(&tab, index);
+                    cx.notify();
+                })
+            },
+        );
         div()
             .size_full()
             .flex()
@@ -534,6 +652,7 @@ impl RightPanelView {
             .items_center()
             .justify_center()
             .gap(px(12.))
+            .children(follow)
             .child(
                 div().text_size(TextSize::Sm).font_weight(FontWeight::SEMIBOLD).text_color(c.foreground).child("Open"),
             )
@@ -542,75 +661,8 @@ impl RightPanelView {
                     .w(px(250.))
                     .flex()
                     .flex_col()
-                    .child(row(
-                        "launch-agents",
-                        "bot",
-                        "Agents",
-                        working,
-                        Some("rightPanel.agents"),
-                        None,
-                        Box::new(|store| store.open_tab(PanelTab::Agents)),
-                    ))
-                    .child(row(
-                        "launch-files",
-                        "folder",
-                        "Files",
-                        0,
-                        Some("rightPanel.files"),
-                        None,
-                        Box::new(|store| store.open_tab(PanelTab::Files)),
-                    ))
-                    .child(row(
-                        "launch-diff",
-                        "diff",
-                        "Diff",
-                        0,
-                        Some("rightPanel.diff"),
-                        (!target.repository).then(|| "Available in git repositories.".to_string()),
-                        Box::new(|store| store.show_diff(None, None)),
-                    ))
-                    .child(row(
-                        "launch-pull-request",
-                        "git-pull-request",
-                        "Pull Request",
-                        0,
-                        Some("rightPanel.pullRequest"),
-                        pull_requests_unavailable.clone(),
-                        Box::new(|store| store.open_tab(PanelTab::PullRequest)),
-                    ))
-                    .when(extended, |rows| {
-                        rows.child(row(
-                            "launch-pull-requests",
-                            "list",
-                            "All Pull Requests",
-                            0,
-                            Some("rightPanel.pullRequests"),
-                            pull_requests_unavailable,
-                            Box::new(|store| store.open_tab(PanelTab::PullRequests)),
-                        ))
-                    })
-                    .when(linear_on, |rows| {
-                        rows.child(row(
-                            "launch-linear",
-                            "linear",
-                            linear_title,
-                            0,
-                            Some("rightPanel.linear"),
-                            linear_unavailable,
-                            Box::new(|store| store.open_tab(PanelTab::Linear)),
-                        ))
-                    })
-                    .when(ricrac_on, |rows| {
-                        rows.child(row(
-                            "launch-ricrac",
-                            "ricrac",
-                            ricrac_title,
-                            0,
-                            Some("rightPanel.ricrac"),
-                            ricrac_unavailable,
-                            Box::new(|store| store.open_tab(PanelTab::Ricrac)),
-                        ))
-                    }),
+                    .on_children_prepainted(self.launcher_order.measure())
+                    .children(rows),
             )
             .into_any_element()
     }
@@ -2046,7 +2098,7 @@ impl Render for RightPanelView {
                     let PanelTab::RicracIssue { workspace, id, .. } = tab.clone() else { unreachable!() };
                     self.ricrac_tab(tab, workspace, Some(id), window, cx)
                 }
-                Some(PanelTab::Blank(_)) | None => self.launcher(&target, cx),
+                Some(PanelTab::Blank(_)) | None => self.launcher(&target, window, cx),
             }
         } else {
             div().into_any_element()
@@ -2065,6 +2117,6 @@ impl Render for RightPanelView {
                     .child(crate::ui::divider(cx))
                     .child(div().flex_1().min_h_0().child(content)),
             )
-            .child(self.tab_strip(cx))
+            .child(self.tab_strip(window, cx))
     }
 }

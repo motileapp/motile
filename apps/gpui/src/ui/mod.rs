@@ -13,6 +13,7 @@ pub mod modal;
 pub mod motion;
 pub mod parts;
 pub mod pick;
+pub mod reorder;
 pub mod rich_text;
 pub mod skill_chip;
 pub mod slider;
@@ -38,6 +39,7 @@ pub use parts::{
     proxied_line, tracks_bounds,
 };
 pub use pick::{OptionCard, PickRow};
+pub use reorder::Reorder;
 pub use slider::Slider;
 pub use swatch::Swatch;
 pub use underline_tabs::UnderlineTabs;

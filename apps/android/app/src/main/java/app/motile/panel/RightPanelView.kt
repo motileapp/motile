@@ -16,16 +16,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -34,10 +40,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import app.motile.LocalStore
+import app.motile.core.AppStore
 import app.motile.core.Integration
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
+import app.motile.sidebar.Reorder
+import app.motile.sidebar.ReorderScrolling
+import app.motile.sidebar.reorders
+import app.motile.theme.Radius
+import app.motile.theme.ShadowSize
 import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.ControlSize
@@ -46,6 +59,7 @@ import app.motile.theme.LocalRow
 import app.motile.theme.Opacity
 import app.motile.theme.Surface
 import app.motile.theme.opacity
+import app.motile.theme.shadow
 import app.motile.theme.wash
 import app.motile.ui.ActionButton
 import app.motile.ui.Disabled
@@ -184,13 +198,16 @@ object PanelTabStrip {
     val height get() = ControlSize.Regular.height + edge * 2
 }
 
-/** The open tabs, side by side and scrolled sideways when they don't fit, and the button that adds one. */
+/** The open tabs, side by side and scrolled sideways when they don't fit, and the button that adds one. A hold lifts a tab to move it. */
 @Composable
 fun PanelTabStrip(tabs: PanelTabs, modifier: Modifier = Modifier) {
     val store = LocalStore.current
     val strip = rememberLazyListState()
+    val reorder = remember(strip) { Reorder(strip) }
     val index = tabs.tabs.indexOf(tabs.active)
     LaunchedEffect(tabs.active) { if (index >= 0 && !tabs.isBlank) strip.animateScrollToItem(index) }
+    ReorderScrolling(reorder, strip)
+    val shown = reorder.arranged(tabs.tabs) { it.id }
     LazyRow(
         modifier.fillMaxHeight(),
         state = strip,
@@ -198,7 +215,20 @@ fun PanelTabStrip(tabs: PanelTabs, modifier: Modifier = Modifier) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (!tabs.isBlank) {
-            items(tabs.tabs, key = { it.id }) { tab -> PanelTabChip(tab, active = tab == tabs.active) }
+            items(shown, key = { it.id }) { tab ->
+                val lifted = reorder.key == tab.id
+                val placed = if (lifted) {
+                    Modifier.zIndex(1f).graphicsLayer { translationX = reorder.offset }
+                } else {
+                    Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
+                }
+                Box(placed) {
+                    PanelTabChip(
+                        tab, active = tab == tabs.active, lifted = lifted, movable = tabs.tabs.size > 1, reorder = reorder,
+                        keys = { shown.map { it.id } }, put = { store.rightPanel.moveTab(tab, it) },
+                    )
+                }
+            }
         }
         if (store.panelUnavailable == null && !tabs.isBlank) {
             item(key = "new") { ActionButton(icon = Symbol.Plus, help = "New tab", margin = beside(start = PanelTabChip.margin)) { store.rightPanel.openBlank() } }
@@ -211,8 +241,9 @@ object PanelTabChip {
     val margin = 1.dp
 }
 
+/** A tab of the strip, with its menu where it is held, and lifted by a hold to be moved where it moves. */
 @Composable
-fun PanelTabChip(tab: PanelTab, active: Boolean) {
+fun PanelTabChip(tab: PanelTab, active: Boolean, lifted: Boolean, movable: Boolean, reorder: Reorder, keys: () -> List<String>, put: (Int) -> Unit) {
     val store = LocalStore.current
     val panel = store.rightPanel
     val height = ControlSize.Regular.height
@@ -222,17 +253,27 @@ fun PanelTabChip(tab: PanelTab, active: Boolean) {
     val reach = max(0f, (Platform.minimumPress - height.value) / 2).dp
     val menu = rememberMenuState()
     Box(contentAlignment = Alignment.CenterEnd) {
+        if (lifted) {
+            Box(Modifier.matchParentSize().padding(vertical = reach, horizontal = PanelTabChip.margin).shadow(ShadowSize.Lg, RoundedCornerShape(Radius.md), Opacity.ShadowStronger))
+        }
         HighlightButton(
             onClick = { panel.activate(tab) },
             modifier = Modifier.pressPosition(menu),
             selected = active,
+            lit = lifted,
             inset = PaddingValues(vertical = reach, horizontal = PanelTabChip.margin),
             faded = true,
             small = true,
-            onLongClick = { menu.openAtPress() },
+            opaque = lifted,
+            // A hold on a tab that moves lifts it, and its menu comes up from there.
+            onLongClick = if (movable) ({}) else ({ menu.openAtPress() }),
         ) {
             Row(
                 Modifier
+                    // Inside the press, which takes every move after a hold for itself.
+                    .reorders(
+                        movable, tab.id, reorder, keys, { keys().toSet() }, openMenu = { menu.openAtPress() }, closeMenu = { menu.close() }, put = put,
+                    )
                     .padding(vertical = reach, horizontal = PanelTabChip.margin)
                     .height(height)
                     .widthIn(max = 180.dp)
@@ -265,35 +306,75 @@ fun PanelTabChip(tab: PanelTab, active: Boolean) {
     }
 }
 
-/** What a blank tab shows: the tabs there are to open. */
+/** What a blank tab shows: the tabs there are to open, in the order kept for them. A hold lifts a row to move it. */
 @Composable
 private fun PanelLauncher(target: PanelTarget) {
     val store = LocalStore.current
     val panel = store.rightPanel
+    val haptics = LocalHapticFeedback.current
+    val list = rememberLazyListState()
+    val reorder = remember(list) { Reorder(list) }
     LaunchedEffect(target.serverID) {
         store.linear.read(target.serverID)
         store.ricrac.read(target.serverID)
     }
+    ReorderScrolling(reorder, list)
+    val entries = launcherEntries(store, target)
+    val shown = reorder.arranged(entries) { it.tab.id }
     Column(
         Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text("Open", size = TextSize.Sm, weight = FontWeight.SemiBold, color = LocalPalette.current.foreground)
-        Column(Modifier.width(250.dp)) {
-            LauncherRow(Symbol.Bot, "Agents", null, count = store.agents.count { it.working }) { panel.open(PanelTab.Agents) }
-            LauncherRow(Symbol.Folder, "Files", null) { panel.open(PanelTab.Files) }
-            LauncherRow(Symbol.Diff, "Diff", if (target.repository) null else "Available in git repositories.") { panel.showDiff() }
-            LauncherRow(Symbol.GitPullRequest, "Pull Request", store.pullRequestsUnavailable) { panel.open(PanelTab.PullRequest) }
-            if (store.pullRequestsExtended) {
-                LauncherRow(Symbol.List, "All Pull Requests", store.pullRequestsUnavailable) { panel.open(PanelTab.PullRequests) }
+        LazyColumn(Modifier.width(250.dp), state = list) {
+            items(shown, key = { it.tab.id }) { entry ->
+                val lifted = reorder.key == entry.tab.id
+                val placed = if (lifted) {
+                    Modifier.zIndex(1f).graphicsLayer { translationY = reorder.offset }
+                } else {
+                    Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null)
+                }
+                Box(placed) {
+                    LauncherRow(
+                        entry, lifted,
+                        Modifier.reorders(
+                            entries.size > 1, entry.tab.id, reorder,
+                            keys = { shown.map { it.tab.id } },
+                            movable = { entries.map { it.tab.id }.toSet() },
+                            openMenu = {}, closeMenu = {},
+                            put = { index -> panel.moveLauncherRow(entry.tab, index, entries.map { it.tab }) },
+                            lift = { haptics.performHapticFeedback(HapticFeedbackType.LongPress) },
+                        ),
+                    )
+                }
             }
-            if (store.isOn(Integration.Linear)) {
-                LauncherRow(Symbol.Linear, if (store.linearConnected) "Linear" else "Connect Linear", store.linearUnavailable) { panel.open(PanelTab.Linear) }
+        }
+    }
+}
+
+/** A row of the launcher: the tab it opens, and why it can't when it can't. */
+private class LauncherEntry(val tab: PanelTab, val symbol: Symbol, val title: String, val reason: String?, val count: Int = 0, val action: () -> Unit)
+
+/** The launcher's rows that show, in the order kept for them. */
+private fun launcherEntries(store: AppStore, target: PanelTarget): List<LauncherEntry> {
+    val panel = store.rightPanel
+    return panel.launcherOrder.mapNotNull { tab ->
+        when (tab) {
+            PanelTab.Agents -> LauncherEntry(tab, Symbol.Bot, "Agents", null, count = store.agents.count { it.working }) { panel.open(tab) }
+            PanelTab.Files -> LauncherEntry(tab, Symbol.Folder, "Files", null) { panel.open(tab) }
+            PanelTab.Diff -> LauncherEntry(tab, Symbol.Diff, "Diff", if (target.repository) null else "Available in git repositories.") { panel.showDiff() }
+            PanelTab.PullRequest -> LauncherEntry(tab, Symbol.GitPullRequest, "Pull Request", store.pullRequestsUnavailable) { panel.open(tab) }
+            PanelTab.PullRequests -> if (!store.pullRequestsExtended) null else {
+                LauncherEntry(tab, Symbol.List, "All Pull Requests", store.pullRequestsUnavailable) { panel.open(tab) }
             }
-            if (store.isOn(Integration.Ricrac)) {
-                LauncherRow(Symbol.Ricrac, if (store.ricracConnected) "Ricrac" else "Connect Ricrac", store.ricracUnavailable) { panel.open(PanelTab.Ricrac) }
+            PanelTab.Linear -> if (!store.isOn(Integration.Linear)) null else {
+                LauncherEntry(tab, Symbol.Linear, if (store.linearConnected) "Linear" else "Connect Linear", store.linearUnavailable) { panel.open(tab) }
             }
+            PanelTab.Ricrac -> if (!store.isOn(Integration.Ricrac)) null else {
+                LauncherEntry(tab, Symbol.Ricrac, if (store.ricracConnected) "Ricrac" else "Connect Ricrac", store.ricracUnavailable) { panel.open(tab) }
+            }
+            else -> null
         }
     }
 }
@@ -301,32 +382,45 @@ private fun PanelLauncher(target: PanelTarget) {
 /** The space between two launcher rows' lights, which is the rows' own, so that it takes a tap. */
 private val LAUNCHER_GAP = 2.dp
 
+/** `modifier` goes inside the press, which takes every move after a hold for itself. */
 @Composable
-private fun LauncherRow(symbol: Symbol, title: String, reason: String?, count: Int = 0, action: () -> Unit) {
+private fun LauncherRow(entry: LauncherEntry, lifted: Boolean, modifier: Modifier = Modifier) {
     val palette = LocalPalette.current
     val foreground = palette.foreground
-    Disabled(reason != null) {
-        HighlightButton(
-            onClick = action,
-            modifier = Modifier.fillMaxWidth().opacity(Opacity.Disabled, on = reason != null),
-            inset = PaddingValues(vertical = LAUNCHER_GAP / 2),
-        ) {
-            Row(
-                Modifier.fillMaxWidth().height(maxOf(ControlSize.Regular.height, Platform.minimumPress.dp) + LAUNCHER_GAP).padding(horizontal = 10.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically,
+    val disabled = entry.reason != null
+    Box {
+        if (lifted) {
+            Box(Modifier.matchParentSize().padding(vertical = LAUNCHER_GAP / 2).shadow(ShadowSize.Lg, RoundedCornerShape(Radius.md), Opacity.ShadowStronger))
+        }
+        Disabled(disabled) {
+            HighlightButton(
+                onClick = entry.action,
+                modifier = Modifier.fillMaxWidth(),
+                lit = lifted,
+                inset = PaddingValues(vertical = LAUNCHER_GAP / 2),
+                opaque = lifted,
             ) {
-                Icon(symbol, iconSize(text = TextSize.Sm), color = foreground)
-                // How many of its things work, in the working colour.
-                val words = buildAnnotatedString {
-                    append(title)
-                    if (count > 0) {
-                        append(" ")
-                        withStyle(SpanStyle(color = palette.mutedForeground)) { append("·") }
-                        withStyle(SpanStyle(color = palette.process)) { append(" $count") }
+                Row(
+                    modifier
+                        .fillMaxWidth()
+                        .opacity(Opacity.Disabled, on = disabled)
+                        .height(maxOf(ControlSize.Regular.height, Platform.minimumPress.dp) + LAUNCHER_GAP)
+                        .padding(horizontal = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(entry.symbol, iconSize(text = TextSize.Sm), color = foreground)
+                    // How many of its things work, in the working colour.
+                    val words = buildAnnotatedString {
+                        append(entry.title)
+                        if (entry.count > 0) {
+                            append(" ")
+                            withStyle(SpanStyle(color = palette.mutedForeground)) { append("·") }
+                            withStyle(SpanStyle(color = palette.process)) { append(" ${entry.count}") }
+                        }
                     }
+                    Text(words, size = TextSize.Sm, color = foreground, maxLines = 1)
                 }
-                Text(words, size = TextSize.Sm, color = foreground, maxLines = 1)
             }
         }
     }

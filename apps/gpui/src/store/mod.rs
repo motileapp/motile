@@ -455,6 +455,7 @@ impl Store {
         let right_panel = RightPanel::new(
             prefs.bool("panel.open"),
             prefs.get::<BTreeMap<String, PanelTabs>>("panel.tabs").unwrap_or_default(),
+            &prefs.get::<Vec<String>>("panel.launcher").unwrap_or_default(),
         );
         let linear = linear::Linear::kept(&prefs);
         let ricrac = ricrac::Ricrac::kept(&prefs);

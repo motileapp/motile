@@ -144,6 +144,64 @@ impl PanelTabs {
     pub fn is_blank(&self) -> bool {
         self.tabs.len() == 1 && self.tabs[0].blank_number().is_some()
     }
+
+    /// Moves the tab to `index` among the others.
+    pub fn move_tab(&mut self, tab: &PanelTab, index: usize) {
+        let Some(from) = self.tabs.iter().position(|open| open == tab) else { return };
+        let moved = self.tabs.remove(from);
+        self.tabs.insert(index.min(self.tabs.len()), moved);
+    }
+}
+
+/// What a blank tab offers to open, in the order it offers them until the user moves them.
+pub const LAUNCHER: [PanelTab; 7] = [
+    PanelTab::Agents,
+    PanelTab::Files,
+    PanelTab::Diff,
+    PanelTab::PullRequest,
+    PanelTab::PullRequests,
+    PanelTab::Linear,
+    PanelTab::Ricrac,
+];
+
+/// The launcher's rows in the order saved by their ids. What is no longer a row is dropped, and
+/// a row the order lacks goes after the one before it in `LAUNCHER`, or first.
+pub fn launcher_order(saved: &[String]) -> Vec<PanelTab> {
+    let mut order: Vec<PanelTab> = Vec::new();
+    for id in saved {
+        let Some(tab) = LAUNCHER.iter().find(|tab| tab.id() == *id) else { continue };
+        if !order.contains(tab) {
+            order.push(tab.clone());
+        }
+    }
+    for (place, tab) in LAUNCHER.iter().enumerate() {
+        if order.contains(tab) {
+            continue;
+        }
+        let before = place.checked_sub(1).and_then(|before| order.iter().position(|kept| *kept == LAUNCHER[before]));
+        order.insert(before.map_or(0, |before| before + 1), tab.clone());
+    }
+    order
+}
+
+/// Moves the launcher's `row` to `index` among the `shown` rows without it: right before the
+/// shown row it lands before, or right after the last. The hidden rows keep their places.
+pub fn place_launcher_row(order: &mut Vec<PanelTab>, shown: &[PanelTab], row: &PanelTab, index: usize) {
+    let others: Vec<&PanelTab> = shown.iter().filter(|tab| *tab != row).collect();
+    let (anchor, after) = match others.get(index) {
+        Some(anchor) => (*anchor, false),
+        None => match others.last() {
+            Some(last) => (*last, true),
+            None => return,
+        },
+    };
+    let Some(from) = order.iter().position(|tab| tab == row) else { return };
+    let moved = order.remove(from);
+    let Some(at) = order.iter().position(|tab| tab == anchor) else {
+        order.insert(from, moved);
+        return;
+    };
+    order.insert(if after { at + 1 } else { at }, moved);
 }
 
 /// The folder the panel looks into: the one the open thread works in, or the project's when a
@@ -461,6 +519,8 @@ fn read_file(answer: Value, path: &str, id: String) -> FileContent {
 pub struct RightPanel {
     pub is_open: bool,
     pub tabs_by_key: BTreeMap<String, PanelTabs>,
+    /// The order of a blank tab's rows on this device, hidden ones too.
+    pub launcher: Vec<PanelTab>,
     /// The turns of the open thread that changed files, the first one first.
     pub turns: Vec<TurnChange>,
     /// The agent whose transcript shows in the thread's place, read only.
@@ -491,10 +551,11 @@ pub struct RightPanel {
 }
 
 impl RightPanel {
-    pub fn new(is_open: bool, tabs_by_key: BTreeMap<String, PanelTabs>) -> Self {
+    pub fn new(is_open: bool, tabs_by_key: BTreeMap<String, PanelTabs>, launcher: &[String]) -> Self {
         Self {
             is_open,
             tabs_by_key,
+            launcher: launcher_order(launcher),
             turns: Vec::new(),
             shown_agent: None,
             diff: Loaded::Loading,
@@ -670,6 +731,29 @@ impl Store {
 
     pub fn activate_tab(&mut self, tab: PanelTab) {
         self.change_tabs(|tabs| tabs.active = Some(tab));
+    }
+
+    /// Moves the tab to `index` among the others. The tab shown stays the one shown.
+    pub fn move_tab(&mut self, tab: &PanelTab, index: usize) {
+        self.change_tabs(|tabs| tabs.move_tab(tab, index));
+    }
+
+    /// The rows a blank tab shows, in the order the user put them.
+    pub fn launcher_rows(&self) -> Vec<PanelTab> {
+        let extended = self.pull_requests_extended();
+        let shows = |tab: &PanelTab| match tab {
+            PanelTab::PullRequests => extended,
+            tab => tab.integration().is_none_or(|integration| self.is_on(integration)),
+        };
+        self.right_panel.launcher.iter().filter(|tab| shows(tab)).cloned().collect()
+    }
+
+    /// Moves the launcher's row to `index` among the rows it shows without it.
+    pub fn move_launcher_row(&mut self, row: &PanelTab, index: usize) {
+        let shown = self.launcher_rows();
+        place_launcher_row(&mut self.right_panel.launcher, &shown, row, index);
+        let saved: Vec<String> = self.right_panel.launcher.iter().map(PanelTab::id).collect();
+        self.prefs.set("panel.launcher", saved);
     }
 
     /// Shows the tab `offset` places from the active one, wrapping around the ends.
@@ -1215,5 +1299,83 @@ pub fn file_symbol(path: &str) -> &'static str {
         "sh" | "bash" | "zsh" | "fish" => "terminal",
         "" => "file",
         _ => "code",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{LAUNCHER, PanelTab, PanelTabs, launcher_order, place_launcher_row};
+
+    fn ids(order: &[PanelTab]) -> Vec<String> {
+        order.iter().map(PanelTab::id).collect()
+    }
+
+    fn saved(ids: &[&str]) -> Vec<String> {
+        ids.iter().map(|id| id.to_string()).collect()
+    }
+
+    #[test]
+    fn a_moved_tab_lands_at_its_index_among_the_others_and_the_active_one_stays() {
+        let mut tabs = PanelTabs {
+            tabs: vec![PanelTab::Diff, PanelTab::Files, PanelTab::Agents, PanelTab::Blank(0)],
+            active: Some(PanelTab::Files),
+            ..Default::default()
+        };
+        tabs.move_tab(&PanelTab::Diff, 2);
+        assert_eq!(tabs.tabs, vec![PanelTab::Files, PanelTab::Agents, PanelTab::Diff, PanelTab::Blank(0)]);
+        tabs.move_tab(&PanelTab::Blank(0), 0);
+        assert_eq!(tabs.tabs, vec![PanelTab::Blank(0), PanelTab::Files, PanelTab::Agents, PanelTab::Diff]);
+        tabs.move_tab(&PanelTab::Files, 9);
+        assert_eq!(tabs.tabs, vec![PanelTab::Blank(0), PanelTab::Agents, PanelTab::Diff, PanelTab::Files]);
+        assert_eq!(tabs.active, Some(PanelTab::Files));
+    }
+
+    #[test]
+    fn the_launcher_starts_in_its_default_order() {
+        assert_eq!(launcher_order(&[]), LAUNCHER.to_vec());
+        assert_eq!(
+            ids(&launcher_order(&[])),
+            saved(&["agents", "files", "diff", "pull_request", "pull_requests", "linear", "ricrac"])
+        );
+    }
+
+    #[test]
+    fn a_saved_launcher_order_drops_unknown_rows_and_puts_missing_ones_after_their_neighbour() {
+        let order = launcher_order(&saved(&["ricrac", "gone", "diff", "files", "diff", "linear", "pull_request"]));
+        assert_eq!(
+            ids(&order),
+            saved(&["agents", "ricrac", "diff", "files", "linear", "pull_request", "pull_requests"])
+        );
+    }
+
+    #[test]
+    fn a_launcher_row_moves_among_the_shown_rows_and_the_hidden_ones_keep_their_places() {
+        let shown: Vec<PanelTab> =
+            LAUNCHER.iter().filter(|tab| !matches!(tab, PanelTab::PullRequests | PanelTab::Linear)).cloned().collect();
+
+        let mut order = LAUNCHER.to_vec();
+        place_launcher_row(&mut order, &shown, &PanelTab::Ricrac, 0);
+        assert_eq!(
+            ids(&order),
+            saved(&["ricrac", "agents", "files", "diff", "pull_request", "pull_requests", "linear"])
+        );
+
+        let mut order = LAUNCHER.to_vec();
+        place_launcher_row(&mut order, &shown, &PanelTab::Agents, 4);
+        assert_eq!(
+            ids(&order),
+            saved(&["files", "diff", "pull_request", "pull_requests", "linear", "ricrac", "agents"])
+        );
+
+        let mut order = LAUNCHER.to_vec();
+        place_launcher_row(&mut order, &shown, &PanelTab::Agents, 3);
+        assert_eq!(
+            ids(&order),
+            saved(&["files", "diff", "pull_request", "pull_requests", "linear", "agents", "ricrac"])
+        );
+
+        let mut order = LAUNCHER.to_vec();
+        place_launcher_row(&mut order, &shown, &PanelTab::Files, 1);
+        assert_eq!(order, LAUNCHER.to_vec());
     }
 }

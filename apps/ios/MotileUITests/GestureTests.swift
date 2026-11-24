@@ -171,6 +171,66 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(ordered(lowerTitle, above: upperTitle))
     }
 
+    /// A hold lifts a row of what a blank tab offers and a move drags it above another, and the
+    /// order stays.
+    func testAHoldAndAMoveOnARowOfTheBlankTabDragsItAboveAnotherAndTheOrderStays() {
+        app.buttons["Files and changes"].tap()
+        XCTAssertTrue(shown(app.navigationBars.buttons["Back"]))
+        if shown(app.buttons["New tab"]) { app.buttons["New tab"].tap() }
+        guard let agents = panelButton("Agents"), let files = panelButton("Files") else { return XCTFail("no rows") }
+        let (upper, lower) = agents.frame.minY < files.frame.minY ? ("Agents", "Files") : ("Files", "Agents")
+        drag(lower, before: upper, along: .vertical)
+        XCTAssertTrue(panelOrdered(lower, before: upper, along: .vertical))
+        app.terminate()
+        app.launch()
+        app.buttons["Files and changes"].tap()
+        XCTAssertTrue(panelOrdered(lower, before: upper, along: .vertical))
+    }
+
+    /// A hold lifts a tab of the panel and a move drags it before another.
+    func testAHoldAndAMoveOnAPanelTabDragsItBeforeAnother() {
+        app.buttons["Files and changes"].tap()
+        XCTAssertTrue(shown(app.navigationBars.buttons["Back"]))
+        for title in ["Agents", "Files"] {
+            if shown(app.buttons["New tab"]) { app.buttons["New tab"].tap() }
+            panelButton(title)?.tap()
+        }
+        guard let agents = panelButton("Agents"), let files = panelButton("Files") else { return XCTFail("no tabs") }
+        let (leading, trailing) = agents.frame.minX < files.frame.minX ? ("Agents", "Files") : ("Files", "Agents")
+        drag(trailing, before: leading, along: .horizontal)
+        XCTAssertTrue(panelOrdered(trailing, before: leading, along: .horizontal))
+        // A hold that doesn't move still brings up the tab's menu.
+        panelButton(leading)?.press(forDuration: 1.2)
+        XCTAssertTrue(app.buttons["Close Others"].waitForExistence(timeout: 3))
+    }
+
+    private func panelButton(_ title: String) -> XCUIElement? {
+        let found = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", title))
+        _ = found.firstMatch.waitForExistence(timeout: 5)
+        return found.allElementsBoundByIndex.first { $0.isHittable }
+    }
+
+    private func drag(_ title: String, before other: String, along axis: Axis) {
+        guard let moved = panelButton(title), let target = panelButton(other) else { return XCTFail("nothing to drag") }
+        let end = axis == .horizontal ? CGVector(dx: 0.15, dy: 0.5) : CGVector(dx: 0.5, dy: 0.15)
+        moved.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).press(
+            forDuration: 0.8, thenDragTo: target.coordinate(withNormalizedOffset: end), withVelocity: .slow, thenHoldForDuration: 0.4)
+    }
+
+    private enum Axis { case horizontal, vertical }
+
+    private func panelOrdered(_ title: String, before other: String, along axis: Axis) -> Bool {
+        for _ in 0..<10 {
+            if let one = panelButton(title), let two = panelButton(other),
+               axis == .horizontal ? one.frame.minX < two.frame.minX : one.frame.minY < two.frame.minY
+            {
+                return true
+            }
+            sleep(1)
+        }
+        return false
+    }
+
     func testAHoldOnAThreadBringsUpItsMenu() {
         openSidebar()
         guard let thread = row("Screenshot of the Landing Page") else { return XCTFail("no row") }
