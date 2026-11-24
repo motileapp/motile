@@ -433,7 +433,9 @@ pub fn view(shown: Shown<'_>, names: &dyn Naming) -> View {
         Reach::Refused => "Your gateway turned this device away",
     };
     let state = state.filter(|_| device.is_some());
-    let mut accounts: Vec<&GatewayAccount> = state.map(|state| state.accounts.iter().collect()).unwrap_or_default();
+    // The gateway sends them oldest first; the newest of a priority shows first.
+    let mut accounts: Vec<&GatewayAccount> =
+        state.map(|state| state.accounts.iter().rev().collect()).unwrap_or_default();
     accounts.sort_by_key(|account| (account.agent != Agent::Claude, account.priority));
     let capture = state.map(|state| state.capture.clone()).unwrap_or_default();
     let sign_in = sign_in.map(|sign_in| sign_in_view(sign_in, &accounts));
@@ -840,7 +842,7 @@ mod tests {
     }
 
     #[test]
-    fn each_account_says_how_it_stands_claude_codes_first_by_priority() {
+    fn each_account_says_how_it_stands_claude_codes_first_by_priority_then_newest() {
         let mut off = account("bench", Agent::Claude, 0);
         off.enabled = false;
         let mut dead = account("dead", Agent::Codex, 0);
@@ -871,22 +873,22 @@ mod tests {
         assert_eq!(
             rows,
             [
-                ("main", AccountState::Ready, None, "Priority 1"),
                 ("bench", AccountState::Off, Some("Off"), "Priority 1"),
+                ("main", AccountState::Ready, None, "Priority 1"),
                 ("tired", AccountState::Resting, Some("Resting until 13:26"), "Priority 2"),
                 ("rested", AccountState::Ready, None, "Priority 3"),
                 ("dead", AccountState::SignInAgain, Some("Sign in again"), "Priority 1"),
             ]
         );
-        let main = &view.accounts[0];
+        let main = &view.accounts[1];
         assert_eq!(
             (main.next, main.threads_text.as_deref(), main.note.as_deref(), main.email.as_deref()),
             (true, Some("3 threads"), None, None)
         );
-        assert_eq!(view.accounts[1].email.as_deref(), Some("bench@b.c"));
+        assert_eq!(view.accounts[0].email.as_deref(), Some("bench@b.c"));
         assert_eq!(main.windows[0].used, "40%");
         assert_eq!(view.accounts[4].note.as_deref(), Some("Sign in again to see its limits."));
-        assert_eq!(view.accounts[1].note.as_deref(), Some("No limits read yet."));
+        assert_eq!(view.accounts[0].note.as_deref(), Some("No limits read yet."));
         assert_eq!((view.status_text.as_str(), view.version.as_deref()), ("Connected", Some("0.1.300")));
     }
 
