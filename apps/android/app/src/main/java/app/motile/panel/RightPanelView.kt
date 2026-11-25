@@ -78,8 +78,9 @@ import kotlin.math.max
 @Composable
 fun PanelTabContent(active: PanelTab?) {
     val store = LocalStore.current
-    // The agents are the thread's own, kept with it, so they show while the server is away too.
+    // The agents and the media are the thread's own, kept with it, so they show while the server is away too.
     if (active == PanelTab.Agents && store.panelTarget != null) return AgentsSurface()
+    if (active == PanelTab.Media) store.panelTarget?.let { return MediaSurface(it.threadID) }
     store.panelUnavailable?.let { return PanelMessage(it) }
     val target = store.panelTarget ?: return
     when (active) {
@@ -88,6 +89,7 @@ fun PanelTabContent(active: PanelTab?) {
         is PanelTab.File -> key(active.path) { FileSurface(target, active.path) }
         is PanelTab.Change -> key(active) { ChangeSurface(target, active.turn, active.path) }
         PanelTab.Agents -> AgentsSurface()
+        PanelTab.Media -> MediaSurface(target.threadID)
         PanelTab.PullRequest -> PullRequestSurface(target)
         is PanelTab.PullRequestNumber -> key(active.number) { PullRequestSurface(target, active.number) }
         PanelTab.PullRequests -> PullRequestListSurface(target)
@@ -374,6 +376,7 @@ private fun launcherEntries(store: AppStore, target: PanelTarget): List<Launcher
             PanelTab.Ricrac -> if (!store.isOn(Integration.Ricrac)) null else {
                 LauncherEntry(tab, Symbol.Ricrac, if (store.ricracConnected) "Ricrac" else "Connect Ricrac", store.ricracUnavailable) { panel.open(tab) }
             }
+            PanelTab.Media -> LauncherEntry(tab, Symbol.Images, "Media", null) { panel.open(tab) }
             else -> null
         }
     }

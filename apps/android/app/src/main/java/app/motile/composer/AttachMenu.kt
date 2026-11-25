@@ -97,6 +97,11 @@ object PickedFile {
         copy
     }.getOrNull()
 
+    /** A copy of a file of the client's under its name. */
+    fun copy(file: File, name: String): File? = runCatching {
+        file.copyTo(File(newFolder(), name.ifEmpty { file.name }))
+    }.getOrNull()
+
     /** A file for the camera to take a photo into. */
     fun newPhoto(): File {
         val stamp = SimpleDateFormat("yyyy-MM-dd 'at' HH.mm.ss", Locale.US).format(Date())

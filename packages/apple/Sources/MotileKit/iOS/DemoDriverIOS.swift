@@ -122,6 +122,7 @@ enum DemoDriver {
             case "diff": store.rightPanel.showDiff()
             case "files": store.rightPanel.open(.files)
             case "agents": store.rightPanel.open(.agents)
+            case "media": store.rightPanel.open(.media)
             case "pull request": store.rightPanel.open(.pullRequest)
             case "pull requests": store.rightPanel.open(.pullRequests)
             case "linear": store.rightPanel.open(.linear)
@@ -257,6 +258,14 @@ enum DemoDriver {
         case "view" where rest == "composer":
             store.view(store.attachments.compactMap(\.viewed), at: 0)
         case "view" where rest == "close": store.closeViewer()
+        case "gallery":
+            let words = rest.split(separator: " ").map(String.init)
+            guard let media = store.gallery?.media, let index = words.last.flatMap(Int.init), media.indices.contains(index) else { return }
+            switch words.first {
+            case "show": store.showInChat(media[index].shownIn)
+            case "add": store.addToMessage(media[index].media, name: media[index].name)
+            default: store.view(media.map(\.viewed), at: index)
+            }
         case "pan": views(ZoomingScrollView.self).last?.pan(toward: rest)
         case "zoom":
             guard let times = Double(rest) else { return }

@@ -37,9 +37,12 @@ struct PanelContent: View {
     let active: PanelTab?
 
     var body: some View {
-        // The agents are the thread's own, kept with it, so they show while the server is away too.
+        // The agents and the media are the thread's own, kept with it, so they show while the
+        // server is away too.
         if active == .agents, store.panelTarget != nil {
             AgentsSurface()
+        } else if active == .media, let target = store.panelTarget {
+            MediaSurface(threadID: target.threadID)
         } else if let reason = store.panelUnavailable {
             PanelMessage(text: reason)
         } else if let target = store.panelTarget {
@@ -49,6 +52,7 @@ struct PanelContent: View {
             case .file(let path): FileSurface(target: target, path: path).id(path)
             case .change(let turn, let path): ChangeSurface(target: target, turn: turn, path: path).id(active)
             case .agents: AgentsSurface()
+            case .media: MediaSurface(threadID: target.threadID)
             case .pullRequest: PullRequestSurface(target: target)
             case .pullRequestNumber(let number): PullRequestSurface(target: target, number: number).id(number)
             case .pullRequests: PullRequestListSurface(target: target)
@@ -366,6 +370,8 @@ private struct PanelLauncher: View {
             row(.ricrac, store.ricracConnected ? "Ricrac" : "Connect Ricrac", command: Integration.ricrac.command, reason: store.ricracUnavailable) {
                 panel.open(.ricrac)
             }
+        case .media:
+            row(.images, "Media", command: "rightPanel.media", reason: nil) { panel.open(.media) }
         default:
             EmptyView()
         }

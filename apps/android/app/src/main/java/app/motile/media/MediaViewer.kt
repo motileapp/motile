@@ -92,6 +92,9 @@ import app.motile.LocalStore
 import app.motile.core.MarkupSession
 import app.motile.core.MarkupTool
 import app.motile.core.Pictures
+import app.motile.core.ShownIn
+import app.motile.core.addToMessage
+import app.motile.core.showInChat
 import app.motile.core.ViewedMedia
 import app.motile.core.Viewing
 import app.motile.platform.Platform
@@ -116,6 +119,8 @@ import app.motile.ui.Asking
 import app.motile.ui.Confirmation
 import app.motile.ui.ButtonVariant
 import app.motile.ui.GlassButton
+import app.motile.ui.MenuPopup
+import app.motile.ui.rememberMenuState
 import app.motile.ui.Spinner
 import app.motile.ui.Text
 import app.motile.ui.glassButton
@@ -332,6 +337,7 @@ private fun Viewer(viewing: Viewing) {
                             }
                         }
                         GlassButton(Symbol.X, "Close", onClick = { store.closeViewer() }, symbolSize = IconSize.Xl)
+                        item.shownIn?.let { MoreMenu(item, it, Modifier.align(Alignment.CenterEnd)) }
                     } else {
                         GlassButton(Symbol.X, "Cancel", onClick = { cancelMarkup() }, symbolSize = IconSize.Xl)
                         ActionButton(
@@ -400,6 +406,21 @@ private fun Viewer(viewing: Viewing) {
                 "Discard your marks?", "The image stays as it was.",
                 listOf(Answer("Discard", ButtonVariant.Danger) { endMarkup() }),
             )
+        }
+    }
+}
+
+/** What else can be done with an image or a video of the open thread. */
+@Composable
+private fun MoreMenu(item: ViewedMedia, shownIn: ShownIn, modifier: Modifier) {
+    val store = LocalStore.current
+    val menu = rememberMenuState()
+    Box(modifier) {
+        GlassButton(Symbol.Ellipsis, "More", onClick = { menu.open() }, symbolSize = IconSize.Xl)
+        MenuPopup(menu) {
+            item("Show in Chat", Symbol.MessageSquareText) { store.showInChat(shownIn) }
+            val source = item.source as? ViewedMedia.Source.Media ?: return@MenuPopup
+            item("Add to Message", Symbol.Paperclip) { store.addToMessage(source.id, item.name) }
         }
     }
 }

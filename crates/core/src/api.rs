@@ -15,6 +15,7 @@ use serde_json::Value;
 
 use crate::connection::PathKind;
 use crate::find::FoundRow;
+use crate::gallery::Shown;
 use crate::gateway;
 use crate::git::Control;
 use crate::keybindings::{Rule, View as KeybindingsView};
@@ -597,6 +598,18 @@ pub enum Command {
     FindEnd {
         thread_id: String,
     },
+    /// Has the core send the thread's images and videos with `gallery`, and again whenever a new
+    /// one shows, until `watch` is false.
+    WatchGallery {
+        thread_id: String,
+        watch: bool,
+    },
+    /// Brings the row of the item into sight, its turn loaded and its fold open, with `reveal`.
+    RevealRow {
+        thread_id: String,
+        item_id: String,
+        row_id: String,
+    },
     /// Asks for the turns before the first row, when the rows said there are some. With `all`,
     /// every turn back to the thread's first.
     LoadEarlier {
@@ -864,6 +877,11 @@ pub enum Event {
     Live {
         thread_id: String,
         live: bool,
+    },
+    /// The thread's images and videos, the newest first.
+    Gallery {
+        thread_id: String,
+        media: Vec<Shown>,
     },
     /// The agents the thread's agent has started, in the order it started them.
     Agents {

@@ -183,6 +183,23 @@ class GestureTests {
     }
 
     @Test
+    fun aHoldOnAPictureOfTheMediaTabShowsItInTheChat() {
+        openSidebar()
+        (row("Screenshot of the Landing Page") ?: return fail("no row")).click()
+        device.wait(Until.findObject(By.desc("Files and changes")), 3_000).click()
+        assertTrue(shown(By.desc("Back")))
+        device.wait(Until.findObject(By.desc("New tab")), 2_000)?.click()
+        (device.wait(Until.findObject(By.text("Media")), 5_000) ?: return fail("no media")).click()
+        val square = device.wait(Until.findObject(By.desc(Pattern.compile(".+\\.(png|jpe?g|webp|gif|svg|mp4|mov)"))), 10_000)
+            ?: return fail("no picture")
+        square.longClick()
+        val show = By.text("Show in Chat")
+        assertTrue(shown(show))
+        device.findObject(show).click()
+        assertTrue(gone(By.desc("Back")))
+    }
+
+    @Test
     fun aSwipeToTheRightOnAThreadInTheSidebarMarksItDone() {
         openSidebar()
         val thread = row("Use an F-String in Greet") ?: return fail("no row")

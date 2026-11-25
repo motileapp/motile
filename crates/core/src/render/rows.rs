@@ -1642,7 +1642,7 @@ fn colour(
     }
 }
 
-fn file_name(path: &str) -> &str {
+pub fn file_name(path: &str) -> &str {
     path.rsplit('/').next().unwrap_or(path)
 }
 

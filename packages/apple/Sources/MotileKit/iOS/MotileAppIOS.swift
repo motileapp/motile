@@ -128,6 +128,9 @@ struct MotileCommands: Commands {
                     .shortcut("rightPanel.ricrac", in: keys)
                     .disabled(store.panelUnavailable != nil || store.ricracUnavailable != nil)
             }
+            Button("Show Media") { store.rightPanel.open(.media) }
+                .shortcut("rightPanel.media", in: keys)
+                .disabled(store.panelUnavailable != nil)
             PanelTabCommands(store: store)
         }
         CommandMenu("Thread") {
@@ -350,12 +353,14 @@ struct MainScreen: View {
             .foregroundStyle(Color.themeForeground)
         }
         .ignoresSafeArea()
+        .onAppear { store.rightPanel.coversThread = true }
     }
 
     private func wide(_ width: CGFloat) -> some View {
         let open = store.rightPanel.isOpen
         let rest = width - Self.sidebarWidth - 1
-        let covers = open && (store.rightPanel.isMaximized || rest - 1 - Self.panelWidth < Self.threadBesidePanel)
+        let crowded = rest - 1 - Self.panelWidth < Self.threadBesidePanel
+        let covers = open && (store.rightPanel.isMaximized || crowded)
         return HStack(spacing: 0) {
             SidebarScreen(underThread: false)
                 .frame(width: Self.sidebarWidth)
@@ -381,6 +386,7 @@ struct MainScreen: View {
             }
         }
         .onAppear { drawer.isOpen = false }
+        .onChange(of: crowded, initial: true) { store.rightPanel.coversThread = crowded }
     }
 
     static var line: some View {

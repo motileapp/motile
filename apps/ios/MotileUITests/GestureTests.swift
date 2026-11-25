@@ -243,6 +243,48 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(app.alerts.firstMatch.waitForNonExistence(timeout: 3))
     }
 
+    func testAHoldOnAPictureInTheMediaTabShowsItInTheChat() {
+        let back = app.navigationBars.buttons["Back"]
+        openScreenshotInTheMediaTab().press(forDuration: 1.2)
+        let showInChat = app.buttons["Show in Chat"]
+        XCTAssertTrue(shown(showInChat))
+        XCTAssertTrue(app.buttons["Add to Message"].exists)
+        showInChat.tap()
+        XCTAssertTrue(back.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["Threads"].isHittable)
+    }
+
+    func testAPictureOpenedFromTheMediaTabShowsItInTheChatFromTheViewersMenu() {
+        let back = app.navigationBars.buttons["Back"]
+        openScreenshotInTheMediaTab().tap()
+        let more = app.buttons["More"]
+        XCTAssertTrue(shown(more))
+        more.tap()
+        let showInChat = app.buttons["Show in Chat"]
+        XCTAssertTrue(shown(showInChat))
+        showInChat.tap()
+        XCTAssertTrue(more.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(back.waitForNonExistence(timeout: 3))
+    }
+
+    /// The agent's screenshot in the Media tab of its thread.
+    private func openScreenshotInTheMediaTab() -> XCUIElement {
+        openSidebar()
+        guard let thread = row("Screenshot of the Landing Page") else {
+            XCTFail("no row")
+            return app
+        }
+        thread.tap()
+        app.buttons["Files and changes"].tap()
+        XCTAssertTrue(shown(app.navigationBars.buttons["Back"]))
+        let media = app.buttons["Media"].firstMatch
+        XCTAssertTrue(media.waitForExistence(timeout: 5))
+        media.tap()
+        let picture = app.buttons["screenshot.png"].firstMatch
+        XCTAssertTrue(picture.waitForExistence(timeout: 10))
+        return picture
+    }
+
     /// A swipe to the left across the thread's title, where nothing of the transcript scrolls sideways.
     private func swipeLeftAcrossTheTitle() {
         let title = app.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.095))

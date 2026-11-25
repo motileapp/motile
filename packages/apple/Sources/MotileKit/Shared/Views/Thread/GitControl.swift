@@ -97,8 +97,7 @@ struct GitButton: View {
             note.isEnabled = false
             menu.addItem(note)
         }
-        let below = view.isFlipped ? view.bounds.maxY + Self.menuGap : -Self.menuGap
-        menu.popUp(positioning: nil, at: NSPoint(x: view.bounds.maxX - menu.size.width, y: below), in: view)
+        menu.popUp(underEndOf: view.bounds, in: view, gap: Self.menuGap)
     }
     #else
     /// The menu of every action, under the one the repository calls for. One that can't run now
@@ -170,46 +169,6 @@ struct GitButton: View {
     }
     #endif
 }
-
-#if os(macOS)
-/// Where the git button is in its window, for its menu to open against.
-private final class MenuAnchorView {
-    weak var view: NSView?
-}
-
-private struct MenuAnchor: NSViewRepresentable {
-    let anchor: MenuAnchorView
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        anchor.view = view
-        return view
-    }
-
-    func updateNSView(_ view: NSView, context: Context) {
-        anchor.view = view
-    }
-}
-
-/// A menu item that runs a closure.
-final class ActionMenuItem: NSMenuItem {
-    private let run: () -> Void
-
-    init(title: String, run: @escaping () -> Void) {
-        self.run = run
-        super.init(title: title, action: #selector(chosen), keyEquivalent: "")
-        target = self
-    }
-
-    required init(coder: NSCoder) {
-        fatalError("not used")
-    }
-
-    @objc private func chosen() {
-        run()
-    }
-}
-#endif
 
 /// What stands in for the git button in a folder that is no git repository: it makes it one.
 struct InitializeGitButton: View {

@@ -1473,6 +1473,14 @@ struct ViewedMedia: Equatable {
     var drawnSize: CGSize?
     /// Its size in pixels, for the viewer to show its row's picture at at once.
     var pixels: CGSize?
+    /// The row of the open thread it is shown in, for the viewer to offer Show in Chat.
+    var shownIn: ShownIn?
+}
+
+/// Where in the open thread an image or a video is shown: the row, and that row's item.
+struct ShownIn: Equatable {
+    let item: String
+    let row: String
 }
 
 /// What the viewer has open: the images and videos of one message or of the composer, and

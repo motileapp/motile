@@ -147,10 +147,29 @@ struct MediaViewer: View {
                 .glassButton(in: Circle())
                 .accessibilityLabel("Close")
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if let shownIn = item.shownIn {
+                more(item, shownIn: shownIn)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, Self.barGap)
         .shown(pulled == 0 && buttonsShown(item), edge: .top)
+    }
+
+    /// What else can be done with an image or a video of the open thread.
+    private func more(_ item: ViewedMedia, shownIn: ShownIn) -> some View {
+        Menu {
+            MenuItem("Show in Chat", symbol: .messageSquareText) { store.showInChat(shownIn) }
+            if case .media(let id) = item.source {
+                MenuItem("Add to Message", symbol: .paperclip) { store.addToMessage(id, name: item.name) }
+            }
+        } label: {
+            Image(.ellipsis, size: .xl)
+        }
+        .buttonStyle(.glassSymbol)
+        .glassButton(in: Circle())
+        .accessibilityLabel("More")
     }
 
     @ViewBuilder private func bottom(_ item: ViewedMedia) -> some View {

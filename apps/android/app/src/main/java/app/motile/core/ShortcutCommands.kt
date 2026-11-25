@@ -149,9 +149,15 @@ fun AppStore.perform(command: String): Boolean {
             if (panelUnavailable != null || panelTarget?.repository != true) return false
             rightPanel.showDiff()
         }
-        "rightPanel.files", "rightPanel.agents" -> {
+        "rightPanel.files", "rightPanel.agents", "rightPanel.media" -> {
             if (panelUnavailable != null) return false
-            rightPanel.open(if (command == "rightPanel.files") PanelTab.Files else PanelTab.Agents)
+            rightPanel.open(
+                when (command) {
+                    "rightPanel.files" -> PanelTab.Files
+                    "rightPanel.agents" -> PanelTab.Agents
+                    else -> PanelTab.Media
+                },
+            )
         }
         "rightPanel.pullRequest", "rightPanel.pullRequests" -> {
             val all = command == "rightPanel.pullRequests"

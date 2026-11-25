@@ -37,6 +37,8 @@ enum PanelTab: Hashable, Codable, Identifiable {
     case change(turn: String, path: String)
     /// The agents the thread's agent has started, and what one of them did.
     case agents
+    /// The images and videos of the thread.
+    case media
     /// The pull request of the branch the thread works on.
     case pullRequest
     /// Another pull request of the repository, by its number.
@@ -60,6 +62,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .diff: "diff"
         case .files: "files"
         case .agents: "agents"
+        case .media: "media"
         case .pullRequest: "pull_request"
         case .pullRequestNumber(let number): "pull_request:\(number)"
         case .pullRequests: "pull_requests"
@@ -81,7 +84,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
     var path: String? {
         switch self {
         case .file(let path), .change(_, let path): path
-        case .diff, .files, .agents, .pullRequest, .pullRequestNumber, .pullRequests, .linear, .linearIssue, .ricrac, .ricracIssue, .blank: nil
+        case .diff, .files, .agents, .media, .pullRequest, .pullRequestNumber, .pullRequests, .linear, .linearIssue, .ricrac, .ricracIssue, .blank: nil
         }
     }
 
@@ -90,6 +93,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .diff: "Diff"
         case .files: "Files"
         case .agents: "Agents"
+        case .media: "Media"
         case .pullRequest: "Pull Request"
         case .pullRequestNumber(let number): "PR #\(number)"
         case .pullRequests: "Pull Requests"
@@ -106,6 +110,7 @@ enum PanelTab: Hashable, Codable, Identifiable {
         case .diff, .change: .diff
         case .files: .folder
         case .agents: .bot
+        case .media: .images
         case .pullRequest, .pullRequestNumber, .pullRequests: .gitPullRequest
         case .linear, .linearIssue: .linear
         case .ricrac, .ricracIssue: .ricrac
@@ -132,7 +137,7 @@ struct PanelTabs: Equatable, Codable {
 
 /// The order of what a blank tab offers to open, as it was dragged into on this device.
 enum PanelLauncherOrder {
-    static let defaults: [PanelTab] = [.agents, .files, .diff, .pullRequest, .pullRequests, .linear, .ricrac]
+    static let defaults: [PanelTab] = [.agents, .files, .diff, .pullRequest, .pullRequests, .linear, .ricrac, .media]
 
     /// The saved order without what isn't offered, and with what is new in its place.
     static func loaded(_ ids: [String]) -> [PanelTab] {
@@ -255,6 +260,8 @@ final class RightPanel {
             if isOpen, !oldValue { showPullRequestIfBlank() }
         }
     }
+    /// An open panel lies over the thread, even unmaximized, as on a phone. The layout says.
+    @ObservationIgnored var coversThread = false
     private(set) var tabsByKey: [String: PanelTabs]
     /// The order of what a blank tab offers to open.
     private(set) var launcher: [PanelTab] {

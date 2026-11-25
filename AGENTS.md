@@ -147,6 +147,7 @@ for tests. `api.rs` is the JSON the client and the core exchange.
   view and the gateway pages.
 - `pull_request.rs`, `linear.rs`, `ricrac.rs`, `git.rs`, `browse.rs`, `skills.rs`, `snooze.rs`,
   `search.rs`, `markup.rs`: what those parts of the clients show.
+- `gallery.rs`: a thread's images and videos, for the panel's Media tab.
 - `render/`: transcripts as rows ready to draw. `render/openui/` runs the programs and resolves
   them into the trees the clients draw; `canvas/` lays out charts and drawings, `map.rs` the map's
   camera. The golden trees are `fixtures/openui` (`OPENUI_BLESS=1` rewrites them). After changing

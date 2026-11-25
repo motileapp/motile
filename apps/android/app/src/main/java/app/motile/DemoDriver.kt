@@ -15,6 +15,8 @@ import app.motile.core.SettingsSection
 import app.motile.core.SkillMenuKey
 import app.motile.core.skillKey
 import app.motile.core.UsageModel
+import app.motile.core.addToMessage
+import app.motile.core.showInChat
 import app.motile.layout.LocalDrawerHolder
 import app.motile.panel.PanelTab
 import app.motile.platform.Platform
@@ -33,7 +35,7 @@ import java.util.concurrent.Executors
  *     continue                          goes on from the open thread of an unlinked server
  *     type <text>                       writes in the composer
  *     send                              sends what is written
- *     panel diff|files|agents|close     opens a tab of the panel, or closes the panel
+ *     panel diff|files|agents|media|close   opens a tab of the panel, or closes the panel
  *     agent <n>                         opens the nth agent of the agents tab, counting from 0
  *     child                             opens the first agent's thread that waits for the user
  *     parent                            goes back from an agent to the thread that started it
@@ -50,6 +52,7 @@ import java.util.concurrent.Executors
  *     mcp add [search]|activity|call    has the MCP Gateway page add an MCP server, open its activity or its latest call
  *     mcp unfold|try|rename|key|remove <name>   has it do that to the MCP server with that name
  *     view [composer]                   opens the thread's images, or the composer's, in the viewer
+ *     gallery [show|add] <n>            opens the nth of the media tab in the viewer, shows it in the chat or adds it to the message
  *     markup start|tool <tool>|ink <ink>|draw <x y x y…>|note <text>|keep|done|cancel
  *                                       marks up the image the viewer shows; draw goes through shares of it
  *     branches                          opens the branch picker in the thread's settings
@@ -152,6 +155,7 @@ object DemoDriver {
                 "diff" -> store.rightPanel.showDiff()
                 "files" -> store.rightPanel.open(PanelTab.Files)
                 "agents" -> store.rightPanel.open(PanelTab.Agents)
+                "media" -> store.rightPanel.open(PanelTab.Media)
                 "pull request" -> store.rightPanel.open(PanelTab.PullRequest)
                 "pull requests" -> store.rightPanel.open(PanelTab.PullRequests)
                 "linear" -> store.rightPanel.open(PanelTab.Linear)
@@ -263,6 +267,15 @@ object DemoDriver {
             "view" -> {
                 val shown = if (rest == "composer") store.attachments.mapNotNull { it.viewed } else store.transcript.rows.mapNotNull { it.mediaShown }
                 store.view(shown, 0)
+            }
+            "gallery" -> {
+                val media = store.gallery?.media ?: return
+                val shown = media.getOrNull(rest.substringAfterLast(' ').toIntOrNull() ?: return) ?: return
+                when (rest.substringBefore(' ')) {
+                    "show" -> store.showInChat(shown.shownIn)
+                    "add" -> store.addToMessage(shown.media, shown.name)
+                    else -> store.view(media.map { it.viewed }, media.indexOf(shown))
+                }
             }
             "markup" -> DemoHooks.markup?.invoke(rest)
             "branches" -> {

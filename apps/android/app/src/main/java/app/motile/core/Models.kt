@@ -1420,12 +1420,17 @@ data class ViewedMedia(
     val drawnSize: Pair<Float, Float>? = null,
     /** Its size in pixels, for the viewer to show its row's picture at at once. */
     val pixels: Pair<Float, Float>? = null,
+    /** The row of the open thread it is shown in, for the viewer to offer Show in Chat. */
+    val shownIn: ShownIn? = null,
 ) {
     sealed interface Source {
         data class LocalFile(val file: File) : Source
         data class Media(val id: String) : Source
     }
 }
+
+/** Where in the open thread an image or a video is shown: the row, and that row's item. */
+data class ShownIn(val item: String, val row: String)
 
 /** What the viewer has open: the images and videos of one message or of the composer, and which of them is shown. */
 data class Viewing(val items: List<ViewedMedia>, val index: Int) {

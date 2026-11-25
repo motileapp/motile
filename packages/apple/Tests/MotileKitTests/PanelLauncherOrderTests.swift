@@ -10,7 +10,7 @@ final class PanelLauncherOrderTests: XCTestCase {
 
     func testDropsWhatIsUnknownAndAddsWhatIsNewInItsPlace() {
         let loaded = PanelLauncherOrder.loaded(["diff", "gone", "agents", "diff", "ricrac", "files"])
-        XCTAssertEqual(loaded, [.diff, .pullRequest, .pullRequests, .linear, .agents, .ricrac, .files])
+        XCTAssertEqual(loaded, [.diff, .pullRequest, .pullRequests, .linear, .agents, .ricrac, .media, .files])
     }
 
     func testMovesARowAmongTheShownOnes() {

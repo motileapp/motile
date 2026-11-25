@@ -99,6 +99,9 @@ struct MotileApp: App {
                         .shortcut("rightPanel.ricrac", in: keys)
                         .disabled(menu.panelUnavailable || menu.ricracUnavailable)
                 }
+                Button("Show Media") { store.rightPanel.open(.media) }
+                    .shortcut("rightPanel.media", in: keys)
+                    .disabled(menu.panelUnavailable)
                 Button("New Tab") { store.rightPanel.openBlank() }
                     .shortcut("rightPanel.new", in: keys)
                     .disabled(menu.panelUnavailable)

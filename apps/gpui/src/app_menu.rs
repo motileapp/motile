@@ -145,7 +145,7 @@ fn on_window<A: Action + Clone>(cx: &mut App, run: impl Fn(&A, &mut Window, &mut
 }
 
 /// The commands the menus run, whose keys they show.
-const COMMANDS: [&str; 27] = [
+const COMMANDS: [&str; 28] = [
     "settings.open",
     "usage.open",
     "chat.new",
@@ -164,6 +164,7 @@ const COMMANDS: [&str; 27] = [
     "rightPanel.pullRequests",
     "rightPanel.linear",
     "rightPanel.ricrac",
+    "rightPanel.media",
     "rightPanel.new",
     "rightPanel.nextTab",
     "rightPanel.previousTab",
@@ -375,6 +376,7 @@ fn menus(state: &State) -> Vec<Menu> {
             .chain(state.shows_linear.map(|shows| item("Show Linear", "rightPanel.linear").disabled(!shows)))
             .chain(state.shows_ricrac.map(|shows| item("Show Ricrac", "rightPanel.ricrac").disabled(!shows)))
             .chain([
+                item("Show Media", "rightPanel.media").disabled(!state.panel_available),
                 item("New Tab", "rightPanel.new").disabled(!state.panel_available),
                 item("Show Next Tab", "rightPanel.nextTab").disabled(!state.switchable_tabs),
                 item("Show Previous Tab", "rightPanel.previousTab").disabled(!state.switchable_tabs),

@@ -137,9 +137,9 @@ extension AppStore {
         case "rightPanel.diff":
             guard panelUnavailable == nil, panelTarget?.repository == true else { return false }
             rightPanel.showDiff()
-        case "rightPanel.files", "rightPanel.agents":
+        case "rightPanel.files", "rightPanel.agents", "rightPanel.media":
             guard panelUnavailable == nil else { return false }
-            rightPanel.open(command == "rightPanel.files" ? .files : .agents)
+            rightPanel.open(command == "rightPanel.files" ? .files : command == "rightPanel.agents" ? .agents : .media)
         case "rightPanel.pullRequest", "rightPanel.pullRequests":
             let all = command == "rightPanel.pullRequests"
             guard panelUnavailable == nil, pullRequestsUnavailable == nil, !all || pullRequestsExtended else { return false }

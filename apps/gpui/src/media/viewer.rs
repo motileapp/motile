@@ -13,14 +13,16 @@ use super::markup::{self, MarkupSession, MarkupTool, ink_color, ink_contrast};
 use super::pictures::{Picture, Pictures, Shown};
 use super::zoom::ZoomableImage;
 use super::{MediaFiles, SAVE_TITLE};
-use crate::models::{MediaSource, SavedMarkup, ViewedMedia};
+use crate::models::{MediaSource, SavedMarkup, ShownIn, ViewedMedia};
 use crate::store::Store;
 use crate::store::shortcuts::ShortcutContext;
 use crate::theme::{ControlSize, Opacity, ShadowSize, Surface, TextSize, colors};
 use crate::ui::menu::Menu;
 use crate::ui::modal::{Answer, Confirmation, confirmation, presented};
 use crate::ui::parts::CopyButton;
-use crate::ui::{ActionButton, InputField, InputVariant, Spinner, Swatch, Variant, beside, tabular_numbers};
+use crate::ui::{
+    ActionButton, ActionMenu, InputField, InputVariant, Spinner, Swatch, Variant, beside, tabular_numbers,
+};
 
 /// The room the picture leaves around it when it fits the window.
 pub const MARGIN: (f32, f32) = (64., 52.);
@@ -570,6 +572,33 @@ impl MediaViewer {
         )
     }
 
+    /// What else can be done with an image or a video of the open thread.
+    fn more_menu(&self, item: &ViewedMedia, shown_in: ShownIn, margin: Edges<f32>) -> Div {
+        let (show_store, add_store) = (self.store.clone(), self.store.clone());
+        let added = match &item.source {
+            MediaSource::Media(id) => Some((id.clone(), item.name.clone())),
+            MediaSource::File(_) => None,
+        };
+        let menu = ActionMenu::icon("viewer-more", "ellipsis", "More", move |_, _| {
+            let (show_store, shown_in) = (show_store.clone(), shown_in.clone());
+            let menu = Menu::new().symbol_item("Show in Chat", "message-square-text", move |_, cx| {
+                show_store.update(cx, |store, cx| {
+                    store.show_in_chat(&shown_in, cx);
+                    cx.notify();
+                })
+            });
+            let Some((media, name)) = added.clone() else { return menu };
+            let add_store = add_store.clone();
+            menu.symbol_item("Add to Message", "paperclip", move |_, cx| {
+                add_store.update(cx, |store, cx| store.add_to_message(&media, &name, cx))
+            })
+        })
+        .button(|button| button.overlay().large().round(true).symbol_size(ControlSize::Large.small_symbol()))
+        .margin(margin)
+        .end();
+        div().on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()).child(menu)
+    }
+
     fn status(&self, item: &ViewedMedia, progress: Option<f64>, failed: bool, cx: &App) -> Div {
         let c = colors(cx);
         let words: AnyElement = if failed {
@@ -645,7 +674,7 @@ impl Render for MediaViewer {
             });
 
         let trailing = CORNER_INSET + crate::window_frame::trailing_room(window, cx);
-        let buttons = 4. * ControlSize::Large.height() + 3. * CORNER_GAP;
+        let buttons = 5. * ControlSize::Large.height() + 4. * CORNER_GAP;
         let name_inset = match marking {
             true => MARKUP_NAME_INSET,
             false => (trailing + buttons).max(crate::window_frame::leading_room(window, cx)) + CORNER_INSET,
@@ -694,12 +723,17 @@ impl Render for MediaViewer {
                         cx.listener(|this, _, _, cx| this.save(cx)),
                     ))
             })
+            .when_some(item.shown_in.clone().filter(|_| !marking), |corner, shown_in| {
+                let before = if self.file.is_some() { CORNER_GAP / 2. } else { 0. };
+                corner.child(self.more_menu(&item, shown_in, beside(before, CORNER_GAP / 2.)))
+            })
             .when(!marking, |corner| {
+                let after_another = self.file.is_some() || item.shown_in.is_some();
                 corner.child(Self::round_button(
                     "close-viewer",
                     "x",
                     self.help("Close", "viewer.close", cx),
-                    beside(if self.file.is_some() { CORNER_GAP / 2. } else { 0. }, 0.),
+                    beside(if after_another { CORNER_GAP / 2. } else { 0. }, 0.),
                     cx.listener(|this, _, _, cx| this.close(cx)),
                 ))
             });
@@ -763,7 +797,7 @@ impl Render for MediaViewer {
                     })
                     // One row in the top bar places the name and the buttons, so they share a
                     // middle. The name is centered on the window, as far from both ends as all
-                    // four buttons need, so it keeps clear of them however many show.
+                    // five buttons need, so it keeps clear of them however many show.
                     .when(!full_screen, |viewer| {
                         viewer.child(
                             div()

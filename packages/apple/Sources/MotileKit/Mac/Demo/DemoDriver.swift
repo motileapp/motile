@@ -304,6 +304,14 @@ private final class Demo {
         await expect("the image is fetched from the server and kept on this Mac") { (store.mediaStorage?.used ?? 0) > 0 }
         await shoot("07-image")
 
+        // The thread's images are gathered in its Media tab.
+        let panelOpen = store.rightPanel.isOpen
+        store.rightPanel.open(.media)
+        await expect("the Media tab lists the image the agent showed") { store.gallery?.media.count == 1 }
+        await shoot("07-media")
+        store.rightPanel.close(.media)
+        store.rightPanel.isOpen = panelOpen
+
         // What the agent left in the folder is committed from the top bar in one click, with a
         // message the server has written for it.
         await expect("the git button offers to commit what the agent changed") {

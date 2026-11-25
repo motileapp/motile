@@ -19,6 +19,7 @@ use crate::media::zoom::ZoomableImage;
 use crate::models::{AgentViewExt, duration, elapsed};
 use crate::panel::line_comment::{self, LineCommentSheet};
 use crate::panel::linear::LinearView;
+use crate::panel::media::{self, MediaView};
 use crate::panel::pull_request::PullRequestView;
 use crate::panel::pull_request_list::PullRequestListView;
 use crate::panel::ricrac::RicracView;
@@ -64,6 +65,10 @@ pub struct RightPanelView {
     pull_request_list: Option<Entity<PullRequestListView>>,
     linear: Option<(TabOf, Entity<LinearView>)>,
     ricrac: Option<(TabOf, Entity<RicracView>)>,
+    /// The media tab's grid, by the thread it shows.
+    media: Option<(String, Entity<MediaView>)>,
+    /// The thread the core sends the images and videos of, while its media tab shows.
+    gallery_watched: Option<String>,
     line_comment: Option<Entity<LineCommentSheet>>,
     /// Where the tabs start from the panel's left edge in place of the strip's own margin: past
     /// the window's buttons when the panel reaches them.
@@ -159,6 +164,7 @@ impl RightPanelView {
     pub fn new(store: Entity<Store>, _window: &mut Window, cx: &mut Context<Self>) -> Self {
         cx.observe(&store, |this, _, cx| {
             this.pause_hidden_videos(cx);
+            this.follow_gallery(cx);
             cx.notify()
         })
         .detach();
@@ -182,6 +188,8 @@ impl RightPanelView {
             pull_request_list: None,
             linear: None,
             ricrac: None,
+            media: None,
+            gallery_watched: None,
             line_comment: None,
             tab_inset: None,
             trailing_room: 0.,
@@ -414,7 +422,7 @@ impl RightPanelView {
     }
 
     /// What a tab says in the middle of the panel when it has nothing to show.
-    fn message(text: impl Into<SharedString>, failed: bool, cx: &App) -> AnyElement {
+    pub(super) fn message(text: impl Into<SharedString>, failed: bool, cx: &App) -> AnyElement {
         super::pull_request::panel_message(text, failed, cx)
     }
 
@@ -451,7 +459,7 @@ impl RightPanelView {
             .into_any_element()
     }
 
-    fn loading(cx: &App) -> AnyElement {
+    pub(super) fn loading(cx: &App) -> AnyElement {
         let c = colors(cx);
         div()
             .size_full()
@@ -464,7 +472,7 @@ impl RightPanelView {
     }
 
     /// The strip under the tabs with what the open tab is about and its buttons.
-    fn bar(content: impl IntoElement, cx: &App) -> Div {
+    pub(super) fn bar(content: impl IntoElement, cx: &App) -> Div {
         div()
             .flex_shrink_0()
             .flex()
@@ -507,7 +515,7 @@ impl RightPanelView {
         })
     }
 
-    fn surface(bar: Div, body: AnyElement) -> AnyElement {
+    pub(super) fn surface(bar: Div, body: AnyElement) -> AnyElement {
         div().size_full().flex().flex_col().child(bar).child(div().flex_1().min_h_0().child(body)).into_any_element()
     }
 
@@ -630,6 +638,7 @@ impl RightPanelView {
                     PanelTab::Ricrac => {
                         row(index, tab, "ricrac", ricrac_title, 0, "rightPanel.ricrac", ricrac_unavailable.clone())
                     }
+                    PanelTab::Media => row(index, tab, "images", "Media", 0, "rightPanel.media", None),
                     _ => return None,
                 };
                 Some(self.launcher_order.place(index, row, window))
@@ -1457,6 +1466,43 @@ impl RightPanelView {
         div().size_full().child(view).into_any_element()
     }
 
+    /// The thread's images and videos, or what a draft says it will have.
+    fn media_tab(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let Some(thread_id) = self.store.read(cx).panel_target().and_then(|target| target.thread_id) else {
+            return Self::message(media::EMPTY, false, cx);
+        };
+        let view = match &self.media {
+            Some((shown, view)) if *shown == thread_id => view.clone(),
+            _ => {
+                let store = self.store.clone();
+                let view = cx.new(|cx| MediaView::new(store, thread_id.clone(), cx));
+                self.media = Some((thread_id, view.clone()));
+                view
+            }
+        };
+        div().size_full().child(view).into_any_element()
+    }
+
+    /// Has the core send the images and videos of the thread whose media tab shows, and stop
+    /// once it doesn't.
+    fn follow_gallery(&mut self, cx: &mut Context<Self>) {
+        let store = self.store.read(cx);
+        let shows = store.right_panel.is_open && store.panel_tabs().active == Some(PanelTab::Media);
+        let wanted = store.panel_target().and_then(|target| target.thread_id).filter(|_| shows);
+        if wanted == self.gallery_watched {
+            return;
+        }
+        let left = std::mem::replace(&mut self.gallery_watched, wanted.clone());
+        self.store.update(cx, |store, _| {
+            if let Some(left) = left {
+                store.watch_gallery(&left, false);
+            }
+            if let Some(wanted) = wanted {
+                store.watch_gallery(&wanted, true);
+            }
+        });
+    }
+
     fn pull_request_list_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let store = self.store.clone();
         let view = self
@@ -1484,6 +1530,9 @@ impl RightPanelView {
         let active = active.map(|(_, tab)| tab);
         if active != Some(PanelTab::PullRequests) {
             self.pull_request_list = None;
+        }
+        if active != Some(PanelTab::Media) {
+            self.media = None;
         }
         if self.change_closed.is_some() && self.change_closed != active {
             self.change_closed = None;
@@ -2073,9 +2122,12 @@ impl Render for RightPanelView {
         let unavailable = store.panel_unavailable();
         let target = store.panel_target();
         let active = store.panel_tabs().active;
-        // The agents are the thread's own, kept with it, so they show while the server is away too.
+        // The agents and the media are the thread's own, kept with it, so they show while the
+        // server is away too.
         let content: AnyElement = if active == Some(PanelTab::Agents) && target.is_some() {
             self.agents_surface(cx)
+        } else if active == Some(PanelTab::Media) && target.is_some() {
+            self.media_tab(cx)
         } else if let Some(reason) = unavailable {
             Self::message(reason, false, cx)
         } else if let Some(target) = target {
@@ -2085,6 +2137,7 @@ impl Render for RightPanelView {
                 Some(PanelTab::File(path)) => self.file_surface(&target, &path, window, cx),
                 Some(PanelTab::Change { turn, path }) => self.change_surface(&target, &turn, &path, window, cx),
                 Some(PanelTab::Agents) => self.agents_surface(cx),
+                Some(PanelTab::Media) => self.media_tab(cx),
                 Some(tab @ PanelTab::PullRequest) => self.pull_request_tab(tab, None, window, cx),
                 Some(tab @ PanelTab::PullRequestNumber(number)) => self.pull_request_tab(tab, Some(number), window, cx),
                 Some(PanelTab::PullRequests) => self.pull_request_list_tab(window, cx),

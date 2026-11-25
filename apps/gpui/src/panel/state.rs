@@ -35,6 +35,8 @@ pub enum PanelTab {
     },
     /// The agents the thread's agent has started, and what one of them did.
     Agents,
+    /// The images and videos of the thread.
+    Media,
     /// The pull request of the branch the thread works on.
     PullRequest,
     /// Another pull request of the repository, by its number.
@@ -68,6 +70,7 @@ impl PanelTab {
             PanelTab::Diff => "diff".into(),
             PanelTab::Files => "files".into(),
             PanelTab::Agents => "agents".into(),
+            PanelTab::Media => "media".into(),
             PanelTab::PullRequest => "pull_request".into(),
             PanelTab::PullRequestNumber(number) => format!("pull_request:{number}"),
             PanelTab::PullRequests => "pull_requests".into(),
@@ -100,6 +103,7 @@ impl PanelTab {
             PanelTab::Diff => "Diff".into(),
             PanelTab::Files => "Files".into(),
             PanelTab::Agents => "Agents".into(),
+            PanelTab::Media => "Media".into(),
             PanelTab::PullRequest => "Pull Request".into(),
             PanelTab::PullRequestNumber(number) => format!("PR #{number}"),
             PanelTab::PullRequests => "Pull Requests".into(),
@@ -117,6 +121,7 @@ impl PanelTab {
             PanelTab::Diff | PanelTab::Change { .. } => "diff",
             PanelTab::Files => "folder",
             PanelTab::Agents => "bot",
+            PanelTab::Media => "images",
             PanelTab::PullRequest | PanelTab::PullRequestNumber(_) | PanelTab::PullRequests => "git-pull-request",
             PanelTab::Linear | PanelTab::LinearIssue { .. } => "linear",
             PanelTab::Ricrac | PanelTab::RicracIssue { .. } => "ricrac",
@@ -154,7 +159,7 @@ impl PanelTabs {
 }
 
 /// What a blank tab offers to open, in the order it offers them until the user moves them.
-pub const LAUNCHER: [PanelTab; 7] = [
+pub const LAUNCHER: [PanelTab; 8] = [
     PanelTab::Agents,
     PanelTab::Files,
     PanelTab::Diff,
@@ -162,6 +167,7 @@ pub const LAUNCHER: [PanelTab; 7] = [
     PanelTab::PullRequests,
     PanelTab::Linear,
     PanelTab::Ricrac,
+    PanelTab::Media,
 ];
 
 /// The launcher's rows in the order saved by their ids. What is no longer a row is dropped, and
@@ -1216,6 +1222,7 @@ impl Store {
             attachment: None,
             opens_at: None,
             pixels: None,
+            shown_in: None,
         };
         self.view(vec![viewed], 0);
     }
@@ -1335,7 +1342,7 @@ mod tests {
         assert_eq!(launcher_order(&[]), LAUNCHER.to_vec());
         assert_eq!(
             ids(&launcher_order(&[])),
-            saved(&["agents", "files", "diff", "pull_request", "pull_requests", "linear", "ricrac"])
+            saved(&["agents", "files", "diff", "pull_request", "pull_requests", "linear", "ricrac", "media"])
         );
     }
 
@@ -1344,7 +1351,7 @@ mod tests {
         let order = launcher_order(&saved(&["ricrac", "gone", "diff", "files", "diff", "linear", "pull_request"]));
         assert_eq!(
             ids(&order),
-            saved(&["agents", "ricrac", "diff", "files", "linear", "pull_request", "pull_requests"])
+            saved(&["agents", "ricrac", "media", "diff", "files", "linear", "pull_request", "pull_requests"])
         );
     }
 
@@ -1357,21 +1364,21 @@ mod tests {
         place_launcher_row(&mut order, &shown, &PanelTab::Ricrac, 0);
         assert_eq!(
             ids(&order),
-            saved(&["ricrac", "agents", "files", "diff", "pull_request", "pull_requests", "linear"])
+            saved(&["ricrac", "agents", "files", "diff", "pull_request", "pull_requests", "linear", "media"])
         );
 
         let mut order = LAUNCHER.to_vec();
         place_launcher_row(&mut order, &shown, &PanelTab::Agents, 4);
         assert_eq!(
             ids(&order),
-            saved(&["files", "diff", "pull_request", "pull_requests", "linear", "ricrac", "agents"])
+            saved(&["files", "diff", "pull_request", "pull_requests", "linear", "ricrac", "agents", "media"])
         );
 
         let mut order = LAUNCHER.to_vec();
         place_launcher_row(&mut order, &shown, &PanelTab::Agents, 3);
         assert_eq!(
             ids(&order),
-            saved(&["files", "diff", "pull_request", "pull_requests", "linear", "agents", "ricrac"])
+            saved(&["files", "diff", "pull_request", "pull_requests", "linear", "agents", "ricrac", "media"])
         );
 
         let mut order = LAUNCHER.to_vec();

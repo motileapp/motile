@@ -71,6 +71,8 @@ sealed interface PanelTab {
     data class Change(val turn: String, override val path: String) : PanelTab
     /** The agents the thread's agent has started, and what one of them did. */
     data object Agents : PanelTab
+    /** The images and videos of the thread. */
+    data object Media : PanelTab
     /** The pull request of the branch the thread works on. */
     data object PullRequest : PanelTab
     /** Another pull request of the repository, by its number. */
@@ -94,6 +96,7 @@ sealed interface PanelTab {
             Diff -> "diff"
             Files -> "files"
             Agents -> "agents"
+            Media -> "media"
             PullRequest -> "pull_request"
             is PullRequestNumber -> "pull_request:$number"
             PullRequests -> "pull_requests"
@@ -115,6 +118,7 @@ sealed interface PanelTab {
             Diff -> "Diff"
             Files -> "Files"
             Agents -> "Agents"
+            Media -> "Media"
             PullRequest -> "Pull Request"
             is PullRequestNumber -> "PR #$number"
             PullRequests -> "Pull Requests"
@@ -132,6 +136,7 @@ sealed interface PanelTab {
             Diff, is Change -> Symbol.Diff
             Files -> Symbol.Folder
             Agents -> Symbol.Bot
+            Media -> Symbol.Images
             PullRequest, is PullRequestNumber, PullRequests -> Symbol.GitPullRequest
             Linear, is LinearIssue -> Symbol.Linear
             Ricrac, is RicracIssue -> Symbol.Ricrac
@@ -144,6 +149,7 @@ sealed interface PanelTab {
             Diff -> mapOf("tab" to "diff")
             Files -> mapOf("tab" to "files")
             Agents -> mapOf("tab" to "agents")
+            Media -> mapOf("tab" to "media")
             PullRequest -> mapOf("tab" to "pull_request")
             PullRequests -> mapOf("tab" to "pull_requests")
             Linear -> mapOf("tab" to "linear")
@@ -161,6 +167,7 @@ sealed interface PanelTab {
             "diff" -> Diff
             "files" -> Files
             "agents" -> Agents
+            "media" -> Media
             "pull_request" -> PullRequest
             "pull_requests" -> PullRequests
             "linear" -> Linear
@@ -218,6 +225,7 @@ data class PanelTabs(
 object LauncherOrder {
     val default: List<PanelTab> = listOf(
         PanelTab.Agents, PanelTab.Files, PanelTab.Diff, PanelTab.PullRequest, PanelTab.PullRequests, PanelTab.Linear, PanelTab.Ricrac,
+        PanelTab.Media,
     )
 
     /** The saved order without the ids it doesn't know, and with the rows it lacks after the ones they follow by default. */
