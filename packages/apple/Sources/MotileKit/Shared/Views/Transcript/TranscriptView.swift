@@ -117,9 +117,9 @@ final class TranscriptView: FlippedView, RowOwner {
     var findCover: CGFloat = 0 {
         didSet {
             guard findCover != oldValue else { return }
-            guard scroller.offsetY > 0.5 else { return updateVisible() }
+            guard scroller.offsetY > 0.5 else { return updateVisible(glides: false) }
             let moved = findCover - oldValue
-            updateVisible(anchor: currentAnchor().map { Anchor(id: $0.id, delta: $0.delta + moved) })
+            updateVisible(anchor: currentAnchor().map { Anchor(id: $0.id, delta: $0.delta + moved) }, glides: false)
         }
     }
 
