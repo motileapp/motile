@@ -430,7 +430,7 @@ impl Transcript {
 
     fn errors(&self) -> Vec<&str> {
         let errors = self.items.iter().filter_map(|item| match &item.kind {
-            ItemKind::Error { message } => Some(message.as_str()),
+            ItemKind::Error { message, .. } => Some(message.as_str()),
             _ => None,
         });
         errors.collect()
@@ -1361,6 +1361,28 @@ async fn a_thread_the_usage_limit_stopped_continues_once_the_limit_resets() {
     assert_eq!(transcript.senders().last(), Some(&&Actor::Server { reason: ServerReason::Limit }));
     let errors = transcript.errors();
     assert!(matches!(&errors[..], [limit] if limit.starts_with("You've hit your limit")), "{errors:?}");
+}
+
+#[tokio::test]
+async fn an_error_from_a_sign_in_that_stopped_working_names_the_account_to_sign_in_again() {
+    for agent in [Agent::Claude, Agent::Codex] {
+        let harness = Harness::start(fixture(agent), "0").await;
+        let connection = harness.connect().await;
+        let new_thread = harness.new_thread(&connection, agent).await;
+        let mut list = connection.follow(&Request::Subscribe).await.unwrap();
+        let Message::Welcome { server, .. } = next(&mut list).await else { panic!("the list starts with a welcome") };
+        let account = server.agent_accounts.iter().find(|account| account.agent == agent && !account.gateway).unwrap();
+        let thread_id = send(&connection, None, new_thread, "Lose the sign-in").await;
+        thread_where(&mut list, |thread| thread.id == thread_id && !thread.running).await;
+
+        let transcript = finished_transcript(&connection, &thread_id).await;
+        let errors = transcript.items.iter().filter_map(|item| match &item.kind {
+            ItemKind::Error { sign_in, .. } => Some(sign_in.as_deref()),
+            _ => None,
+        });
+        assert_eq!(errors.collect::<Vec<_>>(), [Some(account.id.as_str())], "{agent:?}");
+        assert_eq!(transcript.items.last().map(|item| matches!(item.kind, ItemKind::TurnEnd { .. })), Some(true));
+    }
 }
 
 #[tokio::test]
@@ -2296,8 +2318,11 @@ async fn an_account_signs_in_with_the_code_its_page_showed_and_is_saved() {
         let request = Request::FinishSignIn { id: id.into(), code: code.into(), account: account.clone() };
         connection.request(&request).await
     };
-    let Message::SignInLink { id, url } = start().await.unwrap() else { panic!("a sign-in starts with its link") };
+    let Message::SignInLink { id, url, code } = start().await.unwrap() else {
+        panic!("a sign-in starts with its link")
+    };
     assert!(url.starts_with("https://claude.com/cai/oauth/authorize"), "{url}");
+    assert_eq!(code, None, "Claude Code's page shows the code to bring back");
     let refused = finish(&id, "wrong#code", &work).await.unwrap();
     assert!(matches!(refused, Message::Error { message } if message.contains("didn't work")));
     assert!(matches!(finish(&id, "abc#def", &work).await.unwrap(), Message::Error { .. }), "a refused sign-in is over");
@@ -2326,8 +2351,13 @@ async fn an_account_signs_in_with_the_code_its_page_showed_and_is_saved() {
     assert!(matches!(finish(&id, "abc#def", &work).await.unwrap(), Message::Error { .. }));
 
     let codex = AgentAccount { agent: Agent::Codex, folder: "~/.codex-work".into(), ..work.clone() };
-    let refused = connection.request(&Request::StartSignIn { account: codex }).await.unwrap();
-    assert!(matches!(refused, Message::Error { .. }));
+    let started = connection.request(&Request::StartSignIn { account: codex.clone() }).await.unwrap();
+    let Message::SignInLink { id, url, code } = started else { panic!("a Codex sign-in starts with its link") };
+    assert_eq!((url.as_str(), code.as_deref()), ("https://auth.openai.com/codex/device", Some("FAKE-C0DE")));
+    let Message::SignedIn { email, .. } = finish(&id, "", &codex).await.unwrap() else {
+        panic!("Codex signs in once its code was entered on the page")
+    };
+    assert_eq!(email.as_deref(), Some("work@motile.app"));
 }
 
 #[tokio::test]

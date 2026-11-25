@@ -209,9 +209,6 @@ fn keep_sensitive_values(account: &mut AgentAccount, existing: Option<&AgentAcco
 
 /// The account as a sign-in runs it: the form's folder and variables, before they are saved.
 pub fn signing_in(mut account: AgentAccount, accounts: &[AgentAccount]) -> anyhow::Result<AgentAccount> {
-    if account.agent != Agent::Claude {
-        bail!("Only Claude Code accounts sign in from here.");
-    }
     account.folder = account.folder.trim().trim_end_matches('/').to_string();
     account.variables.retain(|variable| !variable.name.trim().is_empty());
     for variable in &mut account.variables {
@@ -223,7 +220,8 @@ pub fn signing_in(mut account: AgentAccount, accounts: &[AgentAccount]) -> anyho
     }
     keep_sensitive_values(&mut account, existing)?;
     if !account.folder.is_empty() && !account.folder.starts_with('/') && !account.folder.starts_with("~/") {
-        bail!("Give the account a full folder first, like ~/.claude-personal.");
+        let usual = if account.agent == Agent::Claude { "claude" } else { "codex" };
+        bail!("Give the account a full folder first, like ~/.{usual}-personal.");
     }
     Ok(account)
 }

@@ -250,6 +250,8 @@ pub struct Parser {
     api_error: Option<String>,
     /// The failed API call was refused for the usage limit.
     rate_limited: bool,
+    /// The failed API call was refused because the account is no longer signed in.
+    signed_out: bool,
     /// The usage limits that refuse the agent, by window, with when each resets.
     refused: HashMap<String, Option<f64>>,
     /// The model the session runs, as it said when it started.
@@ -270,6 +272,7 @@ impl Parser {
             Some("assistant") if object["error"].is_string() => {
                 self.api_error = Some(content_text(&object["message"]["content"]));
                 self.rate_limited = object["error"] == "rate_limit";
+                self.signed_out = object["error"] == "authentication_failed";
                 vec![]
             }
             Some("rate_limit_event") => {
@@ -307,10 +310,11 @@ impl Parser {
                 self.compacted = false;
                 let usage = self.parse_usage(&object["modelUsage"]);
                 let limited = self.limit(&object);
+                let signed_out = std::mem::take(&mut self.signed_out).then_some(AgentEvent::SignedOut);
                 let result = parse_result(&object, self.api_error.take());
                 let taken = consumed(&object, &result);
                 let fast = object["fast_mode_state"].as_str().map(|state| AgentEvent::Fast(state == "on"));
-                usage.into_iter().chain(limited).chain(taken).chain(fast).chain([result]).collect()
+                usage.into_iter().chain(limited).chain(signed_out).chain(taken).chain(fast).chain([result]).collect()
             }
             _ => vec![],
         }
@@ -1027,6 +1031,29 @@ mod tests {
         assert_eq!(*resets_at, Some(1_800_003_600.0), "the agent works again once both limits reset");
         assert!(summary.is_error);
         assert_eq!(result_text.as_deref(), Some("You've hit your limit"));
+    }
+
+    #[test]
+    fn a_turn_an_expired_sign_in_ends_says_the_account_is_signed_out() {
+        let mut parser = Parser::default();
+        let text = "Failed to authenticate: OAuth session expired and could not be refreshed";
+        let message = format!(
+            r#"{{"type":"assistant","error":"authentication_failed","message":{{"id":"m1","model":"<synthetic>",
+            "content":[{{"type":"text","text":"{text}"}}]}}}}"#
+        );
+        let failed = format!(
+            r#"{{"type":"result","subtype":"success","is_error":true,"result":"{text}","api_error_status":401}}"#
+        );
+
+        assert_eq!(parser.parse(&message), vec![]);
+        let events = parser.parse(&failed);
+        let [AgentEvent::SignedOut, AgentEvent::Completed { summary, result_text, .. }] = &events[..] else {
+            panic!("expected the sign-out and then the turn's end, got {events:?}")
+        };
+        assert!(summary.is_error);
+        assert_eq!(result_text.as_deref(), Some(text));
+        let next = parser.parse(r#"{"type":"result","subtype":"success","is_error":true,"result":"Overloaded"}"#);
+        assert!(matches!(next[..], [AgentEvent::Completed { .. }]), "the next turn's failure is its own");
     }
 
     #[test]

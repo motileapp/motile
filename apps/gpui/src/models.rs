@@ -320,6 +320,11 @@ impl Server {
         self.protocol_version >= 31
     }
 
+    /// Whether it signs the agent's accounts in for the client: Claude Code's, and Codex's later.
+    pub fn signs_in(&self, agent: Agent) -> bool {
+        if agent == Agent::Claude { self.signs_in_accounts() } else { self.protocol_version >= 42 }
+    }
+
     /// Whether the server keeps where the user moves its threads in the sidebar.
     pub fn moves_threads(&self) -> bool {
         self.protocol_version >= 21

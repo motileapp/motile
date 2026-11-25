@@ -33,6 +33,8 @@ protocol RowOwner: AnyObject {
     func toggleFolder(id: String, rowID: String)
     /// Shows what the turn that ended with the item changed, with the file at `path` in view.
     func openDiff(turn itemID: String, path: String?)
+    /// Signs the agent's account `accountID` in again.
+    func signIn(accountID: String)
     /// Shows what the agent did that the item's tool call started.
     func openAgent(itemID: String)
     /// Opens the thread an agent the thread's agent started works in.
@@ -96,8 +98,8 @@ class RowView: FlippedView {
             return UserRowView.height(fit, shown: UserRowView.Shown(textHeight: textHeight, lineTops: tops, open: false))
         case .prose(let text, _):
             return TextMeasure.height(of: text, width: width) + ProseRowView.gap + row.above
-        case .error(let text):
-            return TextMeasure.height(of: text, width: width - ErrorRowView.textInset) + ErrorRowView.padding
+        case .error(let text, let signIn):
+            return TextMeasure.height(of: text, width: width - ErrorRowView.textInset) + ErrorRowView.padding(signIn: signIn)
         case .ui(let content):
             return ProgramRowView.height(content, width: width)
         case .code, .tool, .thinking, .group, .fold, .agent, .agents, .media, .file, .changes, .turnEnd, .handoff, .compaction, .queued, .unknown:
@@ -128,8 +130,8 @@ class RowView: FlippedView {
             return MediaRowView.height(content, width: width)
         case .file:
             return FileRowView.height
-        case .error(let text):
-            return estimatedTextHeight(text.length, width: width - ErrorRowView.textInset) + ErrorRowView.padding
+        case .error(let text, let signIn):
+            return estimatedTextHeight(text.length, width: width - ErrorRowView.textInset) + ErrorRowView.padding(signIn: signIn)
         case .changes(let content):
             return ChangesRowView.height(entries: content.entries.count)
         case .turnEnd:
@@ -1097,24 +1099,40 @@ final class ErrorBox {
         set { surface.isHidden = newValue }
     }
 
-    /// Lays the box out from `y`, as wide as `width`: its height.
-    func layout(y: CGFloat, width: CGFloat) -> CGFloat {
+    /// Lays the box out from `y`, as wide as `width`, with `under` more room under its text: its
+    /// height.
+    func layout(y: CGFloat, width: CGFloat, under: CGFloat = 0) -> CGFloat {
         let inner = width - Self.textInset
         let height = text.height(forWidth: inner)
-        surface.frame = CGRect(x: 0, y: y, width: width, height: height + Self.padding)
+        surface.frame = CGRect(x: 0, y: y, width: width, height: height + Self.padding + under)
         icon.frame = CGRect(x: 12, y: 10, width: PlatformImage.symbolSide(.md), height: 18)
-        text.place(CGRect(x: 36, y: 10, width: inner, height: height))
-        return height + Self.padding
+        text.place(CGRect(x: Self.textStart, y: 10, width: inner, height: height))
+        return height + Self.padding + under
+    }
+
+    /// Where the text starts in the box.
+    static let textStart: CGFloat = 36
+
+    /// Puts `view` in the box, over its tint.
+    func add(_ view: PlatformView) {
+        surface.addSubview(view)
     }
 }
 
 final class ErrorRowView: RowView {
     static let textInset = ErrorBox.textInset
-    /// The box's height and the room above and under it.
-    static let padding: CGFloat = ErrorBox.padding + 14
+    /// The room the sign-in button takes under the text: the gap above it and its height.
+    private static let buttonRoom = 10 + RowButton.metrics.height
+
+    /// The box's height, besides its text, and the room above and under it.
+    static func padding(signIn: String?) -> CGFloat {
+        ErrorBox.padding + 14 + (signIn == nil ? 0 : buttonRoom)
+    }
 
     private lazy var box = ErrorBox(in: self)
     private var found = FoundText()
+    private var signIn: String?
+    private var signInButton: RowButton!
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -1122,14 +1140,28 @@ final class ErrorRowView: RowView {
             guard let self else { return }
             self.owner?.rowWillSelect(self)
         }
+        signInButton = RowButton(
+            title: "Sign In Again",
+            tooltip: "Sign the agent's account in again",
+            radius: RowButton.metrics.radius,
+            solid: true,
+            insets: PlatformEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+        ) { [weak self] in
+            guard let self, let signIn = self.signIn else { return }
+            self.owner?.signIn(accountID: signIn)
+        }
+        box.add(signInButton)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
     override func configure(_ row: RowModel) {
         super.configure(row)
-        guard case .error(let message) = row.kind else { return }
+        guard case .error(let message, let signIn) = row.kind else { return }
         found.show(message, in: box.text)
+        self.signIn = signIn
+        signInButton.isHidden = signIn == nil
+        signInButton.dim()
     }
 
     override func mark(_ marks: FoundMarks?) { found.mark(marks, in: box.text) }
@@ -1143,7 +1175,11 @@ final class ErrorRowView: RowView {
     }
 
     override func layout(width: CGFloat) -> CGFloat {
-        box.layout(y: 4, width: width) + 14
+        let under = signIn == nil ? 0 : Self.buttonRoom
+        let height = box.layout(y: 4, width: width, under: under)
+        let button = RowButton.metrics.height
+        signInButton.frame = CGRect(x: ErrorBox.textStart, y: height - ErrorBox.padding / 2 - button, width: signInButton.width, height: button)
+        return height + 14
     }
 
     override func clearSelection() { box.text.clearSelection() }

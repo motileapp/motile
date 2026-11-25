@@ -70,7 +70,8 @@ class RowModel(
         class File(val content: SentFile) : Kind
         class Group(val content: GroupContent) : Kind
         class Fold(val content: FoldContent) : Kind
-        class Error(val message: String) : Kind
+        /** `signIn` is the account whose sign-in stopped working, which the row signs in again. */
+        class Error(val message: String, val signIn: String?) : Kind
         class Changes(val content: ChangesContent) : Kind
         class TurnEnd(val content: TurnEndContent) : Kind
         class Handoff(val content: HandoffContent) : Kind
@@ -141,7 +142,7 @@ class RowModel(
                 "file" -> Kind.File(SentFile(json))
                 "group" -> Kind.Group(GroupContent(json))
                 "fold" -> Kind.Fold(FoldContent(json))
-                "error" -> Kind.Error(json.string("message"))
+                "error" -> Kind.Error(json.string("message"), json.optionalString("sign_in"))
                 "changes" -> Kind.Changes(ChangesContent(json))
                 "turn_end" -> Kind.TurnEnd(TurnEndContent(json))
                 "handoff" -> Kind.Handoff(HandoffContent(json))

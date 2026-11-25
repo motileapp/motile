@@ -242,6 +242,9 @@ data class Server(
     /** Whether it signs its agents' accounts in for the client. */
     val signsInAccounts: Boolean get() = protocolVersion >= 31
 
+    /** Whether it signs the agent's accounts in for the client: Claude Code's, and Codex's later. */
+    fun signsIn(agent: Agent): Boolean = if (agent == Agent.Claude) signsInAccounts else protocolVersion >= 42
+
     /** Whether the server keeps where the user moves its threads in the sidebar. */
     val movesThreads: Boolean get() = protocolVersion >= 21
 

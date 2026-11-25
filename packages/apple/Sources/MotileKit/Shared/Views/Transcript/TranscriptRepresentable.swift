@@ -62,6 +62,10 @@ struct TranscriptRepresentable {
                 guard let threadID = model.threadID else { return done() }
                 store.core.send("trim_earlier", ["thread_id": threadID, "keep_rows": keepRows]) { _ in done() }
             }
+            view.onSignIn = { accountID in
+                guard let threadID = model.threadID else { return }
+                store.signInAgain(accountID, for: threadID)
+            }
             view.onOpenDiff = { itemID, path in
                 guard let path else { return store.rightPanel.showDiff(.turn(itemID)) }
                 store.rightPanel.showChange(turn: itemID, path: path)

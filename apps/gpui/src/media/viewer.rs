@@ -359,6 +359,10 @@ impl MediaViewer {
                     cx.notify();
                 });
                 viewer.close(cx);
+                viewer.store.update(cx, |store, cx| {
+                    store.uncover_thread();
+                    cx.notify();
+                });
             });
         })
         .detach();

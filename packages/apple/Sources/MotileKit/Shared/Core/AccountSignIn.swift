@@ -1,15 +1,17 @@
 import Foundation
 import Observation
 
-/// Signing an account of Claude Code in from its sheet: its server runs the CLI's sign-in, the
-/// user signs in on the page it links to, and pastes the code that page shows, which saves the
-/// account too.
+/// Signing an account in from its sheet: its server runs the CLI's sign-in and the user signs in
+/// on the page it links to. Claude Code's page shows a code to paste here; Codex's takes the code
+/// shown here, and the sign-in finishes by itself once it was entered. Signing in saves the account
+/// too.
 @Observable
 final class AccountSignIn {
     enum Step: Equatable {
         case idle
         case starting
-        case waiting(id: String, url: URL)
+        /// `deviceCode` is the code to enter on the page, for Codex.
+        case waiting(id: String, url: URL, deviceCode: String?)
         case signedIn(String)
     }
 
@@ -21,9 +23,28 @@ final class AccountSignIn {
     /// Who signed in before this sign-in, who still is if it fails.
     @ObservationIgnored private var before = Step.idle
 
-    var canFinish: Bool { !finishing && !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    /// What to do on the page while the sign-in waits.
+    var waitingCaption: String? {
+        switch step {
+        case .waiting(_, _, nil): "Sign in on the page, then paste the code it shows."
+        case .waiting(_, _, _?): "Sign in on the page and enter the code shown here."
+        default: nil
+        }
+    }
 
-    func start(_ account: AgentAccount, on server: Server, in store: AppStore) {
+    /// Whose page a sign-in of the agent opens.
+    static func page(of agent: Agent) -> String {
+        agent == .claude ? "Claude's sign-in page" : "OpenAI's sign-in page"
+    }
+
+    var canFinish: Bool {
+        guard !finishing else { return false }
+        if case .waiting(_, _, _?) = step { return true }
+        return !code.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Starts the sign-in; one that finishes by itself saves `account` and hands `saved` its id.
+    func start(_ account: AgentAccount, on server: Server, in store: AppStore, saved: @escaping (String) -> Void) {
         guard step != .starting else { return }
         let signedIn = step
         cancel(in: store)
@@ -35,25 +56,30 @@ final class AccountSignIn {
             guard let self, step == .starting else { return }
             switch result {
             case .success(let answer):
-                guard let url = URL(string: answer.string("url")) else { return fail("Claude Code didn't give a page to sign in on.") }
-                step = .waiting(id: answer.string("id"), url: url)
+                guard let url = URL(string: answer.string("url")) else { return fail("\(account.agent.name) didn't give a page to sign in on.") }
+                let deviceCode = answer.optionalString("code")
+                step = .waiting(id: answer.string("id"), url: url, deviceCode: deviceCode)
+                if deviceCode != nil { finish(account, in: store, saved: saved) }
             case .failure(let refusal):
                 fail(refusal.message)
             }
         }
     }
 
-    /// Hands the code to the sign-in and saves `account` with it; `saved` gets the saved account's id.
+    /// Hands the code to the sign-in, or waits for Codex's to be entered, and saves `account` with
+    /// it; `saved` gets the saved account's id.
     func finish(_ account: AgentAccount, in store: AppStore, saved: @escaping (String) -> Void) {
-        guard case .waiting(let id, _) = step, canFinish else { return }
+        guard case .waiting(let id, _, let deviceCode) = step, canFinish else { return }
         finishing = true
         error = nil
         let code = code.trimmingCharacters(in: .whitespacesAndNewlines)
         let request: JSON = ["type": "finish_sign_in", "id": id, "code": code, "account": account.json]
         store.core.send("request", ["server_id": serverID, "request": request]) { [weak self] result in
-            guard let self, case .waiting(id, _) = step else { return }
+            guard let self, case .waiting(id, _, _) = step else { return }
             finishing = false
             switch result {
+            case .failure(let refusal) where deviceCode != nil && refusal.message.hasPrefix(Self.stillWaiting):
+                finish(account, in: store, saved: saved)
             case .success(let answer):
                 self.code = ""
                 saved(answer.string("account"))
@@ -64,6 +90,9 @@ final class AccountSignIn {
             }
         }
     }
+
+    /// What the server says while Codex waits for its code to be entered, which is asked again.
+    private static let stillWaiting = "Codex is still waiting"
 
     /// A sign-in that is over says so; one refused for the account it would save waits for the
     /// code again.
@@ -78,7 +107,7 @@ final class AccountSignIn {
 
     /// Stops a sign-in that waits for its code, as closing the sheet or changing the folder does.
     func cancel(in store: AppStore) {
-        if case .waiting(let id, _) = step {
+        if case .waiting(let id, _, _) = step {
             store.core.send("request", ["server_id": serverID, "request": ["type": "cancel_sign_in", "id": id]])
         }
         step = .idle

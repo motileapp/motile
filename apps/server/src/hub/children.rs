@@ -717,7 +717,7 @@ impl Hub {
                     _ => None,
                 });
                 state.error = items.iter().rev().find_map(|item| match &item.kind {
-                    ItemKind::Error { message } => Some(message.clone()),
+                    ItemKind::Error { message, .. } => Some(message.clone()),
                     _ => None,
                 });
                 match ended {

@@ -115,7 +115,7 @@ fun TranscriptRow(row: RowModel) {
         is RowModel.Kind.Agents -> AgentsRow(row, kind.content)
         is RowModel.Kind.Media -> MediaRow(kind.content)
         is RowModel.Kind.File -> FileRow(kind.content)
-        is RowModel.Kind.Error -> ErrorRow(row, kind.message)
+        is RowModel.Kind.Error -> ErrorRow(row, kind)
         is RowModel.Kind.Changes -> ChangesRow(row, kind.content)
         is RowModel.Kind.TurnEnd -> TurnEndRow(row, kind.content)
         is RowModel.Kind.Handoff -> HandoffRow(row, kind.content)
@@ -747,10 +747,11 @@ private fun Modifier.bleed(by: Dp): Modifier = layout { measurable, constraints 
 }
 
 @Composable
-private fun ErrorRow(row: RowModel, message: String) {
+private fun ErrorRow(row: RowModel, error: RowModel.Kind.Error) {
     val actions = LocalTranscript.current
-    val found = actions.model.found[row.id].within(0, message.length)
-    ErrorRow(message, found = found, onCurrent = { _, window -> actions.currentMatch(row.id, window) }, sent = { it })
+    val found = actions.model.found[row.id].within(0, error.message.length)
+    val signIn = error.signIn?.let { account -> { actions.signIn(account) } }
+    ErrorRow(error.message, found = found, onCurrent = { _, window -> actions.currentMatch(row.id, window) }, sent = { it }, signIn = signIn)
 }
 
 @Composable
@@ -760,6 +761,8 @@ fun ErrorRow(
     found: List<FoundSpan> = emptyList(),
     onCurrent: ((Rect, Rect) -> Unit)? = null,
     sent: ((Int) -> Int)? = null,
+    /** Signs the agent's account in again, whose sign-in stopping is what the message says. */
+    signIn: (() -> Unit)? = null,
 ) {
     val palette = LocalPalette.current
     val shape = RoundedCornerShape(Radius.lg)
@@ -773,10 +776,15 @@ fun ErrorRow(
         Box(Modifier.width(24.dp).height(scaled(18f).dp), contentAlignment = Alignment.CenterStart) {
             Icon(Symbol.CircleAlert, iconSize(text = TextSize.Sm), color = palette.destructive)
         }
-        SelectionContainer {
-            val style = Theme.ui(TextSize.Sm).copy(lineHeight = (13f * Platform.scale * 1.2f + 5).sp, color = palette.destructive)
-            val text = remember(message, palette) { AnnotatedString(message, SpanStyle(color = palette.destructive)) }
-            MarkedText(text, style, found = found, onCurrent = onCurrent, sent = sent)
+        Column {
+            SelectionContainer {
+                val style = Theme.ui(TextSize.Sm).copy(lineHeight = (13f * Platform.scale * 1.2f + 5).sp, color = palette.destructive)
+                val text = remember(message, palette) { AnnotatedString(message, SpanStyle(color = palette.destructive)) }
+                MarkedText(text, style, found = found, onCurrent = onCurrent, sent = sent)
+            }
+            if (signIn != null) {
+                RowButton("Sign In Again", "Sign the agent's account in again", Modifier.padding(top = 10.dp), solid = true, onClick = signIn)
+            }
         }
     }
 }

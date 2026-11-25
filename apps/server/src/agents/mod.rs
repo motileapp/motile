@@ -227,6 +227,8 @@ pub enum AgentEvent {
     Limited {
         resets_at: Option<f64>,
     },
+    /// The turn failed because the agent's account is no longer signed in.
+    SignedOut,
     /// Lines the agent's process has to be given now.
     Write(String),
     /// Claude Code refused the MCP servers it was given while it ran, so it keeps what it had.

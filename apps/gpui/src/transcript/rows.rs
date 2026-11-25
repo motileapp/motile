@@ -1727,20 +1727,39 @@ pub fn turn_label(stopped: bool, duration_ms: Option<u64>) -> String {
     }
 }
 
-fn error_row(model: &RowModel, message: &str, ctx: &RowContext, cx: &App) -> AnyElement {
+/// An error, with the way to sign the agent's account in again when its sign-in stopped working.
+fn error_row(model: &RowModel, message: &str, sign_in: Option<&str>, ctx: &RowContext, cx: &App) -> AnyElement {
     let id = format!("{}-error", model.row.id);
     let found = ctx.found.get(&model.row.id).map(|marks| marks.in_text(message, 0)).unwrap_or_default();
     let sent = find::stretch(message.to_string().into(), 0);
-    let error = error_box(&id, message, &found, Some(&sent), row_key(&model.row.id), cx);
+    let button = sign_in.zip(ctx.thread_id.clone()).map(|(account_id, thread_id)| {
+        let (store, account_id) = (ctx.store.clone(), account_id.to_string());
+        RowButton::new(
+            SharedString::from(format!("sign-in-{}", model.row.id)),
+            "Sign In Again",
+            "Sign the agent's account in again",
+        )
+        .solid()
+        .on_click(move |_, _, cx| {
+            store.update(cx, |store, cx| {
+                store.sign_in_again(&account_id, &thread_id);
+                cx.notify();
+            })
+        })
+        .into_any_element()
+    });
+    let error = error_box(&id, message, &found, Some(&sent), button, row_key(&model.row.id), cx);
     div().pt(px(4.)).pb(px(10.)).child(error).into_any_element()
 }
 
-/// An error on its tint, with its sign before it, and what finding found in it set off.
+/// An error on its tint, with its sign before it, what finding found in it set off, and `under`
+/// under its text.
 pub fn error_box(
     id: &str,
     message: &str,
     found: &[(Range<usize>, bool)],
     sent: Option<&Sent>,
+    under: Option<AnyElement>,
     key: u64,
     cx: &App,
 ) -> Div {
@@ -1762,17 +1781,26 @@ pub fn error_box(
                 .justify_center()
                 .child(icons::symbol("circle-alert", IconSize::Md).text_color(c.destructive)),
         )
-        .child(text_box(TextSize::Sm, 20.5).flex_1().min_w_0().text_color(c.destructive).child(plain(
-            id,
-            message,
-            &[],
-            &[],
-            found,
-            sent,
-            c.destructive,
-            key,
-            cx,
-        )))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .items_start()
+                .child(text_box(TextSize::Sm, 20.5).w_full().text_color(c.destructive).child(plain(
+                    id,
+                    message,
+                    &[],
+                    &[],
+                    found,
+                    sent,
+                    c.destructive,
+                    key,
+                    cx,
+                )))
+                .children(under.map(|under| div().mt(px(10.)).child(under))),
+        )
 }
 
 /// "+12 −3" in green and red.
@@ -2253,7 +2281,7 @@ pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &
         RowKind::Agents { .. } => agents_row(model, ctx, cx),
         RowKind::Media { .. } => crate::media::media_row(model, ctx, window, cx),
         RowKind::File { .. } => crate::media::file::file_row(model, ctx, window, cx),
-        RowKind::Error { message } => error_row(model, message, ctx, cx),
+        RowKind::Error { message, sign_in } => error_row(model, message, sign_in.as_deref(), ctx, cx),
         RowKind::Changes { files, added, removed, entries, .. } => {
             changes_row(model, *files, *added, *removed, entries, ctx, cx)
         }

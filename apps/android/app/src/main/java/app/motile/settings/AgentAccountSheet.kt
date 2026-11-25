@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,7 +20,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import app.motile.LocalStore
 import app.motile.core.AccountSignIn
@@ -86,15 +84,14 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
     )
     // Signing in saved everything the form has, so there is nothing left to save or to throw away.
     val savedAsIs = savedBySignIn == edited
-    // Claude Code signs in here; Codex, and a server too old for it, with a command.
-    val signsInHere = account.agent == Agent.Claude && server.signsInAccounts
+    // The agent signs in here, unless the server is too old for it: then with a command.
+    val signsInHere = server.signsIn(account.agent)
     val step = signIn.step
     val signedInAs = (step as? AccountSignIn.Step.SignedIn)?.who
         ?: initial.email?.takeIf { account.folder == initial.folder }?.let { listOfNotNull(it, initial.plan).joinToString(" · ") }
-    val signInCaption = when {
-        step is AccountSignIn.Step.Waiting -> "Sign in on the page, then paste the code it shows."
+    val signInCaption = signIn.waitingCaption ?: when {
         savedAsIs -> "Signing in saved the account."
-        else -> "Opens Claude's sign-in page. Signing in saves the account on ${server.shortName}."
+        else -> "Opens ${AccountSignIn.page(account.agent)}. Signing in saves the account on ${server.shortName}."
     }
 
     LaunchedEffect(account.folder, account.agent) { signIn.cancel(store) }
@@ -112,17 +109,19 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
         copied = false
     }
 
-    fun copyLink(url: String) {
-        Platform.copy(url)
-        copied = true
-        copies += 1
+    fun saved(saved: AgentAccount, id: String) {
+        account = account.copy(id = id)
+        savedBySignIn = saved.copy(id = id)
     }
 
-    fun startSignIn() = signIn.start(edited, server, store)
+    fun startSignIn() {
+        val starting = edited
+        signIn.start(starting, server, store) { saved(starting, it) }
+    }
 
-    fun finishSignIn() = signIn.finish(edited, store) { id ->
-        account = account.copy(id = id)
-        savedBySignIn = edited.copy(id = id)
+    fun finishSignIn() {
+        val finishing = edited
+        signIn.finish(finishing, store) { saved(finishing, it) }
     }
 
     fun save() {
@@ -178,43 +177,7 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
             }
             if (signsInHere) {
                 group(header = "Sign In", footer = signInCaption, failure = signIn.error) {
-                    if (step is AccountSignIn.Step.Waiting) {
-                        row {
-                            SettingsRow {
-                                Text(step.url, Modifier.weight(1f), style = Theme.uiMono(TextSize.Sm), color = LocalPalette.current.mutedForeground, maxLines = 1)
-                            }
-                        }
-                        row { SettingsPressRow({ Platform.open(step.url) }) { SettingsActionLabel("Open the Sign-In Page", Symbol.SquareArrowOutUpRight) } }
-                        row {
-                            SettingsPressRow({ copyLink(step.url) }) {
-                                SettingsActionLabel(if (copied) "Copied" else "Copy the Link", if (copied) Symbol.Check else Symbol.Copy)
-                            }
-                        }
-                        row {
-                            SettingsRow {
-                                Box(Modifier.weight(1f).height(ControlSize.Large.height)) {
-                                    InputField(
-                                        "Paste the code", signIn.code, { signIn.code = it }, variant = InputVariant.Bare, size = ControlSize.Large,
-                                        monospaced = true, keyboardOptions = plainKeyboard.copy(imeAction = ImeAction.Done), onSubmit = ::finishSignIn,
-                                    )
-                                }
-                                if (signIn.finishing) {
-                                    Spinner(IconSize.Xl)
-                                } else {
-                                    ActionButton("Sign In", variant = ButtonVariant.Link, disabled = !signIn.canFinish || !canSave, onClick = ::finishSignIn)
-                                }
-                            }
-                        }
-                    } else {
-                        signedInAs?.let { who -> row { SettingsRow { RowText("Signed in as $who", color = LocalPalette.current.foreground) } } }
-                        row {
-                            SettingsPressRow(::startSignIn, enabled = step != AccountSignIn.Step.Starting) {
-                                SettingsActionLabel(if (signedInAs == null) "Sign In" else "Sign In Again", Symbol.CircleUser)
-                                Spacer(Modifier.weight(1f))
-                                if (step == AccountSignIn.Step.Starting) Spinner(IconSize.Xl)
-                            }
-                        }
-                    }
+                    signInRows(signIn, signedInAs, canFinish = canSave, start = ::startSignIn, finish = ::finishSignIn)
                 }
             } else group(header = "Sign In", footer = "Run it in a terminal on ${server.shortName}. Who is signed in shows in the list once the agent says.") {
                 row {
@@ -269,7 +232,7 @@ private fun VariableRow(edited: EditedVariable, kept: Boolean, server: Server, r
     }
 }
 
-private fun shareText(text: String) {
+internal fun shareText(text: String) {
     val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
     Platform.context.startActivity(Intent.createChooser(send, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 }

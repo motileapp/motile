@@ -37,6 +37,7 @@ final class TranscriptView: FlippedView, RowOwner {
     var onTrimEarlier: ((Int, @escaping () -> Void) -> Void)?
     /// The diff of the turn that ended with the item is to be shown, with a file in view.
     var onOpenDiff: ((String, String?) -> Void)?
+    var onSignIn: ((String) -> Void)?
     /// What the agent did that the item's tool call started is to be shown.
     var onOpenAgent: ((String) -> Void)?
     var onOpenThread: ((String) -> Void)?
@@ -1129,6 +1130,8 @@ final class TranscriptView: FlippedView, RowOwner {
     }
 
     func openDiff(turn itemID: String, path: String?) { onOpenDiff?(itemID, path) }
+
+    func signIn(accountID: String) { onSignIn?(accountID) }
 
     func openAgent(itemID: String) { onOpenAgent?(itemID) }
 

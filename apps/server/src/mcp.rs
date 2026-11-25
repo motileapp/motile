@@ -802,7 +802,7 @@ fn described(item: &Item) -> (&'static str, &'static str, String) {
                 name => ("tool", status, format!("{name} {}{output}", call.input)),
             }
         }
-        ItemKind::Error { message } => ("error", "done", message.clone()),
+        ItemKind::Error { message, .. } => ("error", "done", message.clone()),
         ItemKind::TurnEnd { summary } if summary.stopped => ("turn_end", "done", "Turn stopped".to_string()),
         ItemKind::TurnEnd { .. } => ("turn_end", "done", "Turn ended".to_string()),
         ItemKind::Handoff { from, to, .. } => ("handoff", "done", format!("{} → {}", end_name(from), end_name(to))),

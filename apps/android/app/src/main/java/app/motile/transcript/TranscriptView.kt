@@ -147,6 +147,12 @@ class TranscriptActions(val store: AppStore, val model: TranscriptModel, val ofA
         if (path == null) store.rightPanel.showDiff(DiffScope.Turn(itemID)) else store.rightPanel.showChange(itemID, path)
     }
 
+    /** Signs the agent's account `accountID` in again. */
+    fun signIn(accountID: String) {
+        val threadID = model.threadID ?: return
+        store.signInAgain(accountID, threadID)
+    }
+
     /** Shows what the agent did that the item's tool call started. */
     fun openAgent(itemID: String) = store.rightPanel.showAgent(itemID)
 

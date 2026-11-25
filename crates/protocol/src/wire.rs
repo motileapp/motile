@@ -145,8 +145,8 @@ pub fn is_pull_request_news(text: &str) -> bool {
 
 /// The shape of the items a client caches. Raised when items gain something a client of the shape
 /// before would drop as it caches them, so that clients read their threads again. 1: who took each
-/// action. 2: compactions. 3: what each agent spent.
-pub const ITEMS_FORMAT: u32 = 3;
+/// action. 2: compactions. 3: what each agent spent. 4: the account an error has to sign in.
+pub const ITEMS_FORMAT: u32 = 4;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct Item {
@@ -243,6 +243,9 @@ pub enum ItemKind {
     },
     Error {
         message: String,
+        /// The agent's account whose sign-in stopped working, which caused the error.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        sign_in: Option<String>,
     },
     /// The thread went on with another agent, or with an account whose sessions are elsewhere,
     /// from the turn after this.
@@ -1139,13 +1142,14 @@ pub enum Request {
     MakeAgentAccountDefault {
         id: String,
     },
-    /// Starts signing an account of Claude Code in, with its folder and variables as the form has
-    /// them; a sensitive variable without a value keeps the saved account's. `SignInLink` answers
-    /// with the page to sign in on.
+    /// Starts signing an account in, with its folder and variables as the form has them; a
+    /// sensitive variable without a value keeps the saved account's. `SignInLink` answers with the
+    /// page to sign in on. Codex's accounts sign in from protocol 42.
     StartSignIn {
         account: AgentAccount,
     },
-    /// Hands the code the sign-in page showed to the sign-in `id`, and saves `account` as
+    /// Hands the code the sign-in page showed to the sign-in `id`, or for Codex, whose `code` is
+    /// empty, waits for its own code to be entered on the page; then saves `account` as
     /// `SaveAgentAccount` does once the agent's CLI kept the sign-in. `SignedIn` answers. An account
     /// that can't be saved is refused before the code is used; an error that ended the sign-in
     /// ends with "Sign in again."
@@ -3039,6 +3043,9 @@ pub enum Message {
     SignInLink {
         id: String,
         url: String,
+        /// The code to enter on the page, for an agent that has one: Codex.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        code: Option<String>,
     },
     /// Who signed in, as the agent's CLI says, and the id of the account that was saved.
     SignedIn {
@@ -3134,7 +3141,7 @@ mod tests {
         );
         assert_eq!(
             (ITEMS_FORMAT, format!("{:x}", fingerprint(&shape))),
-            (3, "1a2e638e67dbdf96".to_string()),
+            (4, "2cd7deac1b16e5df".to_string()),
             "An item changed shape. If a client caching it before this change would drop what changed, raise \
              ITEMS_FORMAT. Then write both numbers here."
         );

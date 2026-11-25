@@ -93,6 +93,7 @@ final class RowButton: FlippedView {
     private let title: TextLabel
     private let font: PlatformFont
     private let bordered: Bool
+    private let solid: Bool
     private let sidePadding: CGFloat
     private let insets: PlatformEdgeInsets
     private let hover: PlatformColor
@@ -102,24 +103,27 @@ final class RowButton: FlippedView {
     /// The room between the words and the highlight's sides, without a border.
     static let padding: CGFloat = 8
 
-    /// `hover` lights the button, a step above the surface it sits on, and `rest` fills it unlit.
+    /// `hover` lights the button, a step above the surface it sits on, and `rest` fills it unlit. A
+    /// `solid` one is in the text's colour, with its words in the page's.
     init(
         title: String,
         tooltip: String,
         radius: CGFloat,
         bordered: Bool = false,
+        solid: Bool = false,
         hover: PlatformColor = Theme.backgroundSecondary,
         rest: PlatformColor = .clear,
         insets: PlatformEdgeInsets,
         action: @escaping () -> Void
     ) {
         self.insets = insets
-        self.hover = hover
-        self.rest = rest
+        self.hover = solid ? Theme.thinned(Theme.foreground, .lit) : hover
+        self.rest = solid ? Theme.foreground : rest
         self.bordered = bordered
-        font = self.bordered ? .ui(Self.metrics.textSize, weight: .medium) : Theme.smallFont
-        sidePadding = self.bordered ? Self.metrics.padding : Self.padding
-        self.title = TextLabel(font: font, color: self.bordered ? Theme.foreground : Theme.mutedForeground)
+        self.solid = solid
+        font = bordered || solid ? .ui(Self.metrics.textSize, weight: .medium) : Theme.smallFont
+        sidePadding = bordered || solid ? Self.metrics.padding : Self.padding
+        self.title = TextLabel(font: font, color: solid ? Theme.background : bordered ? Theme.foreground : Theme.mutedForeground)
         super.init(frame: .zero)
         highlight.radius = radius
         if bordered { highlight.stroke = Theme.border }
@@ -134,6 +138,8 @@ final class RowButton: FlippedView {
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    var words: String { title.string }
 
     var width: CGFloat {
         let words = ceil(title.string.size(withAttributes: [.font: font]).width)
@@ -155,7 +161,7 @@ final class RowButton: FlippedView {
 
     private func light(_ lit: Bool) {
         highlight.fill = lit ? hover : rest
-        title.color = lit || bordered ? Theme.foreground : Theme.mutedForeground
+        title.color = solid ? Theme.background : lit || bordered ? Theme.foreground : Theme.mutedForeground
     }
 }
 

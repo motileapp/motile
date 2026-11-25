@@ -387,6 +387,7 @@ clients. It replays the recorded output in `fixtures/` or makes up a turn, depen
 | "ask a few questions" | Asks three questions at once, one with a recommended option and one that takes several (Claude Code) |
 | "plan the hello" | Presents a plan to approve |
 | "hit the limit" | Is stopped by the usage limit, which resets `FAKE_AGENT_RESET` seconds later |
+| "lose the sign-in" | Fails as its sign-in expired, and so does every turn after until the agent signs in again; `login --device-auth` signs Codex in as `codex login --device-auth` does |
 | "agents hit the limit" | Is stopped by the usage limit while two agents it started work, which it stops after the turn (Claude Code) |
 | "crash before taking this" | Exits before it takes the prompt (Claude Code) |
 | "show the ui <name>" | Shows the program `fixtures/openui/<name>.oui`, streamed |

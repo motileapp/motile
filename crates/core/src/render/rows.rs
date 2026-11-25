@@ -228,6 +228,9 @@ pub enum RowKind {
     },
     Error {
         message: String,
+        /// The account whose sign-in stopped working, which the row offers to sign in again.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        sign_in: Option<String>,
     },
     /// What a finished turn changed in the thread's folder. The row's item is the one that ends
     /// the turn, which names the turn when its diff is asked for.
@@ -1473,7 +1476,9 @@ fn render(item: &Item, cwd: &str, started: &Started, streaming: Option<&mut Hash
                 vec![row(0, RowKind::Tool { tool })]
             }
         },
-        ItemKind::Error { message } => vec![row(0, RowKind::Error { message: message.clone() })],
+        ItemKind::Error { message, sign_in } => {
+            vec![row(0, RowKind::Error { message: message.clone(), sign_in: sign_in.clone() })]
+        }
         ItemKind::TurnEnd { summary } => vec![row(
             0,
             RowKind::TurnEnd {
@@ -1531,7 +1536,7 @@ pub fn searched_rows(item: &Item, cwd: &str, changes_hidden: bool) -> Vec<Row> {
 /// names of the files and folders it shows.
 pub fn searched_text(row: &Row) -> Option<Cow<'_, str>> {
     match &row.kind {
-        RowKind::User { text, .. } | RowKind::Code { code: text, .. } | RowKind::Error { message: text } => {
+        RowKind::User { text, .. } | RowKind::Code { code: text, .. } | RowKind::Error { message: text, .. } => {
             Some(Cow::Borrowed(text))
         }
         RowKind::Prose { prose } => Some(Cow::Borrowed(&prose.text)),
@@ -3057,7 +3062,7 @@ mod tests {
             item("u", 0, said("Hi")),
             call("t", 1, "Bash", serde_json::json!({"command": "ls"}), ToolStatus::Succeeded),
             assistant("a", 2, "Listing."),
-            item("x", 3, ItemKind::Error { message: "The agent stopped.".into() }),
+            item("x", 3, ItemKind::Error { message: "The agent stopped.".into(), sign_in: None }),
             item("e", 4, ItemKind::TurnEnd { summary }),
         ]);
         assert_eq!(outline(&failed), ["user", "Ran ls", "Listing.", "other", "end"]);

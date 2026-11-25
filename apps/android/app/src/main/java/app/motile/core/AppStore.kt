@@ -145,6 +145,9 @@ data class UndoNotice(val kind: Kind, val threadIDs: List<String>, val text: Str
 /** The threads a custom snooze is being set for. */
 data class CustomSnooze(val threadIDs: List<String>, val fromSidebar: Boolean)
 
+/** An agent's account to sign in again, from the error of the thread whose agent it stopped. */
+data class ThreadSignIn(val threadID: String, val accountID: String)
+
 /**
  * Everything the views show. It mirrors the core: commands go to it, and its events change the
  * state here. All of it is used on the main thread.
@@ -212,6 +215,8 @@ class AppStore(private val context: Context) {
     var committingProject by mutableStateOf<Project?>(null)
     /** The threads the custom snooze sheet is open for. */
     var customSnooze by mutableStateOf<CustomSnooze?>(null)
+    /** The account the sign-in sheet signs in again, for the thread whose error asked. */
+    var signingInThread by mutableStateOf<ThreadSignIn?>(null)
     var gitFiles by mutableStateOf(emptyList<ChangedFile>())
         private set
     /** An action that pushes from the default branch, until the user says where it should happen. */
@@ -2877,6 +2882,13 @@ class AppStore(private val context: Context) {
         val thread = selectedThread ?: return
         if (onRemovedServer(thread)) return
         request(thread.serverID, mapOf("type" to "continue", "thread_id" to thread.id))
+    }
+
+    /** Opens the sheet that signs the agent's account in again, for the thread whose error asked. */
+    fun signInAgain(accountID: String, threadID: String) {
+        val account = server(threads[threadID]?.serverID)?.agentAccounts?.firstOrNull { it.id == accountID }
+        if (account?.gateway == true) return openSettings(SettingsSection.AgentGateway)
+        signingInThread = ThreadSignIn(threadID, accountID)
     }
 
     /** Whether the open thread goes on by itself once its usage limit resets. */

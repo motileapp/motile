@@ -378,6 +378,8 @@ struct Run {
     instructed: bool,
     /// It refused MCP servers it was given, so it isn't kept for another turn.
     stale: bool,
+    /// The turn that runs failed because the account's sign-in stopped working.
+    signed_out: bool,
 }
 
 pub struct ListSubscription {
@@ -1014,8 +1016,8 @@ impl Hub {
     pub async fn start_sign_in(&self, account: AgentAccount) -> anyhow::Result<Message> {
         let account = agent_accounts::signing_in(account, &self.agent_accounts())?;
         let environment = agent_accounts::environment(&self.environment, &account);
-        let (id, url) = self.sign_ins.start(environment, account.folder).await?;
-        Ok(Message::SignInLink { id, url })
+        let started = self.sign_ins.start(account.agent, environment, account.folder).await?;
+        Ok(Message::SignInLink { id: started.id, url: started.url, code: started.code })
     }
 
     /// Finishes a sign-in with the code its page showed, saves the account, and answers with who
@@ -1028,8 +1030,8 @@ impl Hub {
     ) -> anyhow::Result<Message> {
         let accounts = self.agent_accounts();
         let folder = agent_accounts::checked(account.clone(), &accounts)?.folder;
-        let environment = self.sign_ins.finish(id, code, &folder).await?;
-        let signed_in_as = limits::claude_login(&environment)
+        let (agent, environment) = self.sign_ins.finish(id, code, &folder).await?;
+        let signed_in_as = limits::login(agent, &environment)
             .await
             .inspect_err(|error| tracing::warn!("couldn't read who signed in: {error:#}"))
             .ok();
@@ -3752,7 +3754,7 @@ impl Hub {
     /// stopped it. The messages that waited stay until they are sent.
     fn end_without_agent(&self, live: &mut Live, error: Option<String>) -> anyhow::Result<()> {
         match error {
-            Some(message) => live.append(&self.store, ItemKind::Error { message })?,
+            Some(message) => live.append(&self.store, ItemKind::Error { message, sign_in: None })?,
             None => live.settle(&self.store, None, None, "", true)?,
         }
         // No agent ran, so nothing changed.
@@ -3902,6 +3904,7 @@ impl Hub {
             started: Instant::now(),
             interrupted: interrupted.clone(),
             received_result: false,
+            signed_out: false,
             resting: None,
             input: Some(input),
             background: Background::default(),
@@ -4282,9 +4285,11 @@ impl Hub {
                     return Ok(());
                 }
                 live.fail_dropped_tools(store)?;
+                let mut signed_out = false;
                 if let Some(run) = &mut live.run {
                     run.received_result = true;
                     run.turn_id = None;
+                    signed_out = std::mem::take(&mut run.signed_out);
                     summary.duration_ms = Some(run.started.elapsed().as_millis() as u64);
                     // Claude Code reports a turn the user stopped as one that failed.
                     if run.interrupted.load(Ordering::Relaxed) {
@@ -4296,7 +4301,8 @@ impl Hub {
                     wake(&mut live.stored.thread, true);
                     let message = result_text.filter(|text| !text.is_empty());
                     let message = message.unwrap_or_else(|| "The agent reported an error.".to_string());
-                    live.append(store, ItemKind::Error { message })?;
+                    let sign_in = signed_out.then(|| live.stored.thread.agent_account.clone());
+                    live.append(store, ItemKind::Error { message, sign_in })?;
                 }
                 live.activity.approvals.clear();
                 live.server_asks.clear();
@@ -4361,13 +4367,18 @@ impl Hub {
                 store.save_thread(&live.stored)?;
                 self.announce(&live.stored.thread);
             }
+            AgentEvent::SignedOut => {
+                if let Some(run) = &mut live.run {
+                    run.signed_out = true;
+                }
+            }
             // The process can't go on, and would stay if it weren't let go.
             AgentEvent::Failed { message } => {
                 if let Some(run) = &mut live.run {
                     run.received_result = true;
                     run.input = None;
                 }
-                live.append(store, ItemKind::Error { message })?;
+                live.append(store, ItemKind::Error { message, sign_in: None })?;
             }
         }
         Ok(())
@@ -4441,7 +4452,7 @@ impl Hub {
         }
         if live.retry.is_none() {
             let message = "The agent couldn't find its session. Send the message again to start a new one.";
-            live.append(&self.store, ItemKind::Error { message: message.to_string() })?;
+            live.append(&self.store, ItemKind::Error { message: message.to_string(), sign_in: None })?;
         }
         Ok(())
     }
@@ -4846,7 +4857,7 @@ impl Live {
             self.cut_off_tools(store, true)?;
             self.open.clear();
             let message = RESTARTED.to_string();
-            self.append(store, ItemKind::Error { message })?;
+            self.append(store, ItemKind::Error { message, sign_in: None })?;
             let started =
                 items.iter().rev().find(|item| matches!(item.kind, ItemKind::User { .. } | ItemKind::Notice { .. }));
             let started_at = started.map_or_else(now, |item| item.created_at);
@@ -5453,7 +5464,7 @@ impl Live {
             (true, Some(code)) => format!("{agent} exited unexpectedly (status {code})."),
             (true, None) => format!("{agent} exited unexpectedly."),
         };
-        self.append(store, ItemKind::Error { message })?;
+        self.append(store, ItemKind::Error { message, sign_in: None })?;
         self.keep_turn(store, new_id(), TurnOutcome::Failed);
         Ok(())
     }

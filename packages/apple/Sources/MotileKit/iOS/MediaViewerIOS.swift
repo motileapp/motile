@@ -260,7 +260,7 @@ struct MediaViewer: View {
             guard let result else { return markupFailed = true }
             store.attachMarkup(result, replacing: markup.attachment)
             endMarkup()
-            store.closeViewer()
+            store.uncoverThread()
         }
     }
 

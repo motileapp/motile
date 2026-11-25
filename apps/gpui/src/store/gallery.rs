@@ -71,13 +71,18 @@ impl Store {
     /// viewer and the panel.
     pub fn show_in_chat(&mut self, shown_in: &ShownIn, cx: &App) {
         let Some(thread_id) = self.transcript.read(cx).thread_id.clone() else { return };
+        self.uncover_thread();
+        self.send(Command::RevealRow { thread_id, item_id: shown_in.item.clone(), row_id: shown_in.row.clone() });
+    }
+
+    /// Takes the viewer and the maximized panel away from over the thread.
+    pub fn uncover_thread(&mut self) {
         if self.viewing.is_some() {
             self.close_viewer();
         }
         if self.panel_maximized() {
             self.toggle_panel_maximized();
         }
-        self.send(Command::RevealRow { thread_id, item_id: shown_in.item.clone(), row_id: shown_in.row.clone() });
     }
 
     /// Puts the image or the video in the composer, under its name.
@@ -89,9 +94,7 @@ impl Store {
             cx.spawn(async move |cx| {
                 let copy = copying.await;
                 let _ = weak.update(cx, |store, cx| {
-                    if store.viewing.is_some() {
-                        store.close_viewer();
-                    }
+                    store.uncover_thread();
                     store.attach(vec![copy]);
                     cx.notify();
                 });

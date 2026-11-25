@@ -6,6 +6,7 @@ use gpui_kit::*;
 
 use crate::main_view::MainView;
 use crate::onboarding::{ConnectServer, SignIn};
+use crate::settings::sign_in_again::SignInAgainSheet;
 use crate::store::Store;
 use crate::theme::{self, Appearance, TextSize, colors};
 use crate::ui::modal::{Answer, Confirmation, confirmation, error_alert, modal};
@@ -20,6 +21,7 @@ pub struct Root {
     panel: Option<Entity<crate::command_panel::CommandPanel>>,
     settings: Option<Entity<crate::settings::SettingsRoute>>,
     custom_snooze: Option<Entity<crate::snooze::CustomSnoozeSheet>>,
+    sign_in_again: Option<Entity<SignInAgainSheet>>,
     appearance: Appearance,
     /// The window is visible: the core has said what it remembers, or something went wrong.
     revealed: bool,
@@ -62,6 +64,7 @@ impl Root {
             panel: None,
             settings: None,
             custom_snooze: None,
+            sign_in_again: None,
             appearance: Appearance::System,
             revealed: false,
             moving: Default::default(),
@@ -135,6 +138,12 @@ impl Root {
             Some(_) => {}
             None => self.custom_snooze = None,
         }
+        let request = self.store.read(cx).signing_in_thread.clone();
+        let shown = self.sign_in_again.as_ref().map(|sheet| sheet.read(cx).request.clone());
+        if request != shown {
+            let store = self.store.clone();
+            self.sign_in_again = request.map(|request| cx.new(|cx| SignInAgainSheet::new(store, request, window, cx)));
+        }
         let wants_viewer = self.store.read(cx).viewing.is_some();
         crate::ui::popover_shown("viewer", wants_viewer, cx);
         if wants_viewer && self.viewer.is_none() {
@@ -184,6 +193,7 @@ impl Render for Root {
         let adding_server = self.connect.clone().filter(|_| !first_server);
         let adding_server = crate::ui::modal::presented("add-server", adding_server, window, cx);
         let custom_snooze = crate::ui::modal::presented("custom-snooze", self.custom_snooze.clone(), window, cx);
+        let sign_in_again = crate::ui::modal::presented("sign-in-again", self.sign_in_again.clone(), window, cx);
         // One scrim for every page of the command panel, which fades as it opens and closes.
         let panel_scrim = crate::ui::motion::eased_on(
             "command-panel-scrim",
@@ -257,6 +267,22 @@ impl Render for Root {
                     .leaving(leaving)
                     .on_return(move |_, cx| {
                         let _ = submit.update(cx, |sheet, cx| sheet.submit(cx));
+                    }),
+                )
+            })
+            .when_some(sign_in_again, |root, (sheet, leaving)| {
+                let (store, submit) = (self.store.clone(), sheet.downgrade());
+                root.child(
+                    modal("sign-in-again", sheet, move |_, cx| {
+                        store.update(cx, |store, cx| {
+                            store.signing_in_thread = None;
+                            cx.notify();
+                        })
+                    })
+                    .width(460.)
+                    .leaving(leaving)
+                    .on_return(move |window, cx| {
+                        let _ = submit.update(cx, |sheet, cx| sheet.press_return(window, cx));
                     }),
                 )
             })
