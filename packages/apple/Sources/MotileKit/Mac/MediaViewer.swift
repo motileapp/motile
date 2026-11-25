@@ -16,6 +16,8 @@ struct MediaViewer: View {
     @State private var fraction: Double?
     @State private var keys: Any?
     @State private var playerReady = false
+    /// The video's size as it is shown, turned as it was filmed, which the player takes the shape of.
+    @State private var videoSize: CGSize?
     @State private var fullScreen = false
     @State private var file: URL?
     /// The checkerboard behind a picture with see-through parts.
@@ -283,16 +285,23 @@ struct MediaViewer: View {
             .id(viewing.index)
             .ignoresSafeArea()
         case .video(let player):
-            PlayerView(player: player, ready: $playerReady, fullScreen: $fullScreen, menu: menu)
-                .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
-                .padding(.horizontal, ZoomingScrollView.viewerMargin.width)
-                .padding(.vertical, ZoomingScrollView.viewerMargin.height)
-                .overlay {
-                    if !playerReady {
-                        Spinner(size: ControlSize.large.symbol)
-                            .foregroundStyle(Color.themeMutedForegroundOverPicture)
+            // The player is only as large as the video, so a click beside it closes the viewer.
+            if let videoSize {
+                PlayerView(player: player, ready: $playerReady, fullScreen: $fullScreen, menu: menu)
+                    .aspectRatio(videoSize, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.md, style: .continuous))
+                    .overlay {
+                        if !playerReady {
+                            Spinner(size: ControlSize.large.symbol)
+                                .foregroundStyle(Color.themeMutedForegroundOverPicture)
+                        }
                     }
-                }
+                    .padding(.horizontal, ZoomingScrollView.viewerMargin.width)
+                    .padding(.vertical, ZoomingScrollView.viewerMargin.height)
+            } else {
+                Spinner(size: ControlSize.large.symbol)
+                    .foregroundStyle(Color.themeMutedForegroundOverPicture)
+            }
         case nil:
             Group {
                 if failed {
@@ -403,7 +412,8 @@ struct MediaViewer: View {
 
     private func load(_ item: ViewedMedia) {
         pause()
-        (loaded, failed, fraction, playerReady, file, checker, svgSize, pictureSize) = (nil, false, nil, false, nil, nil, nil, nil)
+        (loaded, failed, fraction, playerReady, videoSize, file, checker, svgSize, pictureSize) =
+            (nil, false, nil, false, nil, nil, nil, nil, nil)
         let scale = NSScreen.main?.backingScaleFactor ?? 2
         showRowPicture(item, scale: scale)
         let show = { (file: URL?) in
@@ -425,14 +435,33 @@ struct MediaViewer: View {
                 NSWorkspace.shared.open(file)
                 return store.closeViewer()
             }
-            let player = AVPlayer(url: file)
+            let asset = AVURLAsset(url: file)
+            let player = AVPlayer(playerItem: AVPlayerItem(asset: asset))
             loaded = .video(player)
-            player.play()
+            Task {
+                let size = await Self.shownSize(of: asset)
+                guard case .video(let shown) = loaded, shown === player else { return }
+                guard let size else { return (loaded, failed) = (nil, true) }
+                videoSize = size
+                player.play()
+            }
         }
         switch item.source {
         case .file(let file): show(file)
         case .media(let id): store.media(id, done: show)
         }
+    }
+}
+
+extension MediaViewer {
+    /// The size of the asset's video as it is shown, turned as it was filmed.
+    fileprivate static func shownSize(of asset: AVURLAsset) async -> CGSize? {
+        guard let track = try? await asset.loadTracks(withMediaType: .video).first,
+            let (natural, transform) = try? await track.load(.naturalSize, .preferredTransform)
+        else { return nil }
+        let size = natural.applying(transform)
+        guard size.width != 0, size.height != 0 else { return nil }
+        return CGSize(width: abs(size.width), height: abs(size.height))
     }
 }
 

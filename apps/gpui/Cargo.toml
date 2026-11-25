@@ -42,7 +42,7 @@ raw-window-handle = "0.6"
 block2 = "0.6"
 objc2-authentication-services = { version = "0.3", default-features = false, features = ["std", "block2", "ASFoundation", "ASWebAuthenticationSession"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSURL", "NSDictionary", "NSValue", "NSGeometry", "NSError", "NSArray", "NSDistributedNotificationCenter", "NSNotification", "NSOperation", "NSByteCountFormatter", "NSNumberFormatter", "NSDateFormatter", "NSDate", "NSFormatter", "NSLocale", "NSCalendar", "block2"] }
-objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "AVPlayer", "AVPlayerItem", "AVPlayerItemOutput", "AVAsset", "AVAssetImageGenerator", "objc2-core-graphics", "objc2-core-media", "objc2-core-video"] }
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "objc2-core-foundation", "AVPlayer", "AVPlayerItem", "AVPlayerItemOutput", "AVAsset", "AVAssetImageGenerator", "AVVideoComposition", "objc2-core-graphics", "objc2-core-media", "objc2-core-video"] }
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes"] }
 objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGImage", "CGContext", "CGBitmapContext", "CGColorSpace"] }
 objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMTime"] }
