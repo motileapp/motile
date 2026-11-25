@@ -4,6 +4,7 @@ import app.motile.panel.PanelTab.Agents
 import app.motile.panel.PanelTab.Diff
 import app.motile.panel.PanelTab.Files
 import app.motile.panel.PanelTab.Linear
+import app.motile.panel.PanelTab.Media
 import app.motile.panel.PanelTab.PullRequest
 import app.motile.panel.PanelTab.PullRequests
 import app.motile.panel.PanelTab.Ricrac
@@ -29,11 +30,11 @@ class RightPanelTest {
     fun theLauncherOrderDropsUnknownIdsAndPutsMissingOnesAfterTheOnesTheyFollow() {
         assertEquals(LauncherOrder.default, LauncherOrder.of(emptyList()))
         assertEquals(
-            listOf(Ricrac, Diff, Agents, Files, PullRequest, PullRequests, Linear),
+            listOf(Ricrac, Media, Diff, Agents, Files, PullRequest, PullRequests, Linear),
             LauncherOrder.of(listOf("ricrac", "gone", "diff", "agents", "pull_request", "diff")),
         )
         assertEquals(
-            listOf(Agents, Ricrac, Linear, Files, Diff, PullRequest, PullRequests),
+            listOf(Agents, Ricrac, Media, Linear, Files, Diff, PullRequest, PullRequests),
             LauncherOrder.of(listOf("ricrac", "linear", "files", "diff", "pull_request", "pull_requests")),
         )
     }
@@ -43,12 +44,12 @@ class RightPanelTest {
         val order = LauncherOrder.default
         val shown = listOf(Agents, Files, Diff, PullRequest, Ricrac)
         // Before the shown row it lands before.
-        assertEquals(listOf(Files, Diff, Agents, PullRequest, PullRequests, Linear, Ricrac), LauncherOrder.moving(order, Agents, 2, shown))
-        assertEquals(listOf(Agents, Files, Diff, Ricrac, PullRequest, PullRequests, Linear), LauncherOrder.moving(order, Ricrac, 3, shown))
+        assertEquals(listOf(Files, Diff, Agents, PullRequest, PullRequests, Linear, Ricrac, Media), LauncherOrder.moving(order, Agents, 2, shown))
+        assertEquals(listOf(Agents, Files, Diff, Ricrac, PullRequest, PullRequests, Linear, Media), LauncherOrder.moving(order, Ricrac, 3, shown))
         // After the last shown row: past the hidden rows before it, ahead of the ones after it.
-        assertEquals(listOf(Agents, Files, PullRequest, PullRequests, Linear, Ricrac, Diff), LauncherOrder.moving(order, Diff, 4, shown))
+        assertEquals(listOf(Agents, Files, PullRequest, PullRequests, Linear, Ricrac, Diff, Media), LauncherOrder.moving(order, Diff, 4, shown))
         assertEquals(
-            listOf(Files, Diff, PullRequest, Agents, PullRequests, Linear, Ricrac),
+            listOf(Files, Diff, PullRequest, Agents, PullRequests, Linear, Ricrac, Media),
             LauncherOrder.moving(order, Agents, 3, listOf(Agents, Files, Diff, PullRequest)),
         )
         assertEquals(order, LauncherOrder.moving(order, Files, 1, shown))

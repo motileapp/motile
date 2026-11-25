@@ -322,6 +322,12 @@ impl Cache {
         self.items_where(thread_id, "json_extract(payload, '$.parent') IS NULL", None)
     }
 
+    /// The thread's items that show an image, a video or a file, without its agents'.
+    pub fn items_with_media(&self, thread_id: &str) -> Vec<Item> {
+        let condition = "instr(payload, '\"media\":[') > 0 AND json_extract(payload, '$.parent') IS NULL";
+        self.items_where(thread_id, condition, None)
+    }
+
     pub fn item(&self, thread_id: &str, id: &str) -> Option<Item> {
         self.items_where(thread_id, "id = ?2", Some(id)).pop()
     }
@@ -582,6 +588,24 @@ mod tests {
         assert_eq!(cache.set_threads("s", &[kept]), ["listed.png"]);
         assert_eq!(sorted(cache.remove_server("removed")), ["elsewhere.png"]);
         assert_eq!(sorted(cache.remove_server("s")), ["poster.png", "shared.png"]);
+    }
+
+    #[test]
+    fn the_items_with_media_are_those_of_the_thread_that_show_some_without_its_agents() {
+        let dir = tempfile::tempdir().unwrap();
+        let cache = Cache::open(&dir.path().join("cache.sqlite")).unwrap();
+        let item = |id: &str, seq: u64, extra: serde_json::Value| -> Item {
+            let mut payload = serde_json::json!({ "id": id, "seq": seq, "rev": 1, "created_at": 1.0, "type": "assistant", "text": "Look" });
+            payload.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+            serde_json::from_value(payload).unwrap()
+        };
+        let media = serde_json::json!([{ "id": "a.png", "src": "a.png", "video": false, "size": 1 }]);
+        let shown = item("shown", 1, serde_json::json!({ "media": media }));
+        let plain = item("plain", 2, serde_json::json!({}));
+        let agents = item("agents", 3, serde_json::json!({ "media": media, "parent": "call" }));
+        cache.save_items("t", &[&shown, &plain, &agents], Some(1));
+
+        assert_eq!(cache.items_with_media("t"), [shown]);
     }
 
     #[test]

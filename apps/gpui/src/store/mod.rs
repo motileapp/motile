@@ -6,6 +6,7 @@ mod attachments;
 mod commands;
 pub mod engaged;
 pub mod find;
+pub mod gallery;
 pub mod gateway;
 mod git;
 mod history;
@@ -358,6 +359,8 @@ pub struct Store {
     pub transcript_is_empty: bool,
     /// The agents the open thread's agent has started, in the order it started them.
     pub agents: Vec<AgentView>,
+    /// The open thread's images and videos, while its Media tab shows them.
+    pub gallery: Option<gallery::Gallery>,
     /// The drafts whose first message is on its way, until the client has the thread it started.
     pub sending_drafts: HashMap<String, SendingDraft>,
     /// The messages on their way to their servers, as the core's outbox has them.
@@ -519,6 +522,7 @@ impl Store {
             question_answers: HashMap::new(),
             transcript_is_empty: true,
             agents: Vec::new(),
+            gallery: None,
             sending_drafts: HashMap::new(),
             outbox: Vec::new(),
             told_outbox_errors: HashMap::new(),
@@ -901,6 +905,7 @@ impl Store {
                 self.apply_found(thread_id, query, count, current, rows, cx)
             }
             Event::Reveal { thread_id, row_id, range } => self.apply_reveal(thread_id, row_id, range, cx),
+            Event::Gallery { thread_id, media } => self.apply_gallery(thread_id, media, cx),
             Event::Backup { backup } => self.backup = Some(backup),
             Event::AllServers { all_servers } => self.all_servers = all_servers,
         }

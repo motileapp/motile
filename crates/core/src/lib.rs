@@ -15,6 +15,7 @@ pub mod engaged;
 pub mod ffi;
 pub mod find;
 pub mod follow;
+pub mod gallery;
 pub mod gateway;
 pub mod git;
 pub mod keybindings;

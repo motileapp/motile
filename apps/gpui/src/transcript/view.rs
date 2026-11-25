@@ -536,6 +536,10 @@ impl TranscriptView {
             if !row_in_sight {
                 list.scroll_to(ListOffset { item_ix: item, offset_in_item: px(0.) });
                 list.scroll_by(px(-(cover + (viewport - cover - self.bottom_inset) * 0.4)));
+                // Rows above that were never measured count as no height, which lands past them.
+                if list.logical_scroll_top().item_ix > item {
+                    list.scroll_to(ListOffset { item_ix: item, offset_in_item: px(0.) });
+                }
                 crate::ui::rich_text::forget_current_match();
                 self.revealing = Some(reveal);
                 cx.notify();
@@ -544,8 +548,10 @@ impl TranscriptView {
             }
         }
         let Some(row) = row else {
-            self.revealing = Some(reveal);
-            cx.on_next_frame(window, |this, window, cx| this.advance_reveal(window, cx));
+            if reveal.frames < REVEAL_FRAMES {
+                self.revealing = Some(reveal);
+                cx.on_next_frame(window, |this, window, cx| this.advance_reveal(window, cx));
+            }
             return;
         };
         let painted = reveal.range.and_then(|_| crate::ui::rich_text::painted_current_match());

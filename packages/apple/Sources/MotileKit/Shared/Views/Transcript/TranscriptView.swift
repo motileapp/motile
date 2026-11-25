@@ -1065,7 +1065,9 @@ final class TranscriptView: FlippedView, RowOwner {
         guard top < shownTop || bottom > shownBottom else { return updateJumpButton() }
         let y = max(0, min(endY, (top + bottom) / 2 - covered - visible / 2))
         scroll(to: y)
-        updateVisible(anchor: viewportAnchor(), follows: false)
+        // The rows that came into sight are measured now, and those above the row may change height:
+        // the row stays where it was put.
+        updateVisible(anchor: Anchor(id: rowID, delta: y - view.frame.minY), follows: false)
     }
 
     // MARK: RowOwner

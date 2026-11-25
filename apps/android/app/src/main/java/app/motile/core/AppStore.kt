@@ -366,6 +366,8 @@ class AppStore(private val context: Context) {
     /** The agents the open thread's agent has started, in the order it started them. */
     var agents by mutableStateOf(emptyList<AgentInfo>())
         private set
+    /** The open thread's images and videos, the newest first, while its Media tab shows them. */
+    var gallery by mutableStateOf<Gallery?>(null)
     /** The agents each thread showed last, for the list of a thread that isn't open or whose agents haven't come again yet. */
     private val lastAgents = mutableMapOf<String, List<AgentInfo>>()
     /** The drafts whose first message is on its way, until the client has the thread it started. */
@@ -663,6 +665,7 @@ class AppStore(private val context: Context) {
             }
             "found" -> return takeFound(event)
             "reveal" -> return takeReveal(event)
+            "gallery" -> return takeGallery(event)
             "rows" -> {
                 val threadID = event.string("thread_id")
                 val reset = event.bool("reset")

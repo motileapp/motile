@@ -49,7 +49,7 @@ struct MediaViewer: View {
     /// `bar` is the height of the window's top bar, which the name and the buttons are drawn in.
     private func viewer(bar: CGFloat) -> some View {
         let item = viewing.item
-        let count = file == nil ? 1 : markable ? 4 : 3
+        let count = (file == nil ? 1 : markable ? 4 : 3) + (item.shownIn == nil ? 0 : 1)
         return ZStack {
             ViewerCoverView()
                 .ignoresSafeArea()
@@ -106,6 +106,9 @@ struct MediaViewer: View {
                             roundButton(.download, help: help("Save As", "viewer.save"), margin: .sharing(Self.buttonGap, at: first + 1, of: count)) {
                                 MediaFiles.save(file, named: item.name)
                             }
+                        }
+                        if let shownIn = item.shownIn {
+                            moreMenu(item, shownIn: shownIn, margin: .sharing(Self.buttonGap, at: count - 2, of: count))
                         }
                         roundButton(.x, help: help("Close", "viewer.close"), margin: .sharing(Self.buttonGap, at: count - 1, of: count)) { store.closeViewer() }
                     }
@@ -324,10 +327,10 @@ struct MediaViewer: View {
     /// How far past its top and bottom a zoomed-in picture scrolls: clear of the buttons over it,
     /// and as far again from them.
     private static let edgeRoom = 2 * cornerInset + ControlSize.large.height
-    /// The room on each side of the name: what all four corner buttons take and a gap, the same
+    /// The room on each side of the name: what all five corner buttons take and a gap, the same
     /// on both sides so the name stays centered and doesn't move when the buttons come in.
     private static var nameInset: CGFloat {
-        cornerInset + 4 * ControlSize.large.height + 3 * buttonGap + cornerInset
+        cornerInset + 5 * ControlSize.large.height + 4 * buttonGap + cornerInset
     }
 
     /// The room around a picture being marked up, which keeps it clear of the bar under it.
@@ -367,6 +370,17 @@ struct MediaViewer: View {
             },
             MenuAction(title: MediaFiles.saveTitle, symbol: .download) { MediaFiles.save(file, named: item.name) },
         ]
+    }
+
+    /// What else can be done with an image or a video of the open thread.
+    private func moreMenu(_ item: ViewedMedia, shownIn: ShownIn, margin: EdgeInsets) -> some View {
+        var items = [MenuItem("Show in Chat", symbol: .messageSquareText) { store.showInChat(shownIn) }]
+        if case .media(let id) = item.source {
+            items.append(MenuItem("Add to Message", symbol: .paperclip) { store.addToMessage(id, name: item.name) })
+        }
+        return EndMenu(
+            icon: .ellipsis, help: "More", variant: .overlay, size: .large, symbolSize: ControlSize.large.smallSymbol, round: true,
+            margin: margin, items: items)
     }
 
     private func roundButton(_ symbol: Symbol, help: String, margin: EdgeInsets = EdgeInsets(), action: @escaping () -> Void) -> some View {

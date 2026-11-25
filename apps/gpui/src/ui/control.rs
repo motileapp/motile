@@ -1207,6 +1207,8 @@ pub struct ActionMenu {
     margin: Edges<f32>,
     /// It opens over its button, its right edge on the button's, as the composer's do.
     up: bool,
+    /// It opens under its button, its right edge on the button's.
+    end: bool,
 }
 
 impl ActionMenu {
@@ -1224,6 +1226,7 @@ impl ActionMenu {
             shortcut: None,
             margin: Edges::default(),
             up: false,
+            end: false,
         }
     }
 
@@ -1240,6 +1243,7 @@ impl ActionMenu {
             shortcut: None,
             margin: Edges::default(),
             up: false,
+            end: false,
         }
     }
 
@@ -1262,6 +1266,13 @@ impl ActionMenu {
         self
     }
 
+    /// Opens the menu under the button with its right edge on the button's, for a button at the
+    /// right of what it lies in.
+    pub fn end(mut self) -> Self {
+        self.end = true;
+        self
+    }
+
     /// Makes the button the one the command's keys press.
     pub fn shortcut(mut self, command: &'static str) -> Self {
         self.shortcut = Some(command);
@@ -1280,7 +1291,7 @@ impl RenderOnce for ActionMenu {
         let opens = self.anchor.clone();
         let build = self.build;
         let fills = self.button.label.fills;
-        let (margin, up) = (self.margin, self.up);
+        let (margin, up, end) = (self.margin, self.up, self.end);
         let _ = window;
         div()
             .relative()
@@ -1301,9 +1312,10 @@ impl RenderOnce for ActionMenu {
                 if menu.is_empty() {
                     return;
                 }
-                match up {
-                    true => menu.show_over_right(&opens, 4., opened, window, cx),
-                    false => menu.show_under(&opens, 4., opened, window, cx),
+                match (up, end) {
+                    (true, _) => menu.show_over_right(&opens, 4., opened, window, cx),
+                    (false, true) => menu.show_under_right(&opens, 4., opened, window, cx),
+                    (false, false) => menu.show_under(&opens, 4., opened, window, cx),
                 }
             }))
     }

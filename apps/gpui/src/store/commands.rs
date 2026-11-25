@@ -285,11 +285,15 @@ impl Store {
                 }
                 self.show_diff(None, None);
             }
-            "rightPanel.files" | "rightPanel.agents" => {
+            "rightPanel.files" | "rightPanel.agents" | "rightPanel.media" => {
                 if self.panel_unavailable().is_some() {
                     return false;
                 }
-                self.open_tab(if command == "rightPanel.files" { PanelTab::Files } else { PanelTab::Agents });
+                self.open_tab(match command {
+                    "rightPanel.files" => PanelTab::Files,
+                    "rightPanel.agents" => PanelTab::Agents,
+                    _ => PanelTab::Media,
+                });
             }
             "rightPanel.pullRequest" | "rightPanel.pullRequests" => {
                 let all = command == "rightPanel.pullRequests";

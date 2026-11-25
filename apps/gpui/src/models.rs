@@ -989,6 +989,7 @@ impl Attachment {
                 attachment: Some(self.id.clone()),
                 opens_at: None,
                 pixels: None,
+                shown_in: None,
             });
         }
         self.media.as_ref().map(|media| ViewedMedia {
@@ -998,6 +999,7 @@ impl Attachment {
             attachment: Some(self.id.clone()),
             opens_at: None,
             pixels: None,
+            shown_in: None,
         })
     }
 }
@@ -1022,6 +1024,15 @@ pub struct ViewedMedia {
     /// Its picture's size in pixels as the core knows it, which the viewer opens it at before its
     /// file is here.
     pub pixels: Option<(u32, u32)>,
+    /// The row of the open thread it is shown in, for the viewer to offer Show in Chat.
+    pub shown_in: Option<ShownIn>,
+}
+
+/// Where in the open thread an image or a video is shown: the row, and that row's item.
+#[derive(Clone, PartialEq, Debug)]
+pub struct ShownIn {
+    pub item: String,
+    pub row: String,
 }
 
 /// What the viewer has open: the images and videos of one message or of the composer, and

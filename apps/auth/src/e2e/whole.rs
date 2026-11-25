@@ -139,6 +139,7 @@ impl Client {
             | Event::MediaProgress { .. }
             | Event::CodeSpans { .. }
             | Event::Agents { .. }
+            | Event::Gallery { .. }
             | Event::AgentRows { .. }
             | Event::UiPatch { .. }
             | Event::UiConfirm { .. }

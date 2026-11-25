@@ -422,6 +422,8 @@ final class AppStore {
     private(set) var transcriptIsEmpty = true
     /// The agents the open thread's agent has started, in the order it started them.
     private(set) var agents: [AgentInfo] = []
+    /// The open thread's images and videos, the newest first, while its Media tab shows them.
+    var gallery: Gallery?
     /// The agents each thread showed last, for the lists kept of threads that aren't open.
     @ObservationIgnored private var lastAgents: [String: [AgentInfo]] = [:]
     /// The drafts whose first message is on its way, until the client has the thread it started.
@@ -735,6 +737,8 @@ final class AppStore {
             return takeFound(event)
         case "reveal":
             return takeReveal(event)
+        case "gallery":
+            return takeGallery(event)
         case "agents":
             let threadID = event.string("thread_id")
             let agents = event.objects("agents").map { AgentInfo(json: $0) }

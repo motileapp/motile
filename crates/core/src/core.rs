@@ -39,6 +39,7 @@ use crate::connection::{NOT_CONNECTED, ServerAddr, bind, leave_relays, offline};
 use crate::engaged::{self, Engagement};
 use crate::find::{self, Find};
 use crate::follow::{self, Followed};
+use crate::gallery::{self, Shown};
 use crate::gateway::{self, GatewayEvent, GatewayLink};
 use crate::git;
 use crate::keybindings::Keybindings;
@@ -357,6 +358,8 @@ struct OpenThread {
     left: Option<Instant>,
     /// What the client finds in it, while it does.
     find: Option<Find>,
+    /// Its images and videos, while the client shows them.
+    gallery: Option<Vec<Shown>>,
 }
 
 /// A place the client left a transcript at, with the item of its row, which the transcript loads
@@ -2733,6 +2736,9 @@ impl Core {
             }
             true
         });
+        let gallery_grew = self.open.get(thread_id).and_then(|open| open.gallery.as_ref()).is_some_and(|shown| {
+            splice.rows.iter().any(|row| gallery::shows_media(row) && !shown.iter().any(|shown| shown.row == row.id))
+        });
         let place = self.places.get(&(thread_id.to_string(), None)).filter(|_| reset);
         self.emit(Event::Rows {
             thread_id: thread_id.to_string(),
@@ -2746,6 +2752,30 @@ impl Core {
         if finds {
             self.emit_found(thread_id);
         }
+        if gallery_grew {
+            self.emit_gallery(thread_id, false);
+        }
+    }
+
+    /// Sends the thread's images and videos, those in the cache and those only in the transcript
+    /// yet, unless they are what was sent before.
+    fn emit_gallery(&mut self, thread_id: &str, always: bool) {
+        let Some(open) = self.open.get(thread_id) else { return };
+        let mut items = self.cache.items_with_media(thread_id);
+        for item in open.transcript.items().iter().filter(|item| !item.media.is_empty()) {
+            match items.iter().position(|cached| cached.id == item.id) {
+                Some(index) => items[index] = item.clone(),
+                None => items.push(item.clone()),
+            }
+        }
+        items.sort_by_key(|item| item.seq);
+        let media = gallery::gallery(&items, open.transcript.cwd());
+        let Some(open) = self.open.get_mut(thread_id) else { return };
+        if !always && open.gallery.as_ref().is_none_or(|shown| *shown == media) {
+            return;
+        }
+        open.gallery = Some(media.clone());
+        self.emit(Event::Gallery { thread_id: thread_id.to_string(), media });
     }
 
     fn hide_changes(&mut self, hidden: bool) {
@@ -2806,7 +2836,7 @@ impl Core {
         let Some(find) = self.open.get(thread_id).and_then(|open| open.find.as_ref()) else { return };
         let item = find.item.clone().filter(|_| find.ready && find.current_index().is_none());
         if let Some(item) = item {
-            self.reveal_item(thread_id, &item);
+            self.reveal_item(thread_id, &item, None);
         } else if moved {
             self.reveal_found(thread_id);
         }
@@ -2852,10 +2882,13 @@ impl Core {
         });
     }
 
-    fn reveal_item(&mut self, thread_id: &str, item_id: &str) {
-        let Some(item) = self.cache.item(thread_id, item_id) else { return };
+    /// Brings the row into sight, or without one the item's first.
+    fn reveal_item(&mut self, thread_id: &str, item_id: &str, row_id: Option<String>) {
         let Some(open) = self.open.get(thread_id) else { return };
-        let row_id = crate::render::rows::rendered(&item, open.transcript.cwd()).first().map(|row| row.id.clone());
+        let item = open.transcript.item(item_id).cloned().or_else(|| self.cache.item(thread_id, item_id));
+        let Some(item) = item else { return };
+        let row_id = row_id
+            .or_else(|| crate::render::rows::rendered(&item, open.transcript.cwd()).first().map(|row| row.id.clone()));
         let Some(row_id) = row_id else { return };
         self.show_row(thread_id, item.seq, &row_id);
         self.emit(Event::Reveal { thread_id: thread_id.to_string(), row_id, range: None });
@@ -4502,6 +4535,19 @@ impl Core {
                 self.keep_place(thread_id, agent_id, at);
                 self.reply(id, Ok(json!({})));
             }
+            Command::WatchGallery { thread_id, watch } => {
+                if let Some(open) = self.open.get_mut(&thread_id) {
+                    open.gallery = watch.then(Vec::new);
+                }
+                if watch {
+                    self.emit_gallery(&thread_id, true);
+                }
+                self.reply(id, Ok(json!({})));
+            }
+            Command::RevealRow { thread_id, item_id, row_id } => {
+                self.reveal_item(&thread_id, &item_id, Some(row_id));
+                self.reply(id, Ok(json!({})));
+            }
             Command::LoadEarlier { thread_id, all } => {
                 self.load_earlier(&thread_id);
                 while all && self.open.get(&thread_id).is_some_and(|open| open.earlier) {
@@ -4738,6 +4784,7 @@ impl Core {
             ui_timers: UiTimers::default(),
             left: None,
             find: None,
+            gallery: None,
         };
         self.open.insert(thread_id.to_string(), open);
         if let Some(activity) = activity {
@@ -4828,6 +4875,7 @@ fn transcript_of(event: &Event) -> Option<&str> {
         | Event::Reveal { thread_id, .. }
         | Event::Live { thread_id, .. }
         | Event::Agents { thread_id, .. }
+        | Event::Gallery { thread_id, .. }
         | Event::AgentRows { thread_id, .. }
         | Event::Spans { thread_id, .. }
         | Event::UiPatch { thread_id, .. }
