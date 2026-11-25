@@ -1,24 +1,27 @@
 //! Playing a video in the window: AVFoundation decodes it and plays its sound, and each frame
 //! it hands over is drawn as a surface, under controls as the system's player floats them: the
 //! sound and its volume, ten seconds back and on, play and pause, filling the screen, and a bar
-//! to scrub along. The controls go once the pointer rests on a playing video.
+//! to scrub along. The controls go once the pointer rests on a playing video. A video filmed
+//! turned, as a phone's upright one is, plays turned back.
 
 use std::cell::Cell;
 use std::path::Path;
 use std::ptr::NonNull;
 use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use block2::RcBlock;
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2::{AnyThread, MainThreadMarker};
-use objc2_av_foundation::{AVPlayer, AVPlayerItem, AVPlayerItemOutput, AVPlayerItemVideoOutput};
+use objc2_av_foundation::{AVPlayer, AVPlayerItem, AVPlayerItemOutput, AVPlayerItemVideoOutput, AVVideoComposition};
 use objc2_core_foundation::CFRetained;
 use objc2_core_media::{CMTime, kCMTimeZero};
-use objc2_core_video::CVPixelBuffer;
-use objc2_foundation::{NSDictionary, NSNumber, NSString, NSURL};
+use objc2_core_video::{CVPixelBuffer, CVPixelBufferGetHeight, CVPixelBufferGetWidth};
+use objc2_foundation::{NSDictionary, NSError, NSNumber, NSString, NSURL};
 
 use crate::theme::{IconSize, Radius, TextSize, colors};
 use crate::ui::icons;
@@ -27,6 +30,13 @@ use crate::ui::icons;
 const CONTROLS_STAY: Duration = Duration::from_secs(3);
 /// How far the buttons that skip go.
 const SKIP: f64 = 10.;
+
+/// What turns the frames as the video was filmed, made off the main thread. `None` when it couldn't
+/// be made, and the frames are shown as they are.
+struct Turning(Option<Retained<AVVideoComposition>>);
+
+// It is only read once made, on the main thread.
+unsafe impl Send for Turning {}
 
 /// What the pointer drags along: the time or the volume.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -40,6 +50,9 @@ pub struct VideoPlayer {
     item: Retained<AVPlayerItem>,
     output: Retained<AVPlayerItemVideoOutput>,
     frame: Option<CFRetained<CVPixelBuffer>>,
+    /// Holds what turns the frames once it is made, until the item takes it.
+    turning: Arc<Mutex<Option<Turning>>>,
+    turned: bool,
     playing: bool,
     /// Where the video is and how long it is, in seconds.
     position: f64,
@@ -79,8 +92,14 @@ impl VideoPlayer {
             AVPlayerItemVideoOutput::initWithPixelBufferAttributes(AVPlayerItemVideoOutput::alloc(), Some(&attributes))
         };
         unsafe { item.addOutput(&output as &AVPlayerItemOutput) };
+        let turning = Arc::new(Mutex::new(None));
+        let made = turning.clone();
+        let handler = RcBlock::new(move |composition: *mut AVVideoComposition, _: *mut NSError| {
+            let composition = unsafe { Retained::retain(composition) };
+            *made.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Turning(composition));
+        });
+        unsafe { AVVideoComposition::videoCompositionWithPropertiesOfAsset_completionHandler(&item.asset(), &handler) };
         let player = unsafe { AVPlayer::playerWithPlayerItem(Some(&item), main) };
-        unsafe { player.play() };
         let (volume, muted) = unsafe { (player.volume(), player.isMuted()) };
         // Frames are taken as the display would show them.
         let frames = cx.spawn(async move |this, cx| {
@@ -96,6 +115,8 @@ impl VideoPlayer {
             item,
             output,
             frame: None,
+            turning,
+            turned: false,
             playing: true,
             position: 0.,
             length: 0.,
@@ -113,6 +134,9 @@ impl VideoPlayer {
     }
 
     fn take_frame(&mut self, cx: &mut Context<Self>) {
+        if !self.turned && !self.turn() {
+            return;
+        }
         let time = unsafe { self.item.currentTime() };
         let position = unsafe { time.seconds() };
         let length = unsafe { self.item.duration().seconds() };
@@ -142,6 +166,22 @@ impl VideoPlayer {
         }
     }
 
+    /// Gives the item what turns its frames once it is made, and starts playing then, so that no
+    /// frame is ever shown unturned. Whether it has.
+    fn turn(&mut self) -> bool {
+        let Some(Turning(composition)) = self.turning.lock().ok().and_then(|mut turning| turning.take()) else {
+            return false;
+        };
+        unsafe {
+            self.item.setVideoComposition(composition.as_deref());
+            if self.playing {
+                self.player.play();
+            }
+        }
+        self.turned = true;
+        true
+    }
+
     /// The controls show while the video waits, while they are used, and a while after the
     /// pointer moved over it.
     fn wants_controls(&self) -> bool {
@@ -163,9 +203,11 @@ impl VideoPlayer {
         cx.notify();
     }
 
-    /// Whether its first frame is there to show.
-    pub fn ready(&self) -> bool {
-        self.frame.is_some()
+    /// The size of its frames in pixels, once the first is there to show.
+    pub fn frame_size(&self) -> Option<Size<f32>> {
+        let frame = self.frame.as_ref()?;
+        let (width, height) = (CVPixelBufferGetWidth(frame), CVPixelBufferGetHeight(frame));
+        (width > 0 && height > 0).then(|| size(width as f32, height as f32))
     }
 
     pub fn full_screen(&self) -> bool {

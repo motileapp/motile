@@ -616,7 +616,7 @@ impl Render for MediaViewer {
         let content: AnyElement = if let Some(image) = self.image.clone() {
             div().absolute().inset_0().child(image).into_any_element()
         } else {
-            match self.video(full_screen, cx) {
+            match self.video(viewport, full_screen, cx) {
                 Some(video) => video,
                 None => self.status(&item, progress, self.failed, cx).into_any_element(),
             }
@@ -790,54 +790,56 @@ impl Render for MediaViewer {
 }
 
 impl MediaViewer {
-    /// The video in its place, with a spinner until its first frame is there, or filling the
-    /// window while it is full screen.
+    /// The video in its place, as large as it fits, or filling the window while it is full screen.
+    /// Before its first frame it is a spinner, and the darkness around it closes the viewer.
     #[cfg(target_os = "macos")]
-    fn video(&self, full_screen: bool, cx: &mut Context<Self>) -> Option<AnyElement> {
+    fn video(&self, viewport: Size<Pixels>, full_screen: bool, cx: &mut Context<Self>) -> Option<AnyElement> {
         let player = self.player.clone()?;
         let menu = cx.entity().downgrade();
-        let ready = player.read(cx).ready();
-        let c = colors(cx);
+        let Some(frame) = player.read(cx).frame_size() else {
+            return Some(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .text_color(colors(cx).muted_foreground_over_picture)
+                    .child(Spinner::new(ControlSize::Large.symbol()).render(cx))
+                    .into_any_element(),
+            );
+        };
+        let shown = fitted(frame, viewport);
         Some(
             div()
                 .absolute()
-                .when(full_screen, |video| video.inset_0())
-                .when(!full_screen, |video| {
-                    video
-                        .left(px(MARGIN.0))
-                        .right(px(MARGIN.0))
-                        .top(px(MARGIN.1))
-                        .bottom(px(MARGIN.1))
-                        .rounded(px(crate::theme::Radius::MD))
-                        .overflow_hidden()
-                })
-                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                .when(!full_screen, |video| {
-                    video.on_mouse_down(MouseButton::Right, move |event, window, cx| {
-                        let Ok(menu) = menu.update(cx, |viewer, cx| viewer.menu(cx)) else { return };
-                        cx.stop_propagation();
-                        menu.show(event.position, window, cx);
-                    })
-                })
-                .child(player)
-                .when(!ready, |video| {
-                    video.child(
-                        div()
-                            .absolute()
-                            .inset_0()
-                            .flex()
-                            .items_center()
-                            .justify_center()
-                            .text_color(c.muted_foreground_over_picture)
-                            .child(Spinner::new(ControlSize::Large.symbol()).render(cx)),
-                    )
-                })
+                .inset_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .child(
+                    div()
+                        .relative()
+                        .when(full_screen, |video| video.size_full())
+                        .when(!full_screen, |video| {
+                            video.w(shown.width).h(shown.height).rounded(px(crate::theme::Radius::MD)).overflow_hidden()
+                        })
+                        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                        .when(!full_screen, |video| {
+                            video.on_mouse_down(MouseButton::Right, move |event, window, cx| {
+                                let Ok(menu) = menu.update(cx, |viewer, cx| viewer.menu(cx)) else { return };
+                                cx.stop_propagation();
+                                menu.show(event.position, window, cx);
+                            })
+                        })
+                        .child(player),
+                )
                 .into_any_element(),
         )
     }
 
     #[cfg(not(target_os = "macos"))]
-    fn video(&self, _: bool, _: &mut Context<Self>) -> Option<AnyElement> {
+    fn video(&self, _: Size<Pixels>, _: bool, _: &mut Context<Self>) -> Option<AnyElement> {
         None
     }
 }
@@ -1039,6 +1041,13 @@ impl MediaViewer {
     }
 }
 
+/// The size a video of `frame` is shown at: as large as fits the viewport inside the margin.
+fn fitted(frame: Size<f32>, viewport: Size<Pixels>) -> Size<Pixels> {
+    let room = (f32::from(viewport.width) - 2. * MARGIN.0, f32::from(viewport.height) - 2. * MARGIN.1);
+    let scale = (room.0 / frame.width).min(room.1 / frame.height).max(0.);
+    size(px(frame.width * scale), px(frame.height * scale))
+}
+
 fn bar_divider(cx: &App) -> Div {
     div().flex_none().mx(px(4.)).w(px(1.)).h(px(BAR_SIZE.height() * 0.6)).bg(colors(cx).border_popover)
 }
@@ -1050,4 +1059,18 @@ fn capitalized(word: &str) -> String {
 
 fn copy_title(video: bool) -> &'static str {
     if video { "Copy Video" } else { "Copy Image" }
+}
+
+#[cfg(test)]
+mod tests {
+    use gpui_kit::{px, size};
+
+    use super::fitted;
+
+    #[test]
+    fn a_video_fits_the_room_inside_the_margin() {
+        let viewport = size(px(1128.), px(704.));
+        assert_eq!(fitted(size(900., 1600.), viewport), size(px(337.5), px(600.)));
+        assert_eq!(fitted(size(1600., 900.), viewport), size(px(1000.), px(562.5)));
+    }
 }
