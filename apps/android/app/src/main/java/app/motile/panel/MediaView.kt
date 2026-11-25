@@ -3,6 +3,9 @@ package app.motile.panel
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -24,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
@@ -40,8 +44,11 @@ import app.motile.core.watchGallery
 import app.motile.platform.Symbol
 import app.motile.theme.ControlSize
 import app.motile.theme.IconSize
+import app.motile.theme.LocalDark
 import app.motile.theme.LocalPalette
+import app.motile.theme.Opacity
 import app.motile.theme.TextSize
+import app.motile.theme.value
 import app.motile.transcript.PictureCache
 import app.motile.transcript.mediaFile
 import app.motile.ui.ContextMenuArea
@@ -118,7 +125,10 @@ private fun MediaGrid(gallery: Gallery) {
     }
 }
 
-/** One image or video, cropped to a square, its picture decoded off the main thread at the square's size. */
+/**
+ * One image or video, cropped to a square, its picture decoded off the main thread at the square's size
+ * and at opacity lit while pressed or under the pointer.
+ */
 @Composable
 private fun MediaSquare(media: GalleryMedia, side: Dp, open: () -> Unit) {
     val store = LocalStore.current
@@ -135,6 +145,10 @@ private fun MediaSquare(media: GalleryMedia, side: Dp, open: () -> Unit) {
         if (decoded != null) picture = decoded
         failed = picture == null
     }
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val hovering by interaction.collectIsHoveredAsState()
+    val lit = Opacity.Lit.value(LocalDark.current)
     ContextMenuArea(
         items = {
             item("Show in Chat", Symbol.MessageSquareText) { store.showInChat(media.shownIn) }
@@ -142,11 +156,12 @@ private fun MediaSquare(media: GalleryMedia, side: Dp, open: () -> Unit) {
         },
         modifier = Modifier.aspectRatio(1f).semantics { contentDescription = media.name },
         onClick = open,
+        interaction = interaction,
     ) {
         Box(Modifier.fillMaxSize().padding(MediaGrid.gap / 2).background(palette.backgroundSecondary), contentAlignment = Alignment.Center) {
             val shown = picture
             if (shown != null) {
-                Image(shown, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                Image(shown, null, Modifier.fillMaxSize().alpha(if (pressed || hovering) lit else 1f), contentScale = ContentScale.Crop)
                 if (media.video) PlayMark()
             } else if (media.picture == null || failed) {
                 Icon(if (media.video) Symbol.Play else Symbol.Image, IconSize.Lg, color = palette.mutedForeground)

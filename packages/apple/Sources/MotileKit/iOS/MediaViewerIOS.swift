@@ -433,6 +433,8 @@ private struct MediaPage: View {
             }
             .font(.ui(.sm))
             .foregroundStyle(Color.themeMutedForegroundOverPicture)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 48)
             .tappable(tapped)
         }
     }

@@ -13,7 +13,7 @@ use super::view::RightPanelView;
 use crate::media::pictures::{Picture, Pictures};
 use crate::store::Store;
 use crate::store::gallery::{self, Gallery};
-use crate::theme::{IconSize, TextSize, colors};
+use crate::theme::{IconSize, Opacity, TextSize, colors};
 use crate::ui::menu::Menu;
 use crate::ui::{ActionButton, icons};
 
@@ -124,7 +124,9 @@ impl Render for MediaView {
     }
 }
 
-/// One image or video, cropped to a square. The gap around it is only drawn: the square takes
+const SQUARE: &str = "gallery-square";
+
+/// One image or video, cropped to a square, its picture at opacity lit under the pointer. The gap around it is only drawn: the square takes
 /// clicks up to its neighbours'.
 fn square(
     store: &Entity<Store>,
@@ -159,8 +161,10 @@ fn square(
     let play = open.clone();
     let (menu_store, shown_in, menu_media, name) =
         (store.clone(), gallery::shown_in(shown), shown.media.clone(), shown.name.clone());
+    let lit = c.opacity(Opacity::Lit);
     div()
         .id(("gallery-square", index))
+        .group(SQUARE)
         .flex_none()
         .size(px(side))
         .p(px(GAP / 2.))
@@ -176,7 +180,13 @@ fn square(
                 .justify_center()
                 .when_some(image.clone(), |square, image| {
                     square.child(
-                        img(ImageSource::Render(image)).absolute().inset_0().size_full().object_fit(ObjectFit::Cover),
+                        div()
+                            .id(("gallery-picture", index))
+                            .absolute()
+                            .inset_0()
+                            .group_hover(SQUARE, move |picture| picture.opacity(lit))
+                            .group_active(SQUARE, move |picture| picture.opacity(lit))
+                            .child(img(ImageSource::Render(image)).size_full().object_fit(ObjectFit::Cover)),
                     )
                 })
                 .when(missing, |square| {

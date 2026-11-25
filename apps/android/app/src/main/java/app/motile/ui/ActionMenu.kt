@@ -3,6 +3,8 @@ package app.motile.ui
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -337,19 +339,24 @@ fun Menu(
     }
 }
 
-/** A view that opens a menu where it is held, as iOS's context menus do, and runs `onClick` when it is tapped. */
+/**
+ * A view that opens a menu where it is held, as iOS's context menus do, and runs `onClick` when it is
+ * tapped. Its presses and the pointer over it are told to `interaction`.
+ */
 @Composable
 fun ContextMenuArea(
     items: MenuBuilder.() -> Unit,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
+    interaction: MutableInteractionSource? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val menu = rememberMenuState()
     Box(
         modifier
             .pressPosition(menu)
-            .combinedClickable(interactionSource = null, indication = null, onLongClick = { menu.openAtPress() }, onClick = { onClick?.invoke() }),
+            .then(interaction?.let { Modifier.pressesAtOnce(it).hoverable(it) } ?: Modifier)
+            .combinedClickable(interactionSource = interaction, indication = null, onLongClick = { menu.openAtPress() }, onClick = { onClick?.invoke() }),
     ) {
         content()
         MenuPopup(menu, items)

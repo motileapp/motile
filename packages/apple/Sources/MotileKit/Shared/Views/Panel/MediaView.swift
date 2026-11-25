@@ -85,6 +85,7 @@ private struct MediaSquare: View {
     let open: () -> Void
     @State private var image: CGImage?
     @State private var failed = false
+    @State private var hovering = false
 
     var body: some View {
         let shown = side - Self.gap
@@ -101,6 +102,12 @@ private struct MediaSquare: View {
                 Image(media.video ? .play : .image, size: .lg)
                     .foregroundStyle(Color.themeMutedForeground)
             }
+        }
+        .frame(width: shown, height: shown)
+        .clipped()
+        .frame(width: side, height: side)
+        .button(PictureButtonStyle(hovering: hovering), action: open)
+        .overlay {
             if media.video, image != nil {
                 // As a reply's video shows it.
                 let size = ControlSize.large
@@ -109,13 +116,10 @@ private struct MediaSquare: View {
                     .frame(width: size.height, height: size.height)
                     .background(Circle().fill(Color.themeOverlayButton))
                     .overlay(Circle().strokeBorder(Color.themeBorderOverlayButton))
+                    .allowsHitTesting(false)
             }
         }
-        .frame(width: shown, height: shown)
-        .clipped()
-        .frame(width: side, height: side)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: open)
+        .onHover { hovering = $0 }
         .contextMenu {
             MenuItem("Show in Chat", symbol: .messageSquareText) { store.showInChat(media.shownIn) }
             MenuItem("Add to Message", symbol: .paperclip) { store.addToMessage(media.media, name: media.name) }
@@ -124,6 +128,7 @@ private struct MediaSquare: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(media.name)
         .accessibilityAddTraits(.isButton)
+        .accessibilityAction { open() }
         .task(id: decodedPixels) { load() }
     }
 
@@ -152,5 +157,16 @@ private struct MediaSquare: View {
                 failed = decoded == nil
             }
         }
+    }
+}
+
+/// The square's picture at opacity lit under the pointer and under a finger; the play mark over it stays.
+private struct PictureButtonStyle: ButtonStyle {
+    let hovering: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .contentShape(Rectangle())
+            .opacity(.lit, when: hovering || configuration.isPressed)
     }
 }
