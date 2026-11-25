@@ -41,7 +41,7 @@ pub fn panel_message(text: impl Into<SharedString>, failed: bool, cx: &App) -> A
     let text: SharedString = text.into();
     div()
         .size_full()
-        .p(px(24.))
+        .p(px(super::EMPTY_PADDING))
         .flex()
         .items_center()
         .justify_center()
@@ -686,7 +686,7 @@ impl PullRequestView {
         let this = cx.entity().downgrade();
         div()
             .size_full()
-            .p(px(24.))
+            .p(px(super::EMPTY_PADDING))
             .flex()
             .flex_col()
             .items_center()

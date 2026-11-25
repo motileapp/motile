@@ -74,6 +74,9 @@ struct PanelLine: View {
     }
 }
 
+/// How far what a tab shows when it has nothing to show keeps from the panel's edges.
+let panelEmptyPadding: CGFloat = 48
+
 /// What a tab says in the middle of the panel when it has nothing to show.
 struct PanelMessage: View {
     let text: String
@@ -85,7 +88,7 @@ struct PanelMessage: View {
             .foregroundStyle(failed ? Color.themeDestructive : Color.themeMutedForeground)
             .multilineTextAlignment(.center)
             .textSelection(.enabled)
-            .padding(24)
+            .padding(panelEmptyPadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
@@ -108,7 +111,7 @@ private struct NoRepositoryMessage: View {
                 }
             }
         }
-        .padding(24)
+        .padding(panelEmptyPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

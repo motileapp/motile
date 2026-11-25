@@ -83,7 +83,7 @@ fun LinearSurface(target: PanelTarget) {
 private fun LinearConnect(target: PanelTarget) {
     val linear = LocalStore.current.linear
     val palette = LocalPalette.current
-    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().padding(panelEmptyPadding), contentAlignment = Alignment.Center) {
         Column(Modifier.widthIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Symbol.Linear, IconSize.Display, color = palette.foreground)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {

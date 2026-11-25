@@ -509,7 +509,7 @@ impl RicracView {
             .flex()
             .items_center()
             .justify_center()
-            .p(px(24.))
+            .p(px(super::EMPTY_PADDING))
             .child(
                 div()
                     .max_w(px(320.))

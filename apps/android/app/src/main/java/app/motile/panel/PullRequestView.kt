@@ -158,7 +158,7 @@ private fun NoPullRequest(target: PanelTarget) {
     val palette = LocalPalette.current
     var linking by rememberSaveable(target.key) { mutableStateOf("") }
     Column(
-        Modifier.fillMaxSize().padding(24.dp),
+        Modifier.fillMaxSize().padding(panelEmptyPadding),
         verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
