@@ -3,8 +3,8 @@ import SwiftUI
 /// A symbol's menu for a button at the right of what it lies in: it opens under the button with its
 /// right edge on the button's, where SwiftUI's Mac menus open from the button's left edge.
 struct EndMenu: View {
-    /// AppKit opens a menu 4 points higher than it is asked to, so this leaves 4 between them.
-    private static let gap: CGFloat = 8
+    /// AppKit opens a menu 4 points higher than it is asked to, so this leaves 8 between them.
+    private static let gap: CGFloat = 12
 
     let icon: Symbol
     let help: String

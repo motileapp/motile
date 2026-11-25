@@ -51,7 +51,7 @@ private struct LinearConnect: View {
             }
         }
         .frame(maxWidth: 320)
-        .padding(24)
+        .padding(panelEmptyPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

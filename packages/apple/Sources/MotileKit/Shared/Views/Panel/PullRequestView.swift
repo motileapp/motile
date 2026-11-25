@@ -126,7 +126,7 @@ private struct NoPullRequest: View {
                 .frame(maxWidth: 300)
             }
         }
-        .padding(24)
+        .padding(panelEmptyPadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

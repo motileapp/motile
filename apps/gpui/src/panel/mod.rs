@@ -11,6 +11,8 @@ pub mod ricrac;
 pub mod state;
 pub mod view;
 
+/// How far what a tab shows when it has nothing to show keeps from the panel's edges.
+pub const EMPTY_PADDING: f32 = 48.;
 /// The space between the right panel's list rows, split around each: it looks empty but is the
 /// row's.
 pub const ROW_MARGIN: f32 = 1.;

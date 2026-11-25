@@ -106,11 +106,14 @@ fun PanelLine(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(1.dp).background(LocalPalette.current.border))
 }
 
+/** How far what a tab shows when it has nothing to show keeps from the panel's edges. */
+val panelEmptyPadding = 48.dp
+
 /** What a tab says in the middle of the panel when it has nothing to show. */
 @Composable
 fun PanelMessage(text: String, failed: Boolean = false) {
     val palette = LocalPalette.current
-    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().padding(panelEmptyPadding), contentAlignment = Alignment.Center) {
         SelectionContainer {
             Text(text, size = TextSize.Xs, color = if (failed) palette.destructive else palette.mutedForeground, align = TextAlign.Center)
         }
@@ -122,7 +125,7 @@ fun PanelMessage(text: String, failed: Boolean = false) {
 internal fun NoRepositoryMessage(projectID: String) {
     val store = LocalStore.current
     Column(
-        Modifier.fillMaxSize().padding(24.dp),
+        Modifier.fillMaxSize().padding(panelEmptyPadding),
         verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

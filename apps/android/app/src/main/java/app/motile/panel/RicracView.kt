@@ -83,7 +83,7 @@ fun RicracSurface(target: PanelTarget) {
 private fun RicracConnect(target: PanelTarget) {
     val ricrac = LocalStore.current.ricrac
     val palette = LocalPalette.current
-    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().padding(panelEmptyPadding), contentAlignment = Alignment.Center) {
         Column(Modifier.widthIn(max = 320.dp), verticalArrangement = Arrangement.spacedBy(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Symbol.Ricrac, IconSize.Display, color = palette.foreground)
             Column(verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {

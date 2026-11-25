@@ -435,7 +435,7 @@ impl RightPanelView {
         let pending = project.as_ref().is_some_and(|project| store.initializing_git.contains(&project.id));
         div()
             .size_full()
-            .p(px(24.))
+            .p(px(super::EMPTY_PADDING))
             .flex()
             .flex_col()
             .items_center()
@@ -1560,7 +1560,7 @@ impl RightPanelView {
             .flex()
             .items_center()
             .justify_center()
-            .p(px(24.))
+            .p(px(super::EMPTY_PADDING))
             .child(
                 div()
                     .max_w(px(320.))
@@ -1622,7 +1622,7 @@ impl RightPanelView {
             .flex()
             .items_center()
             .justify_center()
-            .p(px(24.))
+            .p(px(super::EMPTY_PADDING))
             .child(
                 div()
                     .max_w(px(320.))
