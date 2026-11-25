@@ -54,6 +54,13 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      # Robolectric fetches Android's jars from Maven Central itself, which fails now and then.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ hashFiles('apps/android/gradle/libs.versions.toml') }}
+          restore-keys: robolectric-
+
       - name: Build the core
         run: MOTILE_ABIS=arm64-v8a,x86_64 scripts/build-core.sh
 
