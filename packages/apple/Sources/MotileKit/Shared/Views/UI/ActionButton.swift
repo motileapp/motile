@@ -582,6 +582,7 @@ struct ActionButton: View {
     /// What a long press, or a right click on the Mac, offers besides what it does.
     private var menuItems: [MenuItem]?
     private let action: () -> Void
+    @Environment(\.isEnabled) private var enabled
 
     init(
         _ title: String, tinted: String? = nil, icon: Symbol? = nil, picture: AnyView? = nil, pictures: AnyView? = nil, detail: Symbol? = nil,
@@ -725,6 +726,7 @@ struct ActionButton: View {
         .menuIndicator(.hidden)
         .buttonStyle(seen)
         .tint(Color.themeForeground)
+        .opacity(.disabled, when: !enabled && !pending)
         .padding(room)
         .background { Color.clear.contentShape(Rectangle()).onTapGesture(perform: action) }
     }
