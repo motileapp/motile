@@ -89,16 +89,6 @@ impl RecycledList {
         f32::from(self.scroll.bounds().size.height)
     }
 
-    /// Where the row's top is in the window.
-    pub fn row_top(&self, layout: &Layout, index: usize) -> f32 {
-        f32::from(self.bounds().origin.y) + layout.tops[index] - self.scroll_top()
-    }
-
-    /// The content's y at the window's `y`.
-    pub fn content_y(&self, y: f32) -> f32 {
-        y - f32::from(self.bounds().origin.y) + self.scroll_top()
-    }
-
     /// Brings the target's row into sight once it is in the list: only into sight clear of the
     /// fades, or to the top clear of the fade. Going to the top, `anchor`, a row above the target
     /// such as its section's line, goes there in its place when both fit. A list only just made is

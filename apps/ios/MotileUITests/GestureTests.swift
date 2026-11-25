@@ -174,34 +174,36 @@ final class GestureTests: XCTestCase {
     /// A hold lifts a row of what a blank tab offers and a move drags it above another, and the
     /// order stays.
     func testAHoldAndAMoveOnARowOfTheBlankTabDragsItAboveAnotherAndTheOrderStays() {
-        app.buttons["Files and changes"].tap()
-        XCTAssertTrue(shown(app.navigationBars.buttons["Back"]))
-        if shown(app.buttons["New tab"]) { app.buttons["New tab"].tap() }
+        openBlankPanel()
         guard let agents = panelButton("Agents"), let files = panelButton("Files") else { return XCTFail("no rows") }
         let (upper, lower) = agents.frame.minY < files.frame.minY ? ("Agents", "Files") : ("Files", "Agents")
         drag(lower, before: upper, along: .vertical)
         XCTAssertTrue(panelOrdered(lower, before: upper, along: .vertical))
-        app.terminate()
-        app.launch()
-        app.buttons["Files and changes"].tap()
+        openBlankPanel()
         XCTAssertTrue(panelOrdered(lower, before: upper, along: .vertical))
     }
 
-    /// A hold lifts a tab of the panel and a move drags it before another.
+    /// A hold lifts a tab of the panel and a move drags it before another. A hold that doesn't
+    /// move still brings up the tab's menu.
     func testAHoldAndAMoveOnAPanelTabDragsItBeforeAnother() {
+        openBlankPanel()
+        panelButton("Agents")?.tap()
+        app.buttons["New tab"].tap()
+        panelButton("Files")?.tap()
+        drag("Files", before: "Agents", along: .horizontal)
+        XCTAssertTrue(panelOrdered("Files", before: "Agents", along: .horizontal))
+        panelButton("Agents")?.press(forDuration: 1.2)
+        XCTAssertTrue(app.buttons["Close Others"].waitForExistence(timeout: 3))
+    }
+
+    /// Launches the client with no tabs kept, and opens the panel on its blank tab.
+    private func openBlankPanel() {
+        app.terminate()
+        app.launchArguments = ["-panel.tabs", "{}"]
+        app.launch()
+        XCTAssertTrue(app.buttons["Threads"].waitForExistence(timeout: 30))
         app.buttons["Files and changes"].tap()
         XCTAssertTrue(shown(app.navigationBars.buttons["Back"]))
-        for title in ["Agents", "Files"] {
-            if shown(app.buttons["New tab"]) { app.buttons["New tab"].tap() }
-            panelButton(title)?.tap()
-        }
-        guard let agents = panelButton("Agents"), let files = panelButton("Files") else { return XCTFail("no tabs") }
-        let (leading, trailing) = agents.frame.minX < files.frame.minX ? ("Agents", "Files") : ("Files", "Agents")
-        drag(trailing, before: leading, along: .horizontal)
-        XCTAssertTrue(panelOrdered(trailing, before: leading, along: .horizontal))
-        // A hold that doesn't move still brings up the tab's menu.
-        panelButton(leading)?.press(forDuration: 1.2)
-        XCTAssertTrue(app.buttons["Close Others"].waitForExistence(timeout: 3))
     }
 
     private func panelButton(_ title: String) -> XCUIElement? {

@@ -33,7 +33,7 @@ use crate::store::{ListedDraft, SearchResult, Store, UndoNotice, snooze_presets}
 use crate::theme::{self, ControlSize, Layer, colors};
 use crate::thread::prompts::ThreadPrompts;
 use crate::ui::menu::Menu;
-use crate::ui::{ActionButton, InputField, InputVariant, divider, edges};
+use crate::ui::{ActionButton, InputField, InputVariant, Reorder, divider, edges};
 
 /// The space between the rows' highlights, and around each one: it looks empty but is the row's.
 const ROW_GAP: f32 = 2.;
@@ -228,8 +228,8 @@ pub struct Sidebar {
     /// What the lists are made of, until the store changes.
     plan: Option<Rc<Plan>>,
     stale: bool,
-    press: Option<drag::Press>,
-    lift: Option<drag::Lift>,
+    /// The active thread being moved.
+    reorder: Reorder<drag::Moving>,
     /// The shelf whose line is being pulled, from where to where.
     pulling: Option<(Shelf, f32, f32)>,
     /// How many rows each shelf has and the most room it may take, as last drawn.
@@ -325,8 +325,7 @@ impl Sidebar {
             shelf_lists: HashMap::from([(Shelf::Servers, RecycledList::new())]),
             plan: None,
             stale: true,
-            press: None,
-            lift: None,
+            reorder: Reorder::new(Axis::Vertical).held().free(),
             pulling: None,
             shelf_room: HashMap::new(),
             peek: card::Peek::default(),
@@ -519,7 +518,7 @@ impl Sidebar {
             self.highlighted = 0;
         }
         if self.list.set_ids(ids) {
-            self.cancel_lift();
+            self.reorder.cancel();
             self.forget_pointer(cx);
         }
         self.plan = Some(plan.clone());
@@ -685,6 +684,7 @@ impl Sidebar {
     /// The list: the drafts, the active threads and the sections under them, or what the search
     /// found.
     fn threads(&mut self, plan: &Plan, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
+        self.keep_frame();
         let fitted = self.fitted_layout(plan);
         let layout = &fitted;
         let target = if plan.searching {
@@ -698,7 +698,7 @@ impl Sidebar {
         let jump_hint = |id: &str, store: &Store| plan.jumps.get(id).and_then(|index| store.jump_hint(*index));
         let mut rows = Vec::new();
         for index in self.list.visible(layout, window) {
-            let Some(shift) = self.active_shift(index) else { continue };
+            let Some(shift) = self.reorder.shift(index) else { continue };
             let element = match plan.items[index] {
                 Item::Drafts => self.draft_rows(&plan.drafts, cx),
                 Item::Active(at) => {
@@ -804,7 +804,8 @@ impl Render for Sidebar {
             .children(servers)
             .when(has_servers, |sidebar| sidebar.child(divider(cx)))
             .child(self.footer.clone())
-            .children(self.follow_pointer(cx))
+            .children(self.follow_pulling(cx))
+            .children(self.reorder.follow_pointer(cx.entity().downgrade(), drag::THREAD_ORDER))
             .children(self.card_layer(cx))
             .children(self.lift_layer(window, cx))
     }

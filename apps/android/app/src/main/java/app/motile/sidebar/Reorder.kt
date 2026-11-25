@@ -37,6 +37,8 @@ class Reorder(private val list: LazyListState) {
     private var movable: Set<String> = emptySet()
     private var startOffset = 0
     private var dragged by mutableFloatStateOf(0f)
+    /** Where the lifted row was laid out when it last made way, until the list lays it out again. */
+    private var movedFrom: Int? = null
 
     private val item: LazyListItemInfo? get() = list.layoutInfo.visibleItemsInfo.firstOrNull { it.key == key }
 
@@ -63,6 +65,7 @@ class Reorder(private val list: LazyListState) {
         order = keys
         startOffset = item?.offset ?: 0
         dragged = 0f
+        movedFrom = null
     }
 
     fun drag(by: Float) {
@@ -70,17 +73,31 @@ class Reorder(private val list: LazyListState) {
         makeWay()
     }
 
-    /** Moves the lifted row past the one its middle is over. */
+    /**
+     * Moves the lifted row past a neighbour once it is halfway across it: into the place whose middle
+     * is nearest its own, whatever their sizes, and back only once another place is nearer by more
+     * than a little.
+     */
     fun makeWay() {
         val item = item ?: return
         val order = order ?: return
-        val middle = startOffset + dragged + item.size / 2f
-        val target = list.layoutInfo.visibleItemsInfo.firstOrNull { other ->
-            other.key != key && other.key in movable && middle >= other.offset && middle <= other.offset + other.size
-        } ?: return
+        if (movedFrom == item.offset) return
+        movedFrom = null
         val from = order.indexOf(key)
-        val to = order.indexOf(target.key)
-        if (from < 0 || to < 0) return
+        if (from < 0) return
+        val visible = list.layoutInfo.visibleItemsInfo
+        fun neighbour(index: Int) = order.getOrNull(index)?.takeIf { it in movable }?.let { other -> visible.firstOrNull { it.key == other } }
+        val spacing = list.layoutInfo.mainAxisItemSpacing
+        val held = startOffset + dragged + item.size / 2f
+        val here = item.offset + item.size / 2f
+        val next = neighbour(from + 1)
+        val previous = neighbour(from - 1)
+        val to = when {
+            next != null && held - here > (next.size + spacing + HYSTERESIS) / 2f -> from + 1
+            previous != null && here - held > (previous.size + spacing + HYSTERESIS) / 2f -> from - 1
+            else -> return
+        }
+        movedFrom = item.offset
         // The list keeps its first row where it is, rather than following it.
         if (minOf(from, to) <= list.firstVisibleItemIndex) list.requestScrollToItem(list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset)
         this.order = order.toMutableList().apply { add(to, removeAt(from)) }
@@ -108,6 +125,12 @@ class Reorder(private val list: LazyListState) {
         key = null
         order = null
         dragged = 0f
+        movedFrom = null
+    }
+
+    private companion object {
+        /** How much nearer, in pixels, another place must be before the row leaves the one it would land in. */
+        const val HYSTERESIS = 8f
     }
 }
 

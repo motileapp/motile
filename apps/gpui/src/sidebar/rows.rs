@@ -270,11 +270,14 @@ impl Sidebar {
             return row
                 .on_mouse_down(
                     MouseButton::Left,
-                    cx.listener(move |this, event: &MouseDownEvent, window, cx| {
-                        this.press(index, pressed.clone(), event.position, window, cx);
+                    cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                        this.press(index, pressed.clone(), event.position, cx);
                     }),
                 )
-                .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| this.drag_released(cx)))
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, cx| crate::ui::Reorder::release(this, super::drag::THREAD_ORDER, cx)),
+                )
                 .into_any_element();
         }
         let store = self.store.clone();

@@ -73,7 +73,7 @@ impl Sidebar {
     pub(super) fn point(&mut self, target: Option<(String, Bounds<Pixels>)>, cx: &mut Context<Self>) {
         self.peek.waiting = None;
         let behind_modal = crate::ui::modal::is_open(cx);
-        let Some((thread_id, row)) = target.filter(|_| !behind_modal && self.press.is_none()) else {
+        let Some((thread_id, row)) = target.filter(|_| !behind_modal && !self.reorder.is_pressed()) else {
             self.peek.hide();
             return;
         };

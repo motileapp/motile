@@ -207,23 +207,30 @@ struct PanelTabStrip: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 0) {
                     if !tabs.isBlank {
-                        ForEach(tabs.tabs) { tab in
+                        ForEach(reorder.arranged(tabs.tabs, by: \.id)) { tab in
                             PanelTabChip(tab: tab, active: tab == tabs.active)
-                                .reorderable(tab.id, among: ids, in: reorder) { id, index in
-                                    guard let tab = tabs.tabs.first(where: { $0.id == id }) else { return }
-                                    store.rightPanel.moveTab(tab, to: index)
-                                }
+                                .reorderable(tab.id, in: reorder)
                         }
                     }
                     if store.panelUnavailable == nil, !tabs.isBlank {
                         ActionButton(icon: .plus, help: "New tab", margin: .beside(leading: PanelTabChip.margin)) { store.rightPanel.openBlank() }
                     }
                 }
-                .reorderSpace(reorder)
+                // Every tab is as wide as its title needs.
+                .fixedSize(horizontal: true, vertical: false)
+                .reorderSpace(reorder, ids: ids, light: PanelTabChip.light, menus: true) { id, index in
+                    guard let tab = tabs.tabs.first(where: { $0.id == id }) else { return }
+                    store.rightPanel.moveTab(tab, to: index)
+                } copy: { id in
+                    if let tab = tabs.tabs.first(where: { $0.id == id }) {
+                        PanelTabChip(tab: tab, active: tab == tabs.active)
+                    }
+                }
                 .padding(.leading, leading - PanelTabChip.margin)
                 .padding(.trailing, edge - PanelTabChip.margin)
                 .frame(maxHeight: .infinity)
             }
+            .scrollDisabled(reorder.dragged != nil)
             .onChange(of: tabs.active, initial: true) {
                 guard let active = tabs.active else { return }
                 strip.scrollTo(active.id)
@@ -265,6 +272,8 @@ struct PanelTabChip: View {
     private static let reach = max(0, (Platform.minimumPress - height) / 2)
     /// The room on each side that looks empty but is the tab's, so no click falls between tabs.
     static let margin: CGFloat = 1
+    /// The light a dragged tab lies on.
+    static let light = ReorderLight(inset: EdgeInsets(top: 0, leading: margin, bottom: 0, trailing: margin))
 
     var body: some View {
         let panel = store.rightPanel
@@ -314,6 +323,8 @@ struct PanelTabChip: View {
 private struct PanelLauncher: View {
     /// The space between two rows' lights, which is the rows' own, so that it takes a click.
     private static let gap: CGFloat = 2
+    /// The light a dragged row lies on, as its own light does.
+    private static let light = ReorderLight(inset: EdgeInsets(top: gap / 2, leading: 0, bottom: gap / 2, trailing: 0))
     @Environment(AppStore.self) private var store
     let target: PanelTarget
     @State private var reorder = Reorder(.vertical)
@@ -326,15 +337,19 @@ private struct PanelLauncher: View {
                 .font(.ui(.sm, weight: .semibold))
                 .foregroundStyle(Color.themeForeground)
             VStack(spacing: 0) {
-                ForEach(shown) { tab in
+                ForEach(reorder.arranged(shown, by: \.id)) { tab in
                     row(tab)
-                        .reorderable(tab.id, among: ids, in: reorder) { id, index in
-                            guard let tab = shown.first(where: { $0.id == id }) else { return }
-                            store.rightPanel.moveLauncherRow(tab, to: index, among: shown)
-                        }
+                        .reorderable(tab.id, in: reorder)
                 }
             }
-            .reorderSpace(reorder)
+            .reorderSpace(reorder, ids: ids, light: Self.light) { id, index in
+                guard let tab = shown.first(where: { $0.id == id }) else { return }
+                store.rightPanel.moveLauncherRow(tab, to: index, among: shown)
+            } copy: { id in
+                if let tab = shown.first(where: { $0.id == id }) {
+                    row(tab)
+                }
+            }
             .frame(width: 250)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -382,7 +397,10 @@ private struct PanelLauncher: View {
 
     /// A tab to open, with how many of its things work, in the working colour, when any do.
     private func row(_ symbol: Symbol, _ title: String, count: Int = 0, command: String?, reason: String?, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button {
+            guard !reorder.isMoving else { return }
+            action()
+        } label: {
             HStack(spacing: 10) {
                 Image(symbol, size: .md)
                 Group {

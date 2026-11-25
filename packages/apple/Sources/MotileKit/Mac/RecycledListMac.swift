@@ -370,8 +370,9 @@ private final class RowLift {
     private let from: Int
     /// How far below the row's top it was picked up.
     private let grip: CGFloat
-    /// Every row as it is laid out.
+    /// Every row as it is laid out, and where each lies down the table.
     private let rects: [CGRect]
+    private let spans: [ClosedRange<CGFloat>]
     /// Where it can land, in the list without it.
     private let landings: ClosedRange<Int>
     private var index: Int
@@ -404,6 +405,7 @@ private final class RowLift {
         from = row
         index = row
         rects = (0..<table.numberOfRows).map(table.rect(ofRow:))
+        spans = rects.map { $0.minY...$0.maxY }
         self.grip = grip.y - rects[row].minY
         let others = rects.indices.filter(movable).filter { $0 != row }.map { $0 > row ? $0 - 1 : $0 }
         landings = (others.first ?? row)...(others.last.map { $0 + 1 } ?? row)
@@ -464,8 +466,7 @@ private final class RowLift {
         holder.setFrameOrigin(CGPoint(x: pointer.x - offset.x, y: pointer.y - offset.y))
         let center = table.convert(location, from: nil).y - grip + rects[from].height / 2
         let landing = index
-        while index < landings.upperBound, center >= middle(ofRowBelow: index) { index += 1 }
-        while index > landings.lowerBound, center <= middle(ofRowAbove: index) { index -= 1 }
+        index = ReorderSlot.nearest(to: center, from: from, spans: spans, current: index, among: landings)
         guard landing != index else { return }
         table.enumerateAvailableRowViews { [self] rowView, row in
             guard row != from, let layer = rowView.layer else { return }
@@ -479,22 +480,10 @@ private final class RowLift {
         return row > from && row <= index ? -height : row < from && row >= index ? height : 0
     }
 
-    /// The middle of the row right below the gap at `landing`, as it is drawn.
-    private func middle(ofRowBelow landing: Int) -> CGFloat {
-        let row = landing < from ? landing : landing + 1
-        return rects[row].midY + shift(row)
-    }
-
-    /// The middle of the row right above the gap at `landing`, as it is drawn.
-    private func middle(ofRowAbove landing: Int) -> CGFloat {
-        let row = landing <= from ? landing - 1 : landing
-        return rects[row].midY + shift(row)
-    }
-
     /// Slides the row into its place, grows it back and puts out its light, then says where it
     /// landed.
     func drop(_ landed: @escaping (_ from: Int, _ index: Int) -> Void) {
-        let top = index <= from ? rects[index].minY : rects[index].maxY - rects[from].height
+        let top = ReorderSlot.start(of: index, from: from, spans: spans)
         let place = inOverlay(table.convert(cellFrame.offsetBy(dx: rects[from].minX, dy: top), to: nil))
         NSAnimationContext.runAnimationGroup { [self] context in
             context.duration = 0.25

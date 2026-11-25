@@ -28,6 +28,7 @@ use crate::theme::{self, Colors, ControlSize, IconSize, Layer, Radius, Surface, 
 use crate::transcript::kit::dashed_outline;
 use crate::ui::agent_avatar::{AgentAvatar, state_color};
 use crate::ui::menu::Menu;
+use crate::ui::reorder::Handlers;
 use crate::ui::{
     ActionButton, ActionMenu, GatewayMark, Highlight, KeyCaps, Reorder, Spinner, TOOLBAR_WIDTH, TakesPress, Variant,
     beside, edges, icons,
@@ -125,6 +126,86 @@ struct MarksMadeOf {
     document: usize,
     reads: u64,
     pending: Vec<u64>,
+}
+
+/// The tabs move to where they are pulled; a click on one shows it.
+const TAB_ORDER: Handlers<RightPanelView, PanelTab> = Handlers {
+    reorder: |this| &mut this.tab_order,
+    moved: |this, tab, index, cx| {
+        this.store.update(cx, |store, cx| {
+            store.move_tab(&tab, index);
+            cx.notify();
+        })
+    },
+    clicked: None,
+};
+
+/// A blank tab's rows move to where they are pulled; a click on one opens it.
+const LAUNCHER_ORDER: Handlers<RightPanelView, PanelTab> = Handlers {
+    reorder: |this| &mut this.launcher_order,
+    moved: |this, tab, index, cx| {
+        this.store.update(cx, |store, cx| {
+            store.move_launcher_row(&tab, index);
+            cx.notify();
+        })
+    },
+    clicked: None,
+};
+
+/// A row of a blank tab's launcher: what it opens, how it is shown, and why it can't be opened
+/// when it can't.
+struct LaunchRow {
+    tab: PanelTab,
+    symbol: &'static str,
+    title: &'static str,
+    count: usize,
+    keys: Option<Vec<String>>,
+    reason: Option<String>,
+}
+
+impl LaunchRow {
+    /// The row's size and the room around what it shows, faded when it can't be opened.
+    fn frame<E: Styled + ParentElement>(&self, row: E, cx: &App) -> E {
+        let c = colors(cx);
+        let row = row.relative().h(px(ControlSize::Regular.height() + LAUNCHER_GAP)).px(px(10.)).flex().items_center();
+        if self.reason.is_some() { row.opacity(c.opacity(theme::Opacity::Disabled)) } else { row }
+    }
+
+    /// Its symbol, its title with how many of its things work, and its keys.
+    fn face(&self, cx: &App) -> Div {
+        let c = colors(cx);
+        let (title, count) = (self.title, self.count);
+        div()
+            .relative()
+            .flex_1()
+            .flex()
+            .items_center()
+            .gap(px(10.))
+            .child(
+                div()
+                    .w(px(IconSize::Md.side()))
+                    .flex()
+                    .justify_center()
+                    .child(icons::symbol(self.symbol, IconSize::Md).text_color(c.foreground)),
+            )
+            .child(
+                div()
+                    .flex_1()
+                    .flex()
+                    .text_size(TextSize::Sm)
+                    .text_color(c.foreground)
+                    .when(count == 0, |text| text.child(title))
+                    // How many of its things work, in the working colour.
+                    .when(count > 0, |text| {
+                        text.child(format!("{title}\u{a0}"))
+                            .child(div().text_color(c.muted_foreground).child("·"))
+                            .child(div().text_color(c.process).child(format!("\u{a0}{count}")))
+                    }),
+            )
+            .when_some(self.keys.clone(), |row, keys| {
+                row.child(div().text_color(c.muted_foreground).child(KeyCaps::new(keys).joined(true)))
+            })
+    }
 }
 
 /// Runs something on the store from a click.
@@ -261,19 +342,26 @@ impl RightPanelView {
             .enumerate()
             .map(|(index, tab)| {
                 let chip = self.tab_chip(tab, index, count, tabs.active.as_ref() == Some(tab), cx);
-                self.tab_order.place(index, chip, window)
+                self.tab_order.place(index, chip)
             })
             .collect();
-        let follow = self.tab_order.follow_pointer(
-            cx.entity().downgrade(),
-            |this| &mut this.tab_order,
-            |this, tab, index, cx| {
-                this.store.update(cx, |store, cx| {
-                    store.move_tab(&tab, index);
-                    cx.notify();
-                })
-            },
-        );
+        let lifted = self.tab_order.lifted().and_then(|index| tabs.tabs.get(index)).map(|tab| {
+            let close =
+                div().size_full().flex().items_center().justify_center().child(
+                    icons::symbol("x", ControlSize::Inset.small_symbol()).text_color(colors(cx).muted_foreground),
+                );
+            div()
+                .size_full()
+                .pl(px(9. + TAB_MARGIN))
+                .pr(px(ControlSize::INSET_MARGIN + TAB_MARGIN))
+                .flex()
+                .items_center()
+                .gap(px(6.))
+                .children(self.tab_face(tab, true, close.into_any_element(), cx))
+        });
+        let layer =
+            lifted.and_then(|copy| self.tab_order.layer(copy, edges(0., TAB_MARGIN, 0., TAB_MARGIN), window, cx));
+        let follow = self.tab_order.follow_pointer(cx.entity().downgrade(), TAB_ORDER);
         let leading = self.tab_inset.unwrap_or(TAB_EDGE);
         div()
             .absolute()
@@ -282,6 +370,7 @@ impl RightPanelView {
             .right(px(2. * TOOLBAR_WIDTH + 14. + self.trailing_room))
             .h(px(theme::TOP_BAR))
             .children(follow)
+            .children(layer)
             .child(
                 div()
                     .id("panel-tabs")
@@ -304,6 +393,28 @@ impl RightPanelView {
             .into_any_element()
     }
 
+    /// What a tab shows on its light: its symbol, its title and its close button.
+    fn tab_face(&self, tab: &PanelTab, lit: bool, close: AnyElement, cx: &App) -> Vec<AnyElement> {
+        let c = colors(cx);
+        let tint = if lit { c.foreground } else { c.muted_foreground };
+        vec![
+            div()
+                .relative()
+                .w(px(IconSize::Sm.side()))
+                .flex()
+                .justify_center()
+                .child(icons::symbol(tab.symbol(), IconSize::Sm).text_color(tint))
+                .into_any_element(),
+            crate::ui::middle_truncated(tab.title())
+                .relative()
+                .text_size(TextSize::Xs)
+                .font_weight(FontWeight::MEDIUM)
+                .text_color(tint)
+                .into_any_element(),
+            div().relative().size(px(ControlSize::Inset.height())).flex_shrink_0().child(close).into_any_element(),
+        ]
+    }
+
     fn tab_chip(
         &self,
         tab: &PanelTab,
@@ -312,13 +423,10 @@ impl RightPanelView {
         active: bool,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
-        let c = colors(cx);
-        let height = ControlSize::Regular.height();
-        let close_size = ControlSize::Inset.height();
-        let close_margin = ControlSize::INSET_MARGIN;
         let key = tab.id();
-        let lifted = self.tab_order.lifted() == Some(index);
-        let hovering = lifted || self.hovered_tab.as_ref() == Some(&key);
+        // While a tab is lifted, the others don't light up under the pointer.
+        let dragging = self.tab_order.is_lifted();
+        let hovering = !dragging && self.hovered_tab.as_ref() == Some(&key);
         let lit = hovering || active;
         let group: SharedString = format!("tab-{key}").into();
         let path = tab.path().map(str::to_string);
@@ -326,58 +434,40 @@ impl RightPanelView {
             (key.clone(), tab.clone(), tab.clone(), tab.clone(), tab.clone());
         let menu_store = self.store.clone();
         let close_help = self.store.read(cx).shortcuts.help("Close", "rightPanel.close");
+        let light = Highlight::new().selected(active).small(true).inset(edges(0., TAB_MARGIN, 0., TAB_MARGIN));
+        let light = if dragging { light.hovered(false) } else { light.lit(hovering) };
+        let close = if lit {
+            ActionButton::icon(SharedString::from(format!("close-{key}")), "x", close_help)
+                .size(ControlSize::Inset)
+                .symbol_size(ControlSize::Inset.small_symbol())
+                .row(Some(if active { Layer::ControlLit } else { Layer::Control }))
+                .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    if this.tab_order.is_lifted() {
+                        return;
+                    }
+                    this.store.update(cx, |store, cx| {
+                        store.close_tab(&close_tab);
+                        cx.notify();
+                    });
+                }))
+                .into_any_element()
+        } else {
+            div().into_any_element()
+        };
         div()
             .id(SharedString::from(key.clone()))
             .group(group.clone())
             .relative()
             .flex_shrink_0()
             .max_w(px(180. + 2. * TAB_MARGIN))
-            .h(px(height))
+            .h(px(ControlSize::Regular.height()))
             .pl(px(9. + TAB_MARGIN))
-            .pr(px(close_margin + TAB_MARGIN))
+            .pr(px(ControlSize::INSET_MARGIN + TAB_MARGIN))
             .flex()
             .items_center()
             .gap(px(6.))
-            .child(
-                Highlight::new()
-                    .selected(active)
-                    .lit(hovering)
-                    .small(true)
-                    .opaque(lifted)
-                    .inset(edges(0., TAB_MARGIN, 0., TAB_MARGIN))
-                    .render(group, cx),
-            )
-            .child(div().relative().w(px(IconSize::Sm.side())).flex().justify_center().child(
-                icons::symbol(tab.symbol(), IconSize::Sm).text_color(if lit {
-                    c.foreground
-                } else {
-                    c.muted_foreground
-                }),
-            ))
-            .child(
-                crate::ui::middle_truncated(tab.title())
-                    .relative()
-                    .text_size(TextSize::Xs)
-                    .font_weight(FontWeight::MEDIUM)
-                    .text_color(if lit { c.foreground } else { c.muted_foreground }),
-            )
-            .child(div().relative().size(px(close_size)).flex_shrink_0().when(lit, |close| {
-                close.child(
-                    ActionButton::icon(SharedString::from(format!("close-{key}")), "x", close_help)
-                        .size(ControlSize::Inset)
-                        .symbol_size(ControlSize::Inset.small_symbol())
-                        .row(Some(if active { Layer::ControlLit } else { Layer::Control }))
-                        .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                            if this.tab_order.is_lifted() {
-                                return;
-                            }
-                            this.store.update(cx, |store, cx| {
-                                store.close_tab(&close_tab);
-                                cx.notify();
-                            });
-                        })),
-                )
-            }))
+            .child(light.render(group, cx))
+            .children(self.tab_face(tab, lit, close, cx))
             .tooltip(crate::ui::tooltip(path.clone().unwrap_or_else(|| tab.title())))
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                 if *hovered {
@@ -392,7 +482,7 @@ impl RightPanelView {
                 MouseButton::Left,
                 cx.listener(move |this, event: &MouseDownEvent, _, cx| {
                     this.tab_order.measure_scrolled(&this.strip);
-                    this.tab_order.press(pressed_tab.clone(), index, count, event.position);
+                    this.tab_order.press(pressed_tab.clone(), index, 0..count, event.position, TAB_ORDER, cx);
                     cx.notify();
                 }),
             )
@@ -535,125 +625,89 @@ impl RightPanelView {
         let ricrac_unavailable = store.ricrac_unavailable();
         let ricrac_title = if store.ricrac_connected() { "Ricrac" } else { "Connect Ricrac" };
         let working = store.agents.iter().filter(|agent| agent.working()).count();
-        let lifted = self.launcher_order.lifted();
-        let row = |index: usize,
-                   tab: &PanelTab,
-                   symbol: &'static str,
-                   title: &'static str,
-                   count: usize,
-                   command: &'static str,
-                   reason: Option<String>| {
-            let enabled = reason.is_none();
-            let keys = store.shortcuts.caps(command);
-            let group: SharedString = format!("launch-{}", tab.id()).into();
-            let inset = edges(LAUNCHER_GAP / 2., 0., LAUNCHER_GAP / 2., 0.);
-            let (pressed, opened) = (tab.clone(), tab.clone());
-            let rows = shown.len();
-            div()
-                .id(group.clone())
-                .group(group.clone())
-                .relative()
-                .w_full()
-                .h(px(ControlSize::Regular.height() + LAUNCHER_GAP))
-                .px(px(10.))
-                .flex()
-                .items_center()
-                .gap(px(10.))
-                .when(lifted == Some(index), |row| {
-                    row.child(Highlight::new().inset(inset).lit(true).opaque(true).render(group.clone(), cx))
-                })
-                .when(enabled && lifted != Some(index), |row| row.child(light(group, Radius::MD, inset, false, cx)))
-                .when(!enabled, |row| row.opacity(c.opacity(theme::Opacity::Disabled)))
-                .child(
-                    div()
-                        .relative()
-                        .w(px(IconSize::Md.side()))
-                        .flex()
-                        .justify_center()
-                        .child(icons::symbol(symbol, IconSize::Md).text_color(c.foreground)),
-                )
-                .child(
-                    div()
-                        .relative()
-                        .flex_1()
-                        .flex()
-                        .text_size(TextSize::Sm)
-                        .text_color(c.foreground)
-                        .when(count == 0, |text| text.child(title))
-                        // How many of its things work, in the working colour.
-                        .when(count > 0, |text| {
-                            text.child(format!("{title}\u{a0}"))
-                                .child(div().text_color(c.muted_foreground).child("·"))
-                                .child(div().text_color(c.process).child(format!("\u{a0}{count}")))
-                        }),
-                )
-                .when_some(keys, |row, keys| {
-                    row.child(div().relative().text_color(c.muted_foreground).child(KeyCaps::new(keys).joined(true)))
-                })
-                .when_some(reason, |row, reason| row.tooltip(crate::ui::tooltip(reason)))
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(move |this, event: &MouseDownEvent, _, cx| {
-                        this.launcher_order.press(pressed.clone(), index, rows, event.position);
-                        cx.notify();
-                    }),
-                )
-                .when(enabled, |row| {
-                    row.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                        if this.launcher_order.is_lifted() {
-                            return;
-                        }
-                        this.store.update(cx, |store, cx| {
-                            match opened {
-                                PanelTab::Diff => store.show_diff(None, None),
-                                _ => store.open_tab(opened.clone()),
-                            }
-                            cx.notify();
-                        });
-                    }))
-                })
-        };
-        let rows: Vec<AnyElement> = shown
+        let specs: Vec<LaunchRow> = shown
             .iter()
-            .enumerate()
-            .filter_map(|(index, tab)| {
-                let row = match tab {
-                    PanelTab::Agents => row(index, tab, "bot", "Agents", working, "rightPanel.agents", None),
-                    PanelTab::Files => row(index, tab, "folder", "Files", 0, "rightPanel.files", None),
+            .filter_map(|tab| {
+                let (symbol, title, count, command, reason) = match tab {
+                    PanelTab::Agents => ("bot", "Agents", working, "rightPanel.agents", None),
+                    PanelTab::Files => ("folder", "Files", 0, "rightPanel.files", None),
                     PanelTab::Diff => {
                         let reason = (!target.repository).then(|| "Available in git repositories.".to_string());
-                        row(index, tab, "diff", "Diff", 0, "rightPanel.diff", reason)
+                        ("diff", "Diff", 0, "rightPanel.diff", reason)
                     }
-                    PanelTab::PullRequest => {
-                        let reason = pull_requests_unavailable.clone();
-                        row(index, tab, "git-pull-request", "Pull Request", 0, "rightPanel.pullRequest", reason)
-                    }
+                    PanelTab::PullRequest => (
+                        "git-pull-request",
+                        "Pull Request",
+                        0,
+                        "rightPanel.pullRequest",
+                        pull_requests_unavailable.clone(),
+                    ),
                     PanelTab::PullRequests => {
-                        let reason = pull_requests_unavailable.clone();
-                        row(index, tab, "list", "All Pull Requests", 0, "rightPanel.pullRequests", reason)
+                        ("list", "All Pull Requests", 0, "rightPanel.pullRequests", pull_requests_unavailable.clone())
                     }
-                    PanelTab::Linear => {
-                        row(index, tab, "linear", linear_title, 0, "rightPanel.linear", linear_unavailable.clone())
-                    }
-                    PanelTab::Ricrac => {
-                        row(index, tab, "ricrac", ricrac_title, 0, "rightPanel.ricrac", ricrac_unavailable.clone())
-                    }
-                    PanelTab::Media => row(index, tab, "images", "Media", 0, "rightPanel.media", None),
+                    PanelTab::Linear => ("linear", linear_title, 0, "rightPanel.linear", linear_unavailable.clone()),
+                    PanelTab::Ricrac => ("ricrac", ricrac_title, 0, "rightPanel.ricrac", ricrac_unavailable.clone()),
+                    PanelTab::Media => ("images", "Media", 0, "rightPanel.media", None),
                     _ => return None,
                 };
-                Some(self.launcher_order.place(index, row, window))
+                let keys = store.shortcuts.caps(command);
+                Some(LaunchRow { tab: tab.clone(), symbol, title, count, keys, reason })
             })
             .collect();
-        let follow = self.launcher_order.follow_pointer(
-            cx.entity().downgrade(),
-            |this| &mut this.launcher_order,
-            |this, tab, index, cx| {
-                this.store.update(cx, |store, cx| {
-                    store.move_launcher_row(&tab, index);
-                    cx.notify();
-                })
-            },
-        );
+        let inset = edges(LAUNCHER_GAP / 2., 0., LAUNCHER_GAP / 2., 0.);
+        // While a row is lifted, the others don't light up under the pointer.
+        let dragging = self.launcher_order.is_lifted();
+        let count = specs.len();
+        let rows: Vec<AnyElement> = specs
+            .iter()
+            .enumerate()
+            .map(|(index, spec)| {
+                let enabled = spec.reason.is_none();
+                let group: SharedString = format!("launch-{}", spec.tab.id()).into();
+                let (pressed, opened) = (spec.tab.clone(), spec.tab.clone());
+                let row = spec
+                    .frame(div().id(group.clone()).group(group.clone()).w_full(), cx)
+                    .when(enabled && !dragging, |row| row.child(light(group, Radius::MD, inset, false, cx)))
+                    .child(spec.face(cx))
+                    .when_some(spec.reason.clone(), |row, reason| row.tooltip(crate::ui::tooltip(reason)))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, event: &MouseDownEvent, _, cx| {
+                            this.launcher_order.press(
+                                pressed.clone(),
+                                index,
+                                0..count,
+                                event.position,
+                                LAUNCHER_ORDER,
+                                cx,
+                            );
+                            cx.notify();
+                        }),
+                    )
+                    .when(enabled, |row| {
+                        row.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                            if this.launcher_order.is_lifted() {
+                                return;
+                            }
+                            this.store.update(cx, |store, cx| {
+                                match opened {
+                                    PanelTab::Diff => store.show_diff(None, None),
+                                    _ => store.open_tab(opened.clone()),
+                                }
+                                cx.notify();
+                            });
+                        }))
+                    });
+                self.launcher_order.place(index, row)
+            })
+            .collect();
+        let copy = self
+            .launcher_order
+            .lifted()
+            .and_then(|index| specs.get(index))
+            .map(|spec| spec.frame(div().size_full(), cx).child(spec.face(cx)));
+        let layer = copy.and_then(|copy| self.launcher_order.layer(copy, inset, window, cx));
+        let follow = self.launcher_order.follow_pointer(cx.entity().downgrade(), LAUNCHER_ORDER);
         div()
             .size_full()
             .flex()
@@ -662,6 +716,7 @@ impl RightPanelView {
             .justify_center()
             .gap(px(12.))
             .children(follow)
+            .children(layer)
             .child(
                 div().text_size(TextSize::Sm).font_weight(FontWeight::SEMIBOLD).text_color(c.foreground).child("Open"),
             )
