@@ -1042,6 +1042,7 @@ impl MediaViewer {
 }
 
 /// The size a video of `frame` is shown at: as large as fits the viewport inside the margin.
+#[cfg(any(target_os = "macos", test))]
 fn fitted(frame: Size<f32>, viewport: Size<Pixels>) -> Size<Pixels> {
     let room = (f32::from(viewport.width) - 2. * MARGIN.0, f32::from(viewport.height) - 2. * MARGIN.1);
     let scale = (room.0 / frame.width).min(room.1 / frame.height).max(0.);
