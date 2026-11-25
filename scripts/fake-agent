@@ -41,6 +41,8 @@ reply made up on the spot instead:
   `docs/greeting.md`.
 - "hit the limit": a turn that reads a file and is stopped by the usage limit, which resets
   FAKE_AGENT_RESET seconds later.
+- "lose the sign-in": a turn its sign-in has expired for, as Claude Code's and Codex's do once their
+  login can't be refreshed. Every turn after it fails the same way until the agent signs in again.
 - "agents hit the limit": a turn that starts two agents and is stopped by the usage limit while they
   work, which stops them too, after the turn has ended.
 - "ask two agents": a turn that starts two agents at once. Each says what it does, a step every
@@ -116,6 +118,11 @@ per call (for Codex, once it is asked for a thread), and what it was told while 
 told to change, and the threads and turns Codex was asked for. FAKE_AGENT_PROMPTS_FILE records
 every prompt Claude Code reads, one JSON string each.
 
+Called as `login --device-auth` it signs Codex in as `codex login --device-auth` does: it prints the
+page and the one-time code to enter there, and signs in FAKE_AGENT_DEVICE_WAIT seconds later as the
+folder's name at motile.app (`~/.codex-work` is work@motile.app), kept in `CODEX_HOME`, which
+`account/read` then says.
+
 Called as `auth login` it signs Claude Code in as `claude auth login` does without a terminal: it
 prints the page to sign in on and reads the code that page shows. A code with "wrong" in it is
 refused; any other signs in as the folder's name at motile.app (`~/.claude-work` is
@@ -141,10 +148,31 @@ if "--version" in sys.argv:
     sys.exit(0)
 
 LOGIN_FILE = "fake-login.json"
+SIGNED_OUT_FILE = "fake-signed-out"
+
+
+def signed_out_file():
+    folder = account_folder()
+    return folder and os.path.join(folder, SIGNED_OUT_FILE)
+
+
+def keep_login(folder, prefix):
+    """Signs the folder in as its name at motile.app, and lets it sign out again."""
+    name = os.path.basename(folder.rstrip("/")).removeprefix(prefix).strip(".") or "demo"
+    os.makedirs(folder, exist_ok=True)
+    with open(os.path.join(folder, LOGIN_FILE), "w") as f:
+        json.dump({"email": f"{name}@motile.app"}, f)
+    if os.path.exists(os.path.join(folder, SIGNED_OUT_FILE)):
+        os.remove(os.path.join(folder, SIGNED_OUT_FILE))
+
+
+def account_folder():
+    """The folder the agent keeps its sign-in in: Claude Code's or Codex's."""
+    return os.environ.get("CODEX_HOME") if sys.argv[1:2] in (["app-server"], ["login"]) else os.environ.get("CLAUDE_CONFIG_DIR")
 
 
 def signed_in_email():
-    folder = os.environ.get("CLAUDE_CONFIG_DIR")
+    folder = account_folder()
     try:
         with open(os.path.join(folder, LOGIN_FILE)) as f:
             return json.load(f)["email"]
@@ -163,11 +191,22 @@ if sys.argv[1:3] == ["auth", "login"]:
         sys.exit(1)
     folder = os.environ.get("CLAUDE_CONFIG_DIR")
     if folder:
-        name = os.path.basename(folder.rstrip("/")).removeprefix(".claude-").strip(".") or "demo"
-        os.makedirs(folder, exist_ok=True)
-        with open(os.path.join(folder, LOGIN_FILE), "w") as f:
-            json.dump({"email": f"{name}@motile.app"}, f)
+        keep_login(folder, ".claude-")
     print("Login successful.")
+    sys.exit(0)
+
+if sys.argv[1:3] == ["login", "--device-auth"]:
+    print("Welcome to Codex [v\x1b[90m0.167.1\x1b[0m]\n")
+    print("Follow these steps to sign in with ChatGPT using device code authorization:\n")
+    print("1. Open this link in your browser and sign in to your account")
+    print("   \x1b[94mhttps://auth.openai.com/codex/device\x1b[0m\n")
+    print("2. Enter this one-time code \x1b[90m(expires in 15 minutes)\x1b[0m")
+    print("   \x1b[94mFAKE-C0DE\x1b[0m\n", flush=True)
+    time.sleep(float(os.environ.get("FAKE_AGENT_DEVICE_WAIT", "1")))
+    folder = os.environ.get("CODEX_HOME")
+    if folder:
+        keep_login(folder, ".codex-")
+    print("Successfully logged in")
     sys.exit(0)
 
 
@@ -1269,6 +1308,24 @@ def refused_for_the_limit():
     return text
 
 
+def lose_the_sign_in():
+    kept = signed_out_file()
+    if kept:
+        os.makedirs(os.path.dirname(kept), exist_ok=True)
+        open(kept, "w").close()
+    refused_signed_out()
+
+
+def refused_signed_out():
+    """Ends the turn as Claude Code does when its login expired and couldn't be refreshed."""
+    Turn("00000000-0000-4000-8000-0000000c0107")
+    text = "Failed to authenticate: OAuth session expired and could not be refreshed"
+    message = {"id": f"msg_{PROCESS}signedout", "model": "<synthetic>", "content": [{"type": "text", "text": text}]}
+    emit({"type": "assistant", "error": "authentication_failed", "message": message})
+    emit({"type": "result", "subtype": "success", "is_error": True, "result": text, "duration_ms": 1,
+          "api_error_status": 401, "terminal_reason": "api_error"})
+
+
 def plan_hello():
     turn = Turn("00000000-0000-4000-8000-00000000b1a0")
     turn.tool("Read", {"file_path": "/srv/api/hello.py"}, "1\tdef main():\n2\t    pass\n")
@@ -1548,7 +1605,7 @@ class Codex:
             if method == "initialize":
                 emit({"id": message["id"], "result": {}})
             if method == "account/read":
-                account = {"type": "chatgpt", "email": "demo@motile.app", "planType": "pro"}
+                account = {"type": "chatgpt", "email": signed_in_email(), "planType": "pro"}
                 emit({"id": message["id"], "result": {"account": account, "requiresOpenaiAuth": True}})
             if method == "account/rateLimits/read":
                 emit({"id": message["id"], "result": self.limits()})
@@ -1781,8 +1838,25 @@ class Codex:
                     error=error)
         raise Limited(error)
 
+    def lose_the_sign_in(self, params):
+        kept = signed_out_file()
+        if kept:
+            os.makedirs(os.path.dirname(kept), exist_ok=True)
+            open(kept, "w").close()
+        self.refused_signed_out(params)
+
+    def refused_signed_out(self, params):
+        """Fails the turn as Codex does when its login expired and couldn't be refreshed."""
+        error = {"message": "Your access token could not be refreshed. Please log out and sign in again.",
+                 "codexErrorInfo": "unauthorized"}
+        self.notify("error", threadId=self.thread_id, turnId=self.turn_id(), willRetry=False, error=error)
+        raise Limited(error)
+
     def replay_fixture(self, params):
-        with open(os.environ["FAKE_AGENT_FIXTURE"]) as f:
+        fixture = os.environ.get("FAKE_AGENT_FIXTURE") or os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "fixtures", "codex-edit-and-run.jsonl"
+        )
+        with open(fixture) as f:
             for line in f:
                 message = json.loads(line)
                 event = message["params"]
@@ -1809,6 +1883,7 @@ class Codex:
         "ask an agent": ask_an_agent,
         "long reply with a lot of code": long_reply,
         "hit the limit": hit_the_limit,
+        "lose the sign-in": lose_the_sign_in,
         "look over": look_over,
     }
 
@@ -1834,6 +1909,8 @@ class Codex:
         names = {skill["name"] for skill in codex_skills(os.getcwd())}
         started = [name for name in re.findall(r"(?:^|\s)\$([\w:-]+)", said) if name in names]
         script = next((script for words, script in self.SCRIPTED.items() if words in said), Codex.replay_fixture)
+        if signed_out_file() and os.path.exists(signed_out_file()):
+            script = Codex.refused_signed_out
         if started:
             script = lambda codex, params: codex.text(f"I followed the `{started[-1]}` skill.")
         error = None
@@ -1911,6 +1988,7 @@ SCRIPTED = {
     "rate limiter": rate_limiter,
     "agents hit the limit": agents_hit_the_limit,
     "hit the limit": hit_the_limit,
+    "lose the sign-in": lose_the_sign_in,
 }
 
 
@@ -1966,6 +2044,8 @@ def answer(prompt):
     refusal, gateway_refusal[0] = gateway_refusal[0], None
     if refusal is not None:
         return refused_by_gateway(refusal)
+    if signed_out_file() and os.path.exists(signed_out_file()):
+        return refused_signed_out()
     if prompt.strip() == "/compact":
         return compact()
     said = message_of(prompt).lower()

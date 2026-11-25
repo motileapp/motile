@@ -7,7 +7,7 @@ use motile_protocol::wire::{AgentAccount, Bucket, ContinueSettings, PullRequestS
 
 use super::Store;
 use super::shortcuts::Shortcuts;
-use crate::models::Server;
+use crate::models::{Server, agent_name};
 
 /// A page of the settings, listed in the settings' sidebar.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
@@ -222,6 +222,22 @@ impl SettingsEntry {
     }
 }
 
+/// A sign-in the server started: its id, the page to sign in on, and for Codex the code to enter
+/// there.
+#[derive(Clone, PartialEq, Debug)]
+pub struct SignInLink {
+    pub id: String,
+    pub url: String,
+    pub device_code: Option<String>,
+}
+
+/// An agent's account to sign in again, from the error of the thread whose agent it stopped.
+#[derive(Clone, PartialEq, Debug)]
+pub struct ThreadSignIn {
+    pub thread_id: String,
+    pub account_id: String,
+}
+
 #[derive(Default)]
 pub struct SettingsState {
     /// The section open over the window, while the settings are.
@@ -379,26 +395,32 @@ impl Store {
         self.request(&server.id, Request::MakeAgentAccountDefault { id: account.id.clone() });
     }
 
-    /// Has the server start signing a Claude Code account in. `done` hears the sign-in's id and
-    /// the page to sign in on, or why it couldn't start.
+    /// Has the server start signing an account in. `done` hears the sign-in, or why it couldn't
+    /// start.
     pub fn start_agent_sign_in(
         &mut self,
         account: AgentAccount,
-        server: &Server,
-        done: impl FnOnce(Result<(String, String), String>, &mut gpui_kit::App) + 'static,
+        server_id: &str,
+        done: impl FnOnce(Result<SignInLink, String>, &mut gpui_kit::App) + 'static,
     ) {
-        self.request_then(&server.id, Request::StartSignIn { account }, move |_, result, cx| {
+        let agent = agent_name(account.agent);
+        self.request_then(server_id, Request::StartSignIn { account }, move |_, result, cx| {
             let started = result.map_err(|error| error.message).and_then(|answer| {
                 let url = answer["url"].as_str().filter(|url| !url.is_empty());
-                let Some(url) = url else { return Err("Claude Code didn't give a page to sign in on.".to_string()) };
-                Ok((answer["id"].as_str().unwrap_or_default().to_string(), url.to_string()))
+                let Some(url) = url else { return Err(format!("{agent} didn't give a page to sign in on.")) };
+                Ok(SignInLink {
+                    id: answer["id"].as_str().unwrap_or_default().to_string(),
+                    url: url.to_string(),
+                    device_code: answer["code"].as_str().map(str::to_string),
+                })
             });
             done(started, cx);
         });
     }
 
-    /// Hands the server the code the sign-in page showed, which saves `account` with it. `done`
-    /// hears the saved account's id and who signed in, or why not.
+    /// Hands the server the code the sign-in page showed, or waits for Codex's to be entered,
+    /// which saves `account` with it. `done` hears the saved account's id and who signed in, or why
+    /// not.
     pub fn finish_agent_sign_in(
         &mut self,
         server_id: &str,
@@ -424,6 +446,18 @@ impl Store {
     /// Stops a sign-in that waits for its code.
     pub fn cancel_agent_sign_in(&mut self, server_id: &str, id: String) {
         self.send(Command::Request { server_id: server_id.to_string(), request: Request::CancelSignIn { id } });
+    }
+
+    /// Opens the sheet that signs the agent's account in again, for the thread whose error asked,
+    /// or the gateway's page for the gateway's account.
+    pub fn sign_in_again(&mut self, account_id: &str, thread_id: &str) {
+        let server = self.threads.get(thread_id).and_then(|thread| self.server(Some(&thread.server_id)));
+        let account = server.and_then(|server| server.agent_accounts.iter().find(|account| account.id == account_id));
+        if account.is_some_and(|account| account.gateway) {
+            return self.open_settings(SettingsSection::AgentGateway, None);
+        }
+        self.signing_in_thread =
+            Some(ThreadSignIn { thread_id: thread_id.to_string(), account_id: account_id.to_string() });
     }
 }
 

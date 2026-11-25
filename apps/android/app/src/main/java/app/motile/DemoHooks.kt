@@ -15,6 +15,8 @@ object DemoHooks {
     var search: ((String) -> Unit)? = null
     /** Where the nodes of each program were laid out, by its row, while the driver runs. */
     var programFrames: MutableMap<String, app.motile.transcript.openui.UiFrames>? = null
+    /** Where the transcript's rows laid out their buttons, by their words, while the driver runs. */
+    var rowButtons: MutableMap<String, androidx.compose.ui.layout.LayoutCoordinates>? = null
     /** Touches the window as a finger does. */
     var touch: ((android.view.MotionEvent) -> Unit)? = null
     /** Marks up the image the viewer shows, by the steps of `markup`. */

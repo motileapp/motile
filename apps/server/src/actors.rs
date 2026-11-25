@@ -236,7 +236,7 @@ impl Context<'_> {
                     last_error = None;
                     false
                 }
-                ItemKind::Error { message } => {
+                ItemKind::Error { message, .. } => {
                     last_error = Some(message.clone());
                     false
                 }

@@ -1,5 +1,6 @@
-//! Signs an account of Claude Code in for a client: `claude auth login` runs with the account's
-//! folder, the page it links to opens on the client, and the code that page shows comes back to it.
+//! Signs an account of an agent in for a client, with the account's folder. Claude Code's
+//! `claude auth login` links to a page whose code comes back to it; Codex's
+//! `codex login --device-auth` links to a page to enter its own code on, and finishes by itself.
 
 use std::collections::HashMap;
 use std::process::Stdio;
@@ -15,6 +16,8 @@ use crate::agents::environment::Environment;
 
 const LINK_WITHIN: Duration = Duration::from_secs(30);
 const KEPT_WITHIN: Duration = Duration::from_secs(60);
+/// How long finishing a Codex sign-in waits for the code to be entered on its page.
+const ENTERED_WITHIN: Duration = Duration::from_secs(15);
 /// How long a sign-in waits for its code.
 const WAITS_FOR: Duration = Duration::from_secs(15 * 60);
 
@@ -24,6 +27,7 @@ pub struct SignIns {
 }
 
 struct Running {
+    agent: Agent,
     child: Child,
     stdin: ChildStdin,
     /// What the CLI says after the link, a line at a time.
@@ -33,21 +37,35 @@ struct Running {
     folder: String,
 }
 
+/// The page a sign-in links to, and the code to enter there when the agent has one.
+pub struct Started {
+    pub id: String,
+    pub url: String,
+    pub code: Option<String>,
+}
+
 impl SignIns {
-    /// Starts a sign-in to `folder` in `environment` and answers with its id and the page to sign
+    /// Starts signing `agent` in to `folder` in `environment`, and answers with the page to sign
     /// in on.
     pub async fn start(
         self: &std::sync::Arc<Self>,
+        agent: Agent,
         environment: Environment,
         folder: String,
-    ) -> anyhow::Result<(String, String)> {
-        let executable = environment.executable(Agent::Claude).context("Claude Code isn't installed.")?;
+    ) -> anyhow::Result<Started> {
+        let name = crate::agent_accounts::agent_name(agent);
+        let executable = environment.executable(agent).with_context(|| format!("{name} isn't installed."))?;
+        let arguments = match agent {
+            Agent::Claude => ["auth", "login"],
+            Agent::Codex => ["login", "--device-auth"],
+        };
         let mut child = Command::new(executable)
-            .args(["auth", "login"])
+            .args(arguments)
             .current_dir(std::env::temp_dir())
             .env_clear()
             .envs(&environment.variables)
             .env("BROWSER", "true")
+            .env("NO_COLOR", "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -57,10 +75,18 @@ impl SignIns {
         let (lines, mut said) = mpsc::unbounded_channel();
         forward(child.stdout.take().context("no stdout")?, lines.clone());
         forward(child.stderr.take().context("no stderr")?, lines);
-        let link = tokio::time::timeout(LINK_WITHIN, async {
+        let shown = tokio::time::timeout(LINK_WITHIN, async {
+            let mut link = None;
             while let Some(line) = said.recv().await {
-                if let Some(link) = line.split_whitespace().find(|word| word.starts_with("https://")) {
-                    return Some(link.to_string());
+                let line = plain(&line);
+                if let Some(found) = line.split_whitespace().find(|word| word.starts_with("https://")) {
+                    link = Some(found.to_string());
+                    if agent == Agent::Claude {
+                        return link.map(|link| (link, None));
+                    }
+                }
+                if let (Some(link), Some(code)) = (&link, device_code(&line)) {
+                    return Some((link.clone(), Some(code)));
                 }
             }
             None
@@ -68,46 +94,88 @@ impl SignIns {
         .await
         .ok()
         .flatten()
-        .context("Claude Code didn't give a page to sign in on.")?;
+        .with_context(|| format!("{name} didn't give a page to sign in on."))?;
+        let (url, code) = shown;
         let id = uuid::Uuid::new_v4().to_string();
-        self.running.lock().await.insert(id.clone(), Running { child, stdin, said, environment, folder });
+        let running = Running { agent, child, stdin, said, environment, folder };
+        self.running.lock().await.insert(id.clone(), running);
         let sign_ins = self.clone();
         let waiting = id.clone();
         tokio::spawn(async move {
             tokio::time::sleep(WAITS_FOR).await;
             sign_ins.cancel(&waiting).await;
         });
-        Ok((id, link))
+        Ok(Started { id, url, code })
     }
 
-    /// Hands the code to the sign-in to `folder`, and answers with the environment it signed in,
+    /// Finishes the sign-in to `folder`: Claude Code's with the code its page showed, Codex's once
+    /// its code was entered on its page. Answers with the agent and the environment it signed in,
     /// once the CLI kept the sign-in.
-    pub async fn finish(&self, id: &str, code: &str, folder: &str) -> anyhow::Result<Environment> {
+    pub async fn finish(&self, id: &str, code: &str, folder: &str) -> anyhow::Result<(Agent, Environment)> {
         let running = self.running.lock().await.remove(id);
-        let Running { mut child, mut stdin, mut said, environment, folder: started } =
-            running.context("That sign-in stopped. Sign in again.")?;
-        if started != folder {
+        let mut running = running.context("That sign-in stopped. Sign in again.")?;
+        if running.folder != folder {
             anyhow::bail!("The folder changed since the sign-in started. Sign in again.");
         }
-        stdin.write_all(format!("{}\n", code.trim()).as_bytes()).await?;
-        drop(stdin);
-        let status = tokio::time::timeout(KEPT_WITHIN, child.wait())
-            .await
-            .map_err(|_| anyhow::anyhow!("Claude Code didn't finish signing in. Sign in again."))??;
+        let status = match running.agent {
+            Agent::Claude => {
+                running.stdin.write_all(format!("{}\n", code.trim()).as_bytes()).await?;
+                let waited = tokio::time::timeout(KEPT_WITHIN, running.child.wait()).await;
+                waited.map_err(|_| anyhow::anyhow!("Claude Code didn't finish signing in. Sign in again."))??
+            }
+            Agent::Codex => match tokio::time::timeout(ENTERED_WITHIN, running.child.wait()).await {
+                Ok(status) => status?,
+                Err(_) => {
+                    self.running.lock().await.insert(id.to_string(), running);
+                    anyhow::bail!("Codex is still waiting. Enter the code on the page, then sign in.");
+                }
+            },
+        };
+        let Running { agent, mut said, environment, .. } = running;
         if status.success() {
-            return Ok(environment);
+            return Ok((agent, environment));
         }
         let mut output = Vec::new();
         while let Ok(line) = said.try_recv() {
-            output.push(line);
+            output.push(plain(&line));
         }
-        tracing::warn!("Claude Code didn't sign in: {}", output.join(" / "));
-        anyhow::bail!("That code didn't work. Sign in again.")
+        let name = crate::agent_accounts::agent_name(agent);
+        tracing::warn!("{name} didn't sign in: {}", output.join(" / "));
+        match agent {
+            Agent::Claude => anyhow::bail!("That code didn't work. Sign in again."),
+            Agent::Codex => anyhow::bail!("Codex didn't sign in. Sign in again."),
+        }
     }
 
     pub async fn cancel(&self, id: &str) {
         self.running.lock().await.remove(id);
     }
+}
+
+/// The line without the colours a terminal would show.
+fn plain(line: &str) -> String {
+    let mut plain = String::with_capacity(line.len());
+    let mut characters = line.chars();
+    while let Some(character) = characters.next() {
+        if character != '\u{1b}' {
+            plain.push(character);
+            continue;
+        }
+        for following in characters.by_ref() {
+            if following.is_ascii_alphabetic() {
+                break;
+            }
+        }
+    }
+    plain
+}
+
+/// The one-time code Codex shows to enter on its page: letters and digits around a dash.
+fn device_code(line: &str) -> Option<String> {
+    let word = line.trim();
+    let (before, after) = word.split_once('-')?;
+    let part = |part: &str| (4..=6).contains(&part.len()) && part.chars().all(|c| c.is_ascii_alphanumeric());
+    (part(before) && part(after) && !word.contains(' ')).then(|| word.to_string())
 }
 
 fn forward(output: impl AsyncRead + Unpin + Send + 'static, lines: mpsc::UnboundedSender<String>) {
@@ -119,4 +187,24 @@ fn forward(output: impl AsyncRead + Unpin + Send + 'static, lines: mpsc::Unbound
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn codex_s_code_is_found_in_what_it_prints() {
+        let printed = [
+            "Welcome to Codex [v\u{1b}[90m0.167.1\u{1b}[0m]",
+            "   \u{1b}[94m1Z22-2JRJI\u{1b}[0m",
+            "2. Enter this one-time code",
+        ];
+        let found: Vec<Option<String>> = printed.iter().map(|line| device_code(&plain(line))).collect();
+        assert_eq!(found, [None, Some("1Z22-2JRJI".to_string()), None]);
+        assert_eq!(
+            plain("   \u{1b}[94mhttps://auth.openai.com/codex/device\u{1b}[0m").trim(),
+            "https://auth.openai.com/codex/device"
+        );
+    }
 }

@@ -162,8 +162,16 @@ pub fn answer(approval: &Approval, allow: bool, answers: &HashMap<String, String
 /// Whether what Codex says of an error is that a usage limit was reached. It names the error, or
 /// is an object keyed by its name.
 fn is_limit(info: &Value) -> bool {
-    let name = info.as_str().or_else(|| info.as_object()?.keys().next().map(String::as_str));
-    matches!(name, Some("usageLimitExceeded" | "rateLimitExceeded"))
+    matches!(error_name(info), Some("usageLimitExceeded" | "rateLimitExceeded"))
+}
+
+/// Whether what Codex says of an error is that its account is no longer signed in.
+fn is_signed_out(info: &Value) -> bool {
+    error_name(info) == Some("unauthorized")
+}
+
+fn error_name(info: &Value) -> Option<&str> {
+    info.as_str().or_else(|| info.as_object()?.keys().next().map(String::as_str))
 }
 
 /// An MCP tool's result as JSON, without the images it showed, which the row shows apart. `None`
@@ -236,6 +244,8 @@ pub struct Parser {
     reasoned: Option<u64>,
     /// The usage limit stopped the turn that runs.
     limited: bool,
+    /// The account's sign-in stopped working in the turn that runs.
+    signed_out: bool,
     /// When the usage limits that ran out reset, as Codex last said.
     resets_at: Option<f64>,
     /// How large its own thread's conversation was at its last answer, until it is compacted.
@@ -299,6 +309,7 @@ impl Parser {
             spent: HashMap::new(),
             reasoned: None,
             limited: false,
+            signed_out: false,
             resets_at: None,
             context_used: None,
         }
@@ -414,6 +425,7 @@ impl Parser {
             "turn/completed" => self.parse_turn_end(&params["turn"]),
             "error" if params["willRetry"] != true => {
                 self.limited |= is_limit(&params["error"]["codexErrorInfo"]);
+                self.signed_out |= is_signed_out(&params["error"]["codexErrorInfo"]);
                 vec![]
             }
             "serverRequest/resolved" => match self.asked.remove(&params["requestId"].to_string()) {
@@ -542,8 +554,10 @@ impl Parser {
         let summary = TurnSummary { is_error: failed, ..Default::default() };
         let result_text = turn["error"]["message"].as_str().map(String::from);
         let limited = std::mem::take(&mut self.limited) || is_limit(&turn["error"]["codexErrorInfo"]);
+        let signed_out = std::mem::take(&mut self.signed_out) || is_signed_out(&turn["error"]["codexErrorInfo"]);
         let mut events: Vec<AgentEvent> =
             (failed && limited).then_some(AgentEvent::Limited { resets_at: self.resets_at }).into_iter().collect();
+        events.extend((failed && signed_out).then_some(AgentEvent::SignedOut));
         events.push(AgentEvent::Completed { summary, result_text, preempted: false });
         events.extend(self.plan_approval());
         events
@@ -1243,6 +1257,15 @@ mod tests {
         let other = r#"{"method":"turn/completed","params":{"threadId":"t1","turn":{"status":"failed",
             "error":{"message":"Bad request","codexErrorInfo":{"badRequest":{}}}}}}"#;
         assert!(matches!(parser.parse(other)[..], [AgentEvent::Completed { .. }]));
+    }
+
+    #[test]
+    fn a_turn_an_expired_sign_in_ends_says_the_account_is_signed_out() {
+        let mut parser = parser(turn(Access::Full));
+        let failed = r#"{"method":"turn/completed","params":{"threadId":"t1","turn":{"id":"u1","status":"failed",
+            "error":{"message":"Your access token could not be refreshed.","codexErrorInfo":"unauthorized"}}}}"#;
+
+        assert!(matches!(parser.parse(failed)[..], [AgentEvent::SignedOut, AgentEvent::Completed { .. }]));
     }
 
     #[test]

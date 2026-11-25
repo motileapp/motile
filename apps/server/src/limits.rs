@@ -117,8 +117,22 @@ async fn read_claude(environment: &Environment) -> anyhow::Result<AgentLimits> {
     Ok(limits)
 }
 
-/// Who is signed in to Claude Code in `environment`, and their plan.
-pub async fn claude_login(environment: &Environment) -> anyhow::Result<(Option<String>, Option<String>)> {
+/// Who is signed in to `agent` in `environment`, and their plan.
+pub async fn login(agent: Agent, environment: &Environment) -> anyhow::Result<(Option<String>, Option<String>)> {
+    match agent {
+        Agent::Claude => claude_login(environment).await,
+        Agent::Codex => codex_login(environment).await,
+    }
+}
+
+async fn codex_login(environment: &Environment) -> anyhow::Result<(Option<String>, Option<String>)> {
+    let answers = ask::codex(environment, &[("account/read", json!({}))]).await?;
+    let answer = answers.get("account/read").cloned().ok_or_else(|| anyhow::anyhow!("Codex didn't say"))?;
+    let account = &answer.map_err(anyhow::Error::msg)?["account"];
+    Ok((account["email"].as_str().map(String::from), account["planType"].as_str().map(codex_plan)))
+}
+
+async fn claude_login(environment: &Environment) -> anyhow::Result<(Option<String>, Option<String>)> {
     let answers = ask::claude(environment, &CLAUDE_ARGUMENTS, &["initialize"]).await?;
     let answer = answers.get("initialize").cloned().ok_or_else(|| anyhow::anyhow!("Claude Code didn't say"))?;
     let account = &answer.map_err(anyhow::Error::msg)?["account"];

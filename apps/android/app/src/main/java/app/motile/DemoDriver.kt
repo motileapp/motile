@@ -2,6 +2,7 @@ package app.motile
 
 import android.os.Handler
 import android.os.Looper
+import androidx.compose.ui.layout.boundsInWindow
 import app.motile.core.Access
 import app.motile.core.AgentAccount
 import app.motile.core.Agent
@@ -63,7 +64,7 @@ import java.util.concurrent.Executors
  *     search [text]                     gives the front field the keyboard, and types in it
  *     access <supervised|…>             sets how much the agent may do without asking
  *     slide <label> <share>             drags the program's slider with that label to a share of its track
- *     press <label>                     presses the program's button with that label
+ *     press <label>                     presses the program's button, or a transcript row's, with that label
  *     page close                        puts a program's page open over the screen back in its row
  */
 object DemoDriver {
@@ -75,6 +76,7 @@ object DemoDriver {
         environment["MOTILE_DEMO_SIGN_IN"]?.let { signIn(it, store) }
         val script = environment["MOTILE_DEMO_SCRIPT"] ?: return
         DemoHooks.programFrames = mutableMapOf()
+        DemoHooks.rowButtons = mutableMapOf()
         reader.scheduleWithFixedDelay({
             val steps = runCatching { File(script).readLines() }.getOrNull()?.filter { it.isNotEmpty() } ?: return@scheduleWithFixedDelay
             if (steps.size <= done) return@scheduleWithFixedDelay
@@ -99,6 +101,10 @@ object DemoDriver {
         val row = store.transcript.rows.lastOrNull { it.kind is RowModel.Kind.Ui } ?: return null
         return DemoHooks.programFrames?.get(row.id)?.bounds(label)
     }
+
+    /** Where a transcript row laid out its button with the words, in the window's pixels. */
+    private fun rowButtonBounds(words: String): androidx.compose.ui.geometry.Rect? =
+        DemoHooks.rowButtons?.get(words)?.takeIf { it.isAttached }?.boundsInWindow()
 
     /** A finger put down at `from`, moved to `to` in steps, and lifted, as a drag or, in place, a tap. */
     private fun drag(from: Float, to: Float, y: Float) {
@@ -290,7 +296,7 @@ object DemoDriver {
                 drag(track.left + track.width / 2, track.left + track.width * share, y)
             }
             "press" -> {
-                val button = programBounds(store, rest) ?: return
+                val button = programBounds(store, rest) ?: rowButtonBounds(rest) ?: return
                 drag(button.center.x, button.center.x, button.center.y)
             }
             "page" -> if (rest == "close") store.closeExpandedPage()

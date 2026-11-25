@@ -24,7 +24,6 @@ struct AgentAccountSheet: View {
     @State private var suggestedFolder = ""
     @State private var copied = false
     @State private var copies = 0
-    @FocusState private var codeFocused: Bool
 
     init(server: Server, account: AgentAccount) {
         self.server = server
@@ -54,16 +53,11 @@ struct AgentAccountSheet: View {
         return edited
     }
 
-    /// Claude Code signs in here; Codex, and a server too old for it, with a command.
-    private var signsInHere: Bool { account.agent == .claude && server.signsInAccounts }
+    /// The agent signs in here, unless the server is too old for it: then with a command.
+    private var signsInHere: Bool { server.signsIn(account.agent) }
     private var folderCaption: String {
         "Where its sign-in is kept, as \(account.folderVariable). Empty for \(account.usualFolder)."
     }
-    private var signingIn: Bool {
-        if case .waiting = signIn.step { return true }
-        return false
-    }
-
     /// Who is signed in to the folder the form has, as far as is known.
     private var signedInAs: String? {
         if case .signedIn(let who) = signIn.step { return who }
@@ -72,9 +66,9 @@ struct AgentAccountSheet: View {
     }
 
     private var signInCaption: String {
-        if signingIn { return "Sign in on the page, then paste the code it shows." }
+        if let waiting = signIn.waitingCaption { return waiting }
         if savedAsIs { return "Signing in saved the account." }
-        return "Opens Claude's sign-in page. Signing in saves the account on \(server.shortName)."
+        return "Opens \(AccountSignIn.page(of: account.agent)). Signing in saves the account on \(server.shortName)."
     }
 
     var body: some View {
@@ -89,14 +83,20 @@ struct AgentAccountSheet: View {
     }
 
     private func startSignIn() {
-        signIn.start(edited, on: server, in: store)
+        let starting = edited
+        signIn.start(starting, on: server, in: store) { id in saved(starting, as: id) }
     }
 
     private func finishSignIn() {
-        signIn.finish(edited, in: store) { id in
-            account.id = id
-            savedBySignIn = edited
-        }
+        let finishing = edited
+        signIn.finish(finishing, in: store) { id in saved(finishing, as: id) }
+    }
+
+    private func saved(_ saved: AgentAccount, as id: String) {
+        account.id = id
+        var kept = saved
+        kept.id = id
+        savedBySignIn = kept
     }
 
     @ViewBuilder private var content: some View {
@@ -200,57 +200,9 @@ struct AgentAccountSheet: View {
         }
     }
 
-    @ViewBuilder private var listSignIn: some View {
-        @Bindable var signIn = signIn
+    private var listSignIn: some View {
         Section {
-            switch signIn.step {
-            case .waiting(_, let url):
-                Text(url.absoluteString)
-                    .font(.system(.callout, design: .monospaced))
-                    .foregroundStyle(Color.themeMutedForeground)
-                    .lineLimit(1)
-                Link(destination: url) {
-                    SettingsActionLabel("Open the Sign-In Page", symbol: .squareArrowOutUpRight)
-                }
-                Button {
-                    Platform.copy(url.absoluteString)
-                    copied = true
-                    copies += 1
-                } label: {
-                    SettingsActionLabel(copied ? "Copied" : "Copy the Link", symbol: copied ? .check : .copy)
-                }
-                .task(id: copies) {
-                    guard copied, (try? await Task.sleep(for: .seconds(1.2))) != nil else { return }
-                    copied = false
-                }
-                HStack {
-                    TextField("Paste the code", text: $signIn.code)
-                        .font(.system(.body, design: .monospaced))
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .submitLabel(.done)
-                        .onReturn(finishSignIn)
-                    if signIn.finishing {
-                        Spinner(size: .xl)
-                    } else {
-                        Button("Sign In", action: finishSignIn)
-                            .disabled(!signIn.canFinish || !canSave)
-                    }
-                }
-            default:
-                if let who = signedInAs {
-                    Text("Signed in as \(who)")
-                        .foregroundStyle(Color.themeForeground)
-                }
-                Button(action: startSignIn) {
-                    HStack {
-                        SettingsActionLabel(signedInAs == nil ? "Sign In" : "Sign In Again", symbol: .circleUser)
-                        Spacer()
-                        if signIn.step == .starting { Spinner(size: .xl) }
-                    }
-                }
-                .disabled(signIn.step == .starting)
-            }
+            SignInRows(signIn: signIn, signedInAs: signedInAs, canFinish: canSave, start: startSignIn, finish: finishSignIn)
         } header: {
             Text("Sign In")
         } footer: {
@@ -370,32 +322,8 @@ struct AgentAccountSheet: View {
         }
     }
 
-    @ViewBuilder private var signInSteps: some View {
-        @Bindable var signIn = signIn
-        switch signIn.step {
-        case .waiting(_, let url):
-            VStack(alignment: .leading, spacing: 6) {
-                CommandBox(command: url.absoluteString, link: url)
-                HStack(spacing: 6) {
-                    InputField("Paste the code", text: $signIn.code, monospaced: true, focus: $codeFocused)
-                        .onReturn(finishSignIn)
-                        .onAppear { codeFocused = true }
-                    ActionButton("Sign In", variant: .primary, pending: signIn.finishing, action: finishSignIn)
-                        .disabled(!signIn.canFinish || !canSave)
-                }
-            }
-        default:
-            HStack(spacing: 10) {
-                Text(signedInAs.map { "Signed in as \($0)" } ?? "Not signed in")
-                    .font(.ui(.sm, weight: .medium))
-                    .foregroundStyle(signedInAs == nil ? Color.themeMutedForeground : Color.themeForeground)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .padding(.horizontal, 4)
-                Spacer(minLength: 12)
-                ActionButton(signedInAs == nil ? "Sign In" : "Sign In Again", pending: signIn.step == .starting, action: startSignIn)
-            }
-        }
+    private var signInSteps: some View {
+        SignInSteps(signIn: signIn, signedInAs: signedInAs, canFinish: canSave, start: startSignIn, finish: finishSignIn)
     }
 
     /// A variable's name and value, with whether the value is sensitive and the way to take it out.

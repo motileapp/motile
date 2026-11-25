@@ -63,7 +63,7 @@ extension AppStore {
     }
 
     /// Takes the viewer and the panel away from over the thread.
-    private func uncoverThread() {
+    func uncoverThread() {
         if viewing != nil { closeViewer() }
         if rightPanel.isMaximized { rightPanel.toggleMaximized() }
         if rightPanel.coversThread, rightPanel.isOpen { rightPanel.isOpen = false }

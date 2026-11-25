@@ -17,7 +17,8 @@ use crate::ui::{OnClick, edges, tooltip};
 
 /// A button of words inside a row. All of its frame takes the click, and what lights up under
 /// the pointer is inset from it by `insets`, so buttons that touch each other and the row's edge
-/// look apart. A bordered one is drawn as a regular button is, with a line around it.
+/// look apart. A bordered one is drawn as a regular button is, with a line around it. A solid one
+/// is in the text's colour, with its words in the page's.
 #[derive(IntoElement)]
 pub struct RowButton {
     id: ElementId,
@@ -25,6 +26,7 @@ pub struct RowButton {
     help: SharedString,
     radius: f32,
     bordered: bool,
+    solid: bool,
     hover: Option<Hsla>,
     rest: Option<Hsla>,
     insets: Edges<f32>,
@@ -44,6 +46,7 @@ impl RowButton {
             help: help.into(),
             radius: Self::METRICS.radius(),
             bordered: false,
+            solid: false,
             hover: None,
             rest: None,
             insets: edges(0., 0., 0., 0.),
@@ -59,6 +62,11 @@ impl RowButton {
 
     pub fn bordered(mut self) -> Self {
         self.bordered = true;
+        self
+    }
+
+    pub fn solid(mut self) -> Self {
+        self.solid = true;
         self
     }
 
@@ -97,9 +105,11 @@ impl RenderOnce for RowButton {
         let lit = *hovered.read(cx);
         let c = colors(cx);
         let insets = self.insets;
-        let bordered = self.bordered;
-        let padding = if bordered { Self::METRICS.padding() } else { Self::PADDING };
-        let (fill, text) = if lit {
+        let (bordered, solid) = (self.bordered, self.solid);
+        let padding = if bordered || solid { Self::METRICS.padding() } else { Self::PADDING };
+        let (fill, text) = if solid {
+            (Some(if lit { c.at(c.foreground, Opacity::Lit) } else { c.foreground }), c.background)
+        } else if lit {
             (Some(self.hover.unwrap_or(c.background_secondary)), c.foreground)
         } else {
             (self.rest, if bordered { c.foreground } else { c.muted_foreground })
@@ -124,7 +134,7 @@ impl RenderOnce for RowButton {
                     .when(bordered, |light| light.border_1().border_color(c.border).px(px(padding - 1.)))
                     .when_some(fill, |light, fill| light.bg(fill))
                     .text_size(Self::METRICS.text_size())
-                    .when(bordered, |light| light.font_weight(FontWeight::MEDIUM))
+                    .when(bordered || solid, |light| light.font_weight(FontWeight::MEDIUM))
                     .text_color(text)
                     .whitespace_nowrap()
                     .child(self.title),

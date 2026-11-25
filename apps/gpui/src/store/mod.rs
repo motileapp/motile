@@ -45,7 +45,7 @@ use serde_json::Value;
 pub use self::git::{PendingGit, Toast, stage_label};
 pub use self::projects::RepoListing;
 pub use self::pull_requests::PullRequests;
-pub use self::settings::SettingsState;
+pub use self::settings::{SettingsState, ThreadSignIn};
 pub use self::shortcuts::Shortcuts;
 pub use self::sidebar::{SearchResult, SidebarState};
 pub use self::threads::snooze_presets;
@@ -347,6 +347,8 @@ pub struct Store {
     archived: Vec<ThreadInfo>,
     /// The threads the custom snooze modal is open for.
     pub custom_snooze: Option<CustomSnooze>,
+    /// The account the sign-in sheet signs in again, for the thread whose error asked.
+    pub signing_in_thread: Option<ThreadSignIn>,
 
     // The open thread
     /// Always a draft or a thread; `load_preferences` opens the first draft.
@@ -516,6 +518,7 @@ impl Store {
             snoozed: Vec::new(),
             archived: Vec::new(),
             custom_snooze: None,
+            signing_in_thread: None,
             selection: Selection::Draft(String::new()),
             activity: Activity::default(),
             context: None,

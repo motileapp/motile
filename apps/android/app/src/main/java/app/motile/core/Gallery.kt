@@ -95,7 +95,7 @@ fun AppStore.addToMessage(media: String, name: String) {
 }
 
 /** Closes the viewer, and the panel where it covers the thread. */
-private fun AppStore.uncoverThread() {
+fun AppStore.uncoverThread() {
     if (viewing != null) closeViewer()
     if (rightPanel.isMaximized) rightPanel.toggleMaximized()
     if (Platform.panelCoversThread) rightPanel.isOpen = false

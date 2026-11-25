@@ -266,6 +266,7 @@ struct RootView: View {
                 .frame(width: 620)
         }
         .modal(item: $store.customSnooze) { CustomSnoozeSheet(snooze: $0) }
+        .modal(item: $store.signingInThread) { SignInAgainSheet(request: $0) }
         .asking(shownError) { _ in
             Confirmation(title: store.errorAlert.title, message: store.errorAlert.detail, dismissal: "OK")
         }

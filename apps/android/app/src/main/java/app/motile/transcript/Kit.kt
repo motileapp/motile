@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
+import app.motile.DemoHooks
 import app.motile.platform.scaled
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.TileMode
@@ -66,6 +67,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
@@ -95,15 +97,22 @@ import kotlin.math.min
 
 /**
  * A button of words inside a row. A bordered one is drawn as a regular button is, with a line
- * around it; the others light under a finger. `margin` is room around it that still takes the
- * press, so buttons that touch each other and the row's edge look apart.
+ * around it; a solid one is in the text's colour; the others light under a finger. `margin` is room
+ * around it that still takes the press, so buttons that touch each other and the row's edge look apart.
  */
 @Composable
-fun RowButton(title: String, help: String, modifier: Modifier = Modifier, bordered: Boolean = false, margin: PaddingValues = PaddingValues(0.dp), onClick: () -> Unit) {
-    ActionButton(
-        title = title, help = help, modifier = modifier, variant = if (bordered) ButtonVariant.Outline else ButtonVariant.Ghost,
-        size = RowButton.size, margin = margin, onClick = onClick,
-    )
+fun RowButton(
+    title: String, help: String, modifier: Modifier = Modifier, bordered: Boolean = false, solid: Boolean = false,
+    margin: PaddingValues = PaddingValues(0.dp), onClick: () -> Unit,
+) {
+    val variant = when {
+        solid -> ButtonVariant.Solid
+        bordered -> ButtonVariant.Outline
+        else -> ButtonVariant.Ghost
+    }
+    val frames = DemoHooks.rowButtons
+    val placed = if (frames == null) modifier else modifier.onGloballyPositioned { frames[title] = it }
+    ActionButton(title = title, help = help, modifier = placed, variant = variant, size = RowButton.size, margin = margin, onClick = onClick)
 }
 
 object RowButton {

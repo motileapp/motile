@@ -379,6 +379,11 @@ struct Server: Equatable, Identifiable {
     /// Whether it signs its agents' accounts in for the client.
     var signsInAccounts: Bool { protocolVersion >= 31 }
 
+    /// Whether it signs the agent's accounts in for the client: Claude Code's, and Codex's later.
+    func signsIn(_ agent: Agent) -> Bool {
+        agent == .claude ? signsInAccounts : protocolVersion >= 42
+    }
+
     /// Whether the server keeps where the user moves its threads in the sidebar.
     var movesThreads: Bool { protocolVersion >= 21 }
 

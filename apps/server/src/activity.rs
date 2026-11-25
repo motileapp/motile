@@ -667,7 +667,7 @@ pub fn from_transcript(stored: &StoredThread, items: &[Item]) -> (Vec<TurnRecord
                     turn.agents += 1;
                 }
             }
-            ItemKind::Error { message } => {
+            ItemKind::Error { message, .. } => {
                 if let Some(turn) = &mut open {
                     turn.errors.push(message.to_lowercase());
                 }

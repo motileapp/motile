@@ -270,6 +270,8 @@ final class AppStore {
     var committingProject: Project?
     /// The threads the custom snooze sheet is open for.
     var customSnooze: CustomSnooze?
+    /// The account the sign-in sheet signs in again, for the thread whose error asked.
+    var signingInThread: ThreadSignIn?
     private(set) var gitFiles: [ChangedFile] = []
     /// An action that pushes from the default branch, until the user says where it should happen.
     var pendingGit: PendingGit?
@@ -3024,6 +3026,13 @@ final class AppStore {
     func continueThread() {
         guard let thread = selectedThread, !onRemovedServer(thread) else { return }
         request(thread.serverID, ["type": "continue", "thread_id": thread.id])
+    }
+
+    /// Opens the sheet that signs the agent's account in again, for the thread whose error asked.
+    func signInAgain(_ accountID: String, for threadID: String) {
+        let account = threads[threadID].flatMap { server($0.serverID) }?.agentAccounts.first { $0.id == accountID }
+        guard account?.gateway != true else { return openSettings(.agentGateway) }
+        signingInThread = ThreadSignIn(threadID: threadID, accountID: accountID)
     }
 
     /// Whether the open thread goes on by itself once its usage limit resets.

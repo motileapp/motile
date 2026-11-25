@@ -217,7 +217,7 @@ fn historical(item: &Item) -> Option<HistoricalItem> {
             let input: Value = serde_json::from_str(&call.input).unwrap_or_default();
             ("plan", Role::Assistant, "done".to_string(), input["plan"].as_str().unwrap_or_default().to_string())
         }
-        ItemKind::Error { message } => ("error", Role::Assistant, "done".to_string(), message.clone()),
+        ItemKind::Error { message, .. } => ("error", Role::Assistant, "done".to_string(), message.clone()),
         ItemKind::TurnEnd { summary } if summary.stopped => {
             ("interrupt", Role::Assistant, "done".to_string(), "The user stopped this turn.".to_string())
         }
@@ -345,7 +345,7 @@ mod tests {
             ),
             tool(5, "ExitPlanMode", r#"{"plan":"1. Do it"}"#, None, ToolStatus::Succeeded),
             tool(6, "Read", r#"{"file_path":"/a/b"}"#, Some("…"), ToolStatus::Succeeded),
-            item(7, ItemKind::Error { message: "It broke".into() }),
+            item(7, ItemKind::Error { message: "It broke".into(), sign_in: None }),
             item(8, ItemKind::TurnEnd { summary: TurnSummary { stopped: true, ..TurnSummary::default() } }),
             item(9, ItemKind::TurnEnd { summary: TurnSummary::default() }),
             reply(10, "Fixed it."),

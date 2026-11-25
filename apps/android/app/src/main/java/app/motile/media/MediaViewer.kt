@@ -95,6 +95,7 @@ import app.motile.core.Pictures
 import app.motile.core.ShownIn
 import app.motile.core.addToMessage
 import app.motile.core.showInChat
+import app.motile.core.uncoverThread
 import app.motile.core.ViewedMedia
 import app.motile.core.Viewing
 import app.motile.platform.Platform
@@ -246,7 +247,7 @@ private fun Viewer(viewing: Viewing) {
             }
             store.attachMarkup(result, session.attachment)
             endMarkup()
-            store.closeViewer()
+            store.uncoverThread()
         }
     }
 

@@ -39,6 +39,7 @@ import app.motile.core.EngagedWindow
 import app.motile.core.CustomSnooze
 import app.motile.core.PanelPage
 import app.motile.core.Project
+import app.motile.core.ThreadSignIn
 import app.motile.layout.Drawer
 import app.motile.layout.MainScreen
 import app.motile.layout.handleShortcut
@@ -47,6 +48,7 @@ import app.motile.onboarding.ConnectServerView
 import app.motile.onboarding.SignInView
 import app.motile.platform.Platform
 import app.motile.settings.SettingsSheet
+import app.motile.settings.SignInAgainSheet
 import app.motile.theme.LocalDark
 import app.motile.theme.LocalForeground
 import app.motile.theme.LocalPalette
@@ -80,6 +82,7 @@ private sealed interface RootSheet {
     data object Usage : RootSheet
     data object ThreadSettings : RootSheet
     data class Snooze(val snooze: CustomSnooze) : RootSheet
+    data class SignIn(val request: ThreadSignIn) : RootSheet
 }
 
 private val AppStore.sheet: RootSheet?
@@ -91,6 +94,7 @@ private val AppStore.sheet: RootSheet?
         if (showsUsage) return RootSheet.Usage
         if (showsThreadSettings) return RootSheet.ThreadSettings
         customSnooze?.let { return RootSheet.Snooze(it) }
+        signingInThread?.let { return RootSheet.SignIn(it) }
         return null
     }
 
@@ -102,6 +106,7 @@ private fun AppStore.closeSheet() {
         settings != null -> closeSettings()
         showsUsage -> showsUsage = false
         customSnooze != null -> customSnooze = null
+        signingInThread != null -> signingInThread = null
         else -> {
             showsThreadSettings = false
             showsBranches = false
@@ -225,6 +230,7 @@ private fun Sheets(store: AppStore) {
                     RootSheet.Usage -> UsageSheet()
                     RootSheet.ThreadSettings -> ThreadSettingsSheet()
                     is RootSheet.Snooze -> CustomSnoozeSheet(sheet.snooze)
+                    is RootSheet.SignIn -> SignInAgainSheet(sheet.request)
                 }
             }
         }

@@ -12,6 +12,8 @@ mod mcp_gateway;
 mod page;
 mod relay_sheet;
 mod sidebar;
+pub mod sign_in_again;
+pub mod sign_in_steps;
 
 use std::cell::Cell;
 use std::rc::Rc;

@@ -38,7 +38,7 @@ import UIKit
 ///     search [text]                     gives the front field the keyboard, and types in it
 ///     access <supervised|…>             sets how much the agent may do without asking
 ///     slide <label> <share>             drags the program's slider with that label to a share of its track
-///     press <label>                     presses the program's button with that label
+///     press <label>                     presses the program's button, or a transcript row's, with that label
 ///     page close                        puts a program's page open over the screen back in its row
 enum DemoDriver {
     private static var watcher: Timer?
@@ -287,7 +287,9 @@ enum DemoDriver {
             slider.onDrag?(.ended, CGPoint(x: slider.bounds.width * share, y: y))
         case "page" where rest == "close": store.closeExpandedPage()
         case "press":
-            let button: FlippedView? = views(ControlView.self).last { $0.title == rest } ?? views(ExpandButton.self).last { !$0.isHidden && $0.words == rest }
+            let button: FlippedView? = views(ControlView.self).last { $0.title == rest }
+                ?? views(ExpandButton.self).last { !$0.isHidden && $0.words == rest }
+                ?? views(RowButton.self).last { !$0.isHidden && $0.words == rest }
             guard let button else { return }
             button.onPress?(CGPoint(x: button.bounds.midX, y: button.bounds.midY))
         case "scroll":

@@ -92,7 +92,8 @@ final class RowModel {
         case file(SentFile)
         case group(GroupContent)
         case fold(FoldContent)
-        case error(NSAttributedString)
+        /// `signIn` is the account whose sign-in stopped working, which the row signs in again.
+        case error(NSAttributedString, signIn: String?)
         case changes(ChangesContent)
         case turnEnd(TurnEnd)
         case handoff(HandoffContent)
@@ -167,7 +168,7 @@ final class RowModel {
         case "fold":
             kind = .fold(FoldContent(json: json))
         case "error":
-            kind = .error(ErrorBox.message(json.string("message")))
+            kind = .error(ErrorBox.message(json.string("message")), signIn: json.optionalString("sign_in"))
         case "changes":
             kind = .changes(ChangesContent(json: json))
         case "turn_end":

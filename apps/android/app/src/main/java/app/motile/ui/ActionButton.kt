@@ -112,6 +112,8 @@ enum class ButtonVariant {
     Accent,
     /** A secondary button as it is in the dark, over a picture or a video. */
     Overlay,
+    /** In the text's colour, with its words in the page's: what a card asks of the user. */
+    Solid,
 }
 
 /** The sides of a control. */
@@ -174,6 +176,7 @@ data class ControlLook(
             }
             ButtonVariant.Link, ButtonVariant.Accent -> palette.primary
             ButtonVariant.Overlay -> palette.foreground
+            ButtonVariant.Solid -> palette.background
         }
     }
 
@@ -199,6 +202,7 @@ data class ControlLook(
             ButtonVariant.Link -> if (lit) palette.primary.at(Opacity.ColorTint, dark) else Color.Transparent
             ButtonVariant.Accent -> palette.primary.at(if (lit) Opacity.ColorTintStronger else Opacity.ColorTint, dark)
             ButtonVariant.Overlay -> if (lit) palette.overlayButtonAccent else palette.overlayButton
+            ButtonVariant.Solid -> filled(palette.foreground)
         }
     }
 
