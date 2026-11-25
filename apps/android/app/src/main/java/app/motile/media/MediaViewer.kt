@@ -551,7 +551,7 @@ private fun MediaPage(
             Text("This video can't be played here.", size = TextSize.Sm, color = OverPicture.foreground)
             ActionButton("Open in Another App", variant = ButtonVariant.Primary, size = ControlSize.Large) { MediaFiles.open(shownNow.file, item.name) }
         }
-        null -> Box(tapping, contentAlignment = Alignment.Center) {
+        null -> Box(tapping.padding(horizontal = 48.dp), contentAlignment = Alignment.Center) {
             val id = (item.source as? ViewedMedia.Source.Media)?.id
             val fraction = id?.let { store.mediaProgress[it] }
             when {
@@ -559,7 +559,10 @@ private fun MediaPage(
                     if (item.video) "This video couldn't be loaded." else "This image couldn't be loaded.",
                     size = TextSize.Sm, color = OverPicture.mutedForeground, align = TextAlign.Center,
                 )
-                fraction != null -> Text("Downloading ${item.name} · ${(fraction * 100).toInt()}%", style = app.motile.theme.Theme.uiDigits(TextSize.Sm), color = OverPicture.mutedForeground)
+                fraction != null -> Text(
+                    "Downloading ${item.name} · ${(fraction * 100).toInt()}%",
+                    style = app.motile.theme.Theme.uiDigits(TextSize.Sm), color = OverPicture.mutedForeground, align = TextAlign.Center,
+                )
                 else -> Spinner(ControlSize.Large.symbol, color = OverPicture.mutedForeground)
             }
         }

@@ -619,6 +619,8 @@ impl MediaViewer {
             .flex()
             .items_center()
             .justify_center()
+            .px(px(48.))
+            .text_center()
             .text_size(TextSize::Sm)
             .text_color(c.muted_foreground_over_picture)
             .child(words)
