@@ -58,8 +58,11 @@ enum PointerCursor {
     }
 
     static func update(after event: NSEvent) {
-        found = nil
-        guard events.contains(event.type) else { return }
+        guard events.contains(event.type) else {
+            found = nil
+            return
+        }
+        found = routed(event)
         if event.type == .leftMouseDown { dragged = hit()?.view }
         update()
     }
@@ -95,12 +98,23 @@ enum PointerCursor {
         return (view, location)
     }
 
+    /// The window the window server wrote in a pointer event: the one on top under the pointer that
+    /// takes it. Events AppKit makes itself carry none.
+    private static func routed(_ event: NSEvent) -> (location: CGPoint, windows: [Int], number: Int)? {
+        guard let field = event.cgEvent?.getIntegerValueField(.mouseEventWindowUnderMousePointerThatCanHandleThisEvent),
+            field != 0, NSApp.window(withWindowNumber: Int(field))?.ignoresMouseEvents != true
+        else { return nil }
+        return (NSEvent.mouseLocation, visibleWindows, Int(field))
+    }
+
+    private static var visibleWindows: [Int] { NSApp.windows.filter(\.isVisible).map(\.windowNumber) }
+
     /// The window the pointer's events go to: the one on top under it that takes them, if it is ours.
-    /// Asking the window server waits on it, and AppKit sets the cursor many times a frame while
-    /// views change, so the answer stands until an event comes, the pointer moves or our windows change.
+    /// Asking the window server waits on it, so the window the last event named, or the last answer,
+    /// stands until the pointer moves or our windows change.
     private static func windowUnderPointer() -> NSWindow? {
         let location = NSEvent.mouseLocation
-        let windows = NSApp.windows.filter(\.isVisible).map(\.windowNumber)
+        let windows = visibleWindows
         if let found, found.location == location, found.windows == windows {
             return NSApp.window(withWindowNumber: found.number)
         }

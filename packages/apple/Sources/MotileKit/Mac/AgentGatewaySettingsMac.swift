@@ -218,7 +218,7 @@ struct GatewayHeader: View {
             if gateway.exists {
                 let name = gateway.name ?? "Gateway"
                 SettingsRow {
-                    SettingsLabel(name, description: [gateway.statusText, gateway.version.map { "version \($0)" }].compactMap { $0 }.joined(separator: " · "), icon: .waypoints) {
+                    SettingsLabel(name, description: [gateway.statusText, gateway.version.map { "Version \($0)" }].compactMap { $0 }.joined(separator: " · "), icon: .waypoints) {
                         if let error = gateway.error {
                             Text(error)
                                 .font(.ui(.xs))

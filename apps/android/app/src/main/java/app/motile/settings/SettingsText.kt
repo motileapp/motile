@@ -14,7 +14,7 @@ val Server.settingsDescription: String
     get() {
         if (deleting) return "Deleting"
         if (state != Server.State.Connected) return stateLabel
-        return "Connected · version $version · $installedAgents"
+        return "Connected · Version $version · $installedAgents"
     }
 
 val Server.stateLabel: String
