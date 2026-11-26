@@ -242,7 +242,10 @@ impl Surface {
                 Layer::Control | Layer::Row | Layer::Box | Layer::Chip => c.popover_accent,
                 Layer::ControlLit | Layer::ControlLitOnSelected | Layer::RowSelected => c.popover_accent_stronger,
             },
-            Surface::Composer => c.border_composer,
+            Surface::Composer => match layer {
+                Layer::Control | Layer::Row | Layer::Box | Layer::Chip => c.border_composer,
+                Layer::ControlLit | Layer::ControlLitOnSelected | Layer::RowSelected => c.border_composer_stronger,
+            },
             Surface::ComposerBox => match layer {
                 Layer::Control | Layer::Row | Layer::Box | Layer::Chip => c.composer_accent,
                 Layer::ControlLit | Layer::ControlLitOnSelected | Layer::RowSelected => c.composer_accent_stronger,

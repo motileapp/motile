@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -329,8 +330,14 @@ private fun Viewer(viewing: Viewing) {
                     val session = markup
                     if (session == null) {
                         Column(
-                            Modifier.align(Alignment.Center).padding(horizontal = GlassButton.side + 8.dp),
+                            Modifier
+                                .align(Alignment.Center)
+                                .padding(horizontal = GlassButton.side + 8.dp)
+                                .height(GlassButton.side)
+                                .glassButton(CircleShape)
+                                .padding(horizontal = 16.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
                         ) {
                             Text(item.name, size = TextSize.Sm, weight = FontWeight.SemiBold, color = chromePalette.foreground, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                             if (viewing.items.size > 1) {

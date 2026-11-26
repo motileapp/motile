@@ -311,6 +311,9 @@ struct MediaViewer: View {
             }
         }
         .foregroundStyle(Color.themeForeground)
+        .padding(.horizontal, 16)
+        .frame(height: GlassButtonStyle.side)
+        .glassSurface(in: Capsule())
     }
 }
 
