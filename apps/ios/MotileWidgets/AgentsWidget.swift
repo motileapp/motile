@@ -54,28 +54,32 @@ struct AgentsWidgetView: View {
         case .accessoryRectangular:
             rectangular(items)
         case .systemMedium:
-            system(items, rows: 4, links: true)
+            system(items, wide: true)
         default:
-            system(items, rows: 3, links: false)
+            system(items, wide: false)
                 .widgetURL(items.first?.link)
         }
     }
 
-    private func system(_ items: [AgentsWork.Item], rows: Int, links: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    /// The summary and as many one-line threads as the widget's height holds, from the top.
+    private func system(_ items: [AgentsWork.Item], wide: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
             WorkSummary(work: entry.work)
-            ForEach(items.prefix(rows)) { item in
-                let row = WorkRow(item: item, stale: item.isStale(at: entry.date))
-                if links {
+            ForEach(items.prefix(Self.systemRows)) { item in
+                let row = WorkRow(item: item, stale: item.isStale(at: entry.date), showsProject: wide)
+                if wide {
                     Link(destination: item.link) { row }
                 } else {
                     row
                 }
             }
-            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
     }
+
+    /// The small and the medium widget are as tall as each other.
+    private static let systemRows = 4
 
     private func rectangular(_ items: [AgentsWork.Item]) -> some View {
         VStack(alignment: .leading, spacing: 1) {

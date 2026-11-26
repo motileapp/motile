@@ -17,7 +17,8 @@ struct WorkSummary: View {
     }
 }
 
-/// A thread in the work: a dot of its state, its title, and its project under it.
+/// A thread in the work, on one line: a dot of its state, its title, then its project. The title
+/// gives way first.
 struct WorkRow: View {
     static let dot: CGFloat = 7
 
@@ -26,21 +27,20 @@ struct WorkRow: View {
     var showsProject = true
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(spacing: 6) {
             Circle()
                 .fill(WidgetTheme.color(of: item.state))
                 .frame(width: Self.dot, height: Self.dot)
-                .alignmentGuide(.firstTextBaseline) { $0[.bottom] }
-            VStack(alignment: .leading, spacing: 1) {
+            HStack(spacing: 0) {
                 Text(item.title)
-                    .font(.widget(.sm, weight: .medium))
                     .foregroundStyle(WidgetTheme.foreground)
-                if showsProject {
-                    Text(item.project)
-                        .font(.widget(.xs))
-                        .foregroundStyle(WidgetTheme.mutedForeground)
+                if showsProject, !item.project.isEmpty {
+                    (Text(" · ").foregroundStyle(WidgetTheme.mutedStrongerForeground)
+                        + Text(item.project).foregroundStyle(WidgetTheme.mutedForeground))
+                        .fixedSize()
                 }
             }
+            .font(.widget(.sm, weight: .medium))
             .lineLimit(1)
         }
         .opacity(stale ? WidgetTheme.disabled : 1)

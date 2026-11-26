@@ -78,9 +78,17 @@ private fun color(pick: (Palette) -> Color, faded: Boolean = false): ColorProvid
 
 private fun size(size: TextSize) = (size.points * Platform.scale).sp
 
-/** Wider than this, the widget lists more threads, each opening its own. */
+/** Wider than this, each thread shows its project and opens itself. */
 private val MEDIUM_WIDTH = 250.dp
 private val DOT = 7.dp
+private val PADDING = 14.dp
+private val GAP = 6.dp
+private val SUMMARY_HEIGHT = 22.dp
+private val ROW_HEIGHT = 20.dp
+
+/** How many one-line threads fit under the summary in a widget this tall. */
+internal fun rowsThatFit(height: androidx.compose.ui.unit.Dp): Int =
+    ((height - PADDING * 2 - SUMMARY_HEIGHT) / (ROW_HEIGHT + GAP)).toInt().coerceAtLeast(0)
 
 private fun stateColor(state: WorkState): (Palette) -> Color = when (state) {
     WorkState.Waiting -> { palette -> palette.warning }
@@ -100,16 +108,17 @@ private fun Agents(work: AgentsWork) {
     val context = LocalContext.current
     val now = System.currentTimeMillis() / 1000.0
     val items = work.shown(now)
-    val medium = LocalSize.current.width >= MEDIUM_WIDTH
+    val size = LocalSize.current
+    val medium = size.width >= MEDIUM_WIDTH
     Column(
-        GlanceModifier.fillMaxSize().cornerRadius(Radius.xl).background(color({ it.background })).padding(14.dp)
+        GlanceModifier.fillMaxSize().cornerRadius(Radius.xl).background(color({ it.background })).padding(PADDING)
             .clickable(actionStartActivity(opening(context, items.firstOrNull()))),
     ) {
         Summary(work)
-        for (item in items.take(if (medium) 4 else 3)) {
-            Spacer(GlanceModifier.height(8.dp))
-            val row = if (medium) GlanceModifier.fillMaxWidth().clickable(actionStartActivity(opening(context, item))) else GlanceModifier.fillMaxWidth()
-            Item(item, item.isStale(now), row)
+        for (item in items.take(rowsThatFit(size.height))) {
+            Spacer(GlanceModifier.height(GAP))
+            val row = GlanceModifier.fillMaxWidth().height(ROW_HEIGHT)
+            Item(item, item.isStale(now), medium, if (medium) row.clickable(actionStartActivity(opening(context, item))) else row)
         }
     }
 }
@@ -126,15 +135,17 @@ private fun Summary(work: AgentsWork) {
     }
 }
 
-/** A thread: a dot of its state, its title, and its project under it, faded once it may no longer be so. */
+/** A thread on one line: a dot of its state, its title, then its project, faded once it may no longer be so. */
 @Composable
-private fun Item(item: AgentsWork.Item, stale: Boolean, modifier: GlanceModifier) {
+private fun Item(item: AgentsWork.Item, stale: Boolean, showsProject: Boolean, modifier: GlanceModifier) {
+    val style = TextStyle(color = color({ it.foreground }, stale), fontSize = size(TextSize.Sm), fontWeight = FontWeight.Medium)
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(GlanceModifier.size(DOT).cornerRadius(DOT / 2).background(color(stateColor(item.state), stale))) {}
         Spacer(GlanceModifier.width(6.dp))
-        Column {
-            Text(item.title, style = TextStyle(color = color({ it.foreground }, stale), fontSize = size(TextSize.Sm), fontWeight = FontWeight.Medium), maxLines = 1)
-            Text(item.project, style = TextStyle(color = color({ it.mutedForeground }, stale), fontSize = size(TextSize.Xs)), maxLines = 1)
+        Text(item.title, style = style, maxLines = 1, modifier = GlanceModifier.defaultWeight())
+        if (showsProject && item.project.isNotEmpty()) {
+            Text(" · ", style = style.copy(color = color({ it.mutedStrongerForeground }, stale)), maxLines = 1)
+            Text(item.project, style = style.copy(color = color({ it.mutedForeground }, stale)), maxLines = 1)
         }
     }
 }
