@@ -21,7 +21,7 @@ type Switches = Option<[f64; 2]>;
 
 #[derive(Serialize, Clone, PartialEq, Debug)]
 pub struct StatsView {
-    /// "Uptime: 2d 10h".
+    /// How long the machine has been up: "2d 10h".
     pub uptime: String,
     pub rows: Vec<StatsRow>,
 }
@@ -136,7 +136,7 @@ pub fn view(stats: &MachineStats) -> StatsView {
             fill: Some(Bar::of(disk_share, TONES)),
         },
     ];
-    StatsView { uptime: format!("Uptime: {}", uptime(stats.uptime_secs)), rows }
+    StatsView { uptime: uptime(stats.uptime_secs), rows }
 }
 
 /// A bar for each slot, the empty ones first while fewer samples have come.
@@ -204,7 +204,7 @@ mod tests {
     #[test]
     fn a_machine_reads_as_its_monitor_would() {
         let view = view(&stats(vec![sample(12.0, 0), sample(0.5, 1434)]));
-        assert_eq!(view.uptime, "Uptime: 2d 10h");
+        assert_eq!(view.uptime, "2d 10h");
         let lines: Vec<_> = view
             .rows
             .iter()

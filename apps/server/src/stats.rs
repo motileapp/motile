@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use motile_protocol::now;
 use motile_protocol::wire::{MachineStats, StatsSample};
-use sysinfo::{Disks, Networks, System};
+use sysinfo::{DiskRefreshKind, Disks, Networks, System};
 use tokio::sync::watch;
 
 const EVERY: Duration = Duration::from_secs(3);
@@ -111,13 +111,14 @@ fn counts(interface: &str) -> bool {
 }
 
 /// Used and total bytes of the volume `home` is on. What is used is what isn't free, which on
-/// APFS counts the volumes that share its container, as Finder does.
+/// APFS counts the volumes that share its container, as Finder does. The whole list is refreshed:
+/// on macOS a disk refreshed alone keeps reading the space it first read.
 fn disk_of(disks: &mut Disks, home: &Path) -> Option<(u64, u64)> {
+    disks.refresh_specifics(true, DiskRefreshKind::nothing().with_storage());
     let disk = disks
-        .iter_mut()
+        .iter()
         .filter(|disk| home.starts_with(disk.mount_point()))
         .max_by_key(|disk| disk.mount_point().as_os_str().len())?;
-    disk.refresh();
     Some((disk.total_space().saturating_sub(disk.available_space()), disk.total_space()))
 }
 

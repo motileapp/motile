@@ -926,7 +926,7 @@ private struct ServersShelf: View {
         if servers.count == 1 {
             VStack(spacing: 0) {
                 ThemeDivider()
-                ServerStatsButton(server: servers[0], radius: 0) {
+                ServerStatsButton(server: servers[0]) {
                     ServerLine(server: servers[0])
                         .padding(.leading, sidebarEdge)
                         .padding(.trailing, sidebarEdge - serverButtonOutset)
@@ -943,11 +943,12 @@ private struct ServersShelf: View {
                         SidebarChevron(expanded: expanded)
                     }
                 } row: { server in
-                    ServerStatsButton(server: server, inset: rowMargin) {
+                    ServerStatsButton(server: server) {
                         ServerLine(server: server)
                             .padding(.leading, sidebarRowPadding)
                             .padding(.trailing, sidebarRowPadding - serverButtonOutset)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding(rowMargin)
                     }
                 }
                 ServerErrors(servers: servers)
@@ -1405,6 +1406,7 @@ struct ServerLine: View {
                     .font(.ui(.xs))
                     .foregroundStyle(Color.themeMutedStrongerForeground)
                     .monospacedDigit()
+                    .padding(.trailing, serverButtonOutset)
             }
         }
         .tooltip(server.error ?? detail)

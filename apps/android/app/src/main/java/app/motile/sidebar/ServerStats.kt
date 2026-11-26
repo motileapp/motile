@@ -54,7 +54,8 @@ fun ServerStatsHeader(server: Server, modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // The line keeps its room while the stats come, so that nothing under it moves.
-            Text(store.serverStats[server.id]?.uptime ?: " ", Modifier.weight(1f), style = Theme.uiDigits(TextSize.Sm), color = Theme.colors.foreground, maxLines = 1)
+            val uptime = store.serverStats[server.id]?.uptime?.let { uptime(it, Theme.colors.mutedForeground, Theme.colors.foreground) }
+            Text(uptime ?: AnnotatedString(" "), Modifier.weight(1f), style = Theme.uiDigits(rowText), maxLines = 1)
             UpdateButton(server, step)
         }
         UpdateLine(step)
@@ -126,6 +127,8 @@ fun AppStore.updateStep(server: Server): ServerUpdateStep {
 }
 
 private val symbolGap = 5.dp
+/** As large as the rows of the other sheets. */
+private val rowText = TextSize.Lg
 /** Between a part's name and its chart, so that they read as one. */
 private val chartGap = 8.dp
 /** A meter is a thin line, so it stands further from its name than a chart's bars do. */
@@ -135,12 +138,12 @@ private val meterGap = chartGap + 4.dp
 @Composable
 fun ServerStatsRow(row: ServerStats.Row, modifier: Modifier = Modifier) {
     val colors = Theme.colors
-    val style = Theme.uiDigits(TextSize.Sm)
+    val style = Theme.uiDigits(rowText)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(chartGap)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Icon(row.symbol, IconSize.Sm, Modifier.padding(end = symbolGap), color = colors.mutedForeground)
+            Icon(row.symbol, IconSize.Md, Modifier.padding(end = symbolGap), color = colors.mutedForeground)
             Text(label(row, colors.mutedForeground, colors.mutedStrongerForeground), Modifier.weight(1f).padding(end = 8.dp), style = style, maxLines = 1)
-            Text(value(row, colors.mutedForeground, colors.mutedStrongerForeground, colors.foreground), style = Theme.uiDigits(TextSize.Sm, FontWeight.Medium), maxLines = 1)
+            Text(value(row, colors.mutedForeground, colors.mutedStrongerForeground, colors.foreground), style = Theme.uiDigits(rowText, FontWeight.Medium), maxLines = 1)
         }
         val fill = row.fill
         if (fill != null) {
@@ -149,6 +152,12 @@ fun ServerStatsRow(row: ServerStats.Row, modifier: Modifier = Modifier) {
             StatsBars(row.bars)
         }
     }
+}
+
+/** "Uptime: 2d 10h", named as a part's row is and as much as its value. */
+private fun uptime(uptime: String, muted: Color, foreground: Color): AnnotatedString = buildAnnotatedString {
+    withStyle(SpanStyle(color = muted)) { append("Uptime: ") }
+    withStyle(SpanStyle(color = foreground, fontWeight = FontWeight.Medium)) { append(uptime) }
 }
 
 /** "CPU · 12 cores", the separator a muted step behind the words it divides. */

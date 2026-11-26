@@ -860,7 +860,8 @@ fn context_fill(fill: &ContextFill, cx: &App) -> Div {
                 .child(div().text_color(c.foreground).child(fill.tokens.clone()))
                 .when_some(fill.window.clone(), |line, window| line.child(format!(" / {window}")))
                 .when_some(fill.used.clone(), |line, used| {
-                    line.child(div().text_color(c.muted_stronger_foreground).child(" · ")).child(used)
+                    line.child(div().text_color(c.muted_stronger_foreground).child(" · "))
+                        .child(div().text_color(c.foreground).child(used))
                 }),
         )
         .when_some(fill.used_percent, |lines, percent| {

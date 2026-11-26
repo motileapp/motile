@@ -19,7 +19,7 @@ use super::{
 use crate::models::{Server, ThreadInfo, section_label};
 use crate::prefs::Prefs;
 use crate::store::{Store, UndoNotice};
-use crate::theme::{self, IconSize, Opacity, Radius, TextSize, colors};
+use crate::theme::{self, IconSize, Opacity, TextSize, colors};
 use crate::ui::{Highlight, divider, ease_out, icons, tabular_numbers, tooltip};
 
 /// How tall a shelf's list can get at least, when there is room, and before it is resized.
@@ -572,7 +572,7 @@ impl Sidebar {
             let visible = self.list_mut(Shelf::Servers).visible(&layout, window);
             for index in visible {
                 let server = &servers[index];
-                let light = Highlight::new().radius(Radius::MD).inset(margin).opaque(true);
+                let light = Highlight::new().radius(0.).opaque(true);
                 let line = div()
                     .relative()
                     .size_full()
@@ -639,6 +639,7 @@ impl Sidebar {
                         .text_color(c.muted_stronger_foreground)
                         .font_features(tabular_numbers())
                         .whitespace_nowrap()
+                        .mr(px(BUTTON_OUTSET))
                         .child(detail.clone()),
                 ),
             );

@@ -554,7 +554,7 @@ private struct ComposerPicker: View {
         VStack(alignment: .leading, spacing: Self.headerGap) {
             let tokens = Text(verbatim: fill.tokens).foregroundStyle(Color.themeForeground)
             let dot = Text(verbatim: " · ").foregroundStyle(Color.themeMutedStrongerForeground)
-            let used = fill.used.map { Text("\(dot)\($0)") } ?? Text(verbatim: "")
+            let used = fill.used.map { Text("\(dot)\(Text(verbatim: $0).foregroundStyle(Color.themeForeground))") } ?? Text(verbatim: "")
             Text("Context: \(tokens)\(fill.window.map { " / \($0)" } ?? "")\(used)")
                 .font(ControlSize.regular.font)
                 .foregroundStyle(Color.themeMutedForeground)

@@ -253,7 +253,7 @@ struct ThreadSettingsSheet: View {
                     Spacer()
                     if let used = fill.used {
                         Text(verbatim: used)
-                            .foregroundStyle(Color.themeMutedForeground)
+                            .foregroundStyle(Color.themeForeground)
                     }
                 }
                 if let percent = fill.usedPercent {

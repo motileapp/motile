@@ -156,7 +156,7 @@ private fun Lighted(
     }
 }
 
-/** A button whose own look says what it does, like a picture: pressed, it is at opacity lit. */
+/** A button whose own look says what it does, like a picture: pressed, it is at opacity lit-picture. */
 @Composable
 fun DimButton(
     onClick: () -> Unit,
@@ -168,7 +168,7 @@ fun DimButton(
 ) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val lit = Opacity.Lit.value(LocalDark.current)
+    val lit = Opacity.LitPicture.value(LocalDark.current)
     Box(
         modifier
             .arrowPointer()

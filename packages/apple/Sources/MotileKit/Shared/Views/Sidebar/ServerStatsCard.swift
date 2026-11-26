@@ -6,7 +6,7 @@ import SwiftUI
 struct ServerStatsCard: View {
     static let width: CGFloat = 300
     static let edge: CGFloat = 14
-    private static let headerTop: CGFloat = 8
+    private static let headerTop: CGFloat = 10
     private static let headerBottom: CGFloat = 10
     /// The update's button stands as far from the header's side as from its top and bottom.
     private static let buttonSide: CGFloat = 12
@@ -63,9 +63,8 @@ struct ServerStatsHeader: View {
                             .foregroundStyle(Color.themeForeground)
                     }
                     // The line keeps its room while the stats come, so that nothing under it moves.
-                    Text(store.serverStats[server.id]?.uptime ?? " ")
-                        .font(.ui(named ? .xs : .sm))
-                        .foregroundStyle(named ? Color.themeMutedForeground : Color.themeForeground)
+                    uptime
+                        .font(ServerStatsRow.font)
                         .monospacedDigit()
                 }
                 .lineLimit(1)
@@ -75,6 +74,13 @@ struct ServerStatsHeader: View {
             .frame(minHeight: ControlSize.regular.height)
             updateLine(step)
         }
+    }
+
+    /// Named as a part's row is, and as much as its value.
+    private var uptime: Text {
+        guard let uptime = store.serverStats[server.id]?.uptime else { return Text(verbatim: " ") }
+        let value = Text(uptime).foregroundStyle(Color.themeForeground).fontWeight(.medium)
+        return Text("\(muted("Uptime:")) \(value)")
     }
 
     @ViewBuilder private func updateButton(_ step: ServerUpdateStep) -> some View {
@@ -151,7 +157,7 @@ extension AppStore {
 /// can't be shown.
 struct ServerStatsRows: View {
     /// Between the line over the rows and the first.
-    static let top: CGFloat = 10
+    static let top: CGFloat = 12
     /// Between one part's chart and the next part's name: clearly more than a name and its chart.
     private static let gap: CGFloat = 20
 
@@ -187,17 +193,25 @@ struct ServerStatsRow: View {
     #if os(iOS)
     private static let chartGap: CGFloat = 8
     #else
-    private static let chartGap: CGFloat = 4
+    private static let chartGap: CGFloat = 6
     #endif
     /// A meter is a thin line, so it stands further from its name than a chart's bars do.
     private static let meterGap: CGFloat = chartGap + 4
+    /// On iOS as large as the rows of the other sheets.
+    #if os(iOS)
+    static let font = Font.body
+    private static let symbolSize = IconSize.md
+    #else
+    static let font = Font.ui(.sm)
+    private static let symbolSize = IconSize.sm
+    #endif
 
     let row: ServerStats.Row
 
     var body: some View {
         VStack(spacing: Self.chartGap) {
             HStack(spacing: 0) {
-                Image(symbol, size: .sm)
+                Image(symbol, size: Self.symbolSize)
                     .foregroundStyle(Color.themeMutedForeground)
                     .padding(.trailing, Self.symbolGap)
                 label
@@ -205,7 +219,7 @@ struct ServerStatsRow: View {
                 value
                     .fontWeight(.medium)
             }
-            .font(.ui(.sm))
+            .font(Self.font)
             .monospacedDigit()
             .lineLimit(1)
             if let fill = row.fill {

@@ -735,7 +735,7 @@ fun ServerLine(server: Server, modifier: Modifier = Modifier) {
         ShelfLineMark { StateRing(server.stateTint ?: palette.success) }
         Text(server.shortName, Modifier.weight(1f).padding(start = 7.dp, end = 4.dp), size = TextSize.Xs, weight = FontWeight.Medium, maxLines = 1)
         ServerUpdateStatus(server) {
-            Text(detail, style = Theme.uiDigits(TextSize.Xs), color = palette.mutedStrongerForeground, maxLines = 1)
+            Text(detail, Modifier.padding(end = serverButtonOutset), style = Theme.uiDigits(TextSize.Xs), color = palette.mutedStrongerForeground, maxLines = 1)
         }
     }
 }
