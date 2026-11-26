@@ -104,6 +104,27 @@ ${Object.entries(shadow)
 `
 }
 
+/// The tokens as plain values, for the iOS extensions, which draw without MotileKit.
+function sharedSwift() {
+  return `// ${generated("The design tokens of the clients, for what draws without MotileKit.")}
+import CoreGraphics
+
+/// Each colour as its light and dark RGB.
+public enum SharedTokens {
+${names.map((name) => `    public static let ${camel(name)}: (light: UInt32, dark: UInt32) = (${hex(colors.light[name])}, ${hex(colors.dark[name])})`).join("\n")}
+
+${opacities.map((name) => `    public static let ${swiftName(name)}Opacity: (light: CGFloat, dark: CGFloat) = (${opacity.light[name]}, ${opacity.dark[name]})`).join("\n")}
+}
+
+/// How large text is, as on the Mac.
+public enum SharedTextSize: CGFloat, CaseIterable {
+${Object.entries(text)
+  .map(([name, value]) => `    case ${swiftName(name)} = ${value}`)
+  .join("\n")}
+}
+`
+}
+
 function swift() {
   const cases = (keys, value) =>
     keys.map((name) => `        case .${swiftName(name)}: ${value(name)}`).join("\n")
@@ -550,6 +571,7 @@ function mapStyle(mode) {
 writeFileSync(here("tokens.css"), tokensCSS())
 writeFileSync(here("theme.css"), themeCSS())
 writeFileSync(here("../apple/Sources/MotileKit/Shared/Theme/Tokens.swift"), swift())
+writeFileSync(here("../apple/Sources/MotileShared/SharedTokens.swift"), sharedSwift())
 writeFileSync(here("../../apps/gpui/src/tokens.rs"), rust())
 writeFileSync(here("../../apps/android/app/src/main/java/app/motile/theme/Tokens.kt"), kotlin())
 writeFileSync(here("../../apps/android/app/src/main/res/values/tokens.xml"), androidResources("light"))

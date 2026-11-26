@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use motile_protocol::auth_api::User;
+use motile_protocol::alerts::Alert;
+use motile_protocol::auth_api::{PushService, User};
 use motile_protocol::gateway_wire::{AccountChange, Capture, McpChange};
 use motile_protocol::wire::{
     Activity, Agent, Bucket, ClientForm, ClientInfo, ClientKind, ContinueSettings, DiffScope, GitAction, GitStage,
@@ -13,6 +14,7 @@ use motile_protocol::wire::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::alerts;
 use crate::connection::PathKind;
 use crate::find::FoundRow;
 use crate::gallery::Shown;
@@ -138,6 +140,29 @@ pub enum Command {
     },
     /// The device changed networks: what waits to dial again dials now.
     NetworkChanged,
+    /// This device's notification settings; `Notifications` tells them back.
+    SetNotifications {
+        settings: alerts::Settings,
+    },
+    /// The phone's push token and its Live Activity tokens, at start and whenever one changes: the
+    /// auth server pushes the servers' alerts to it, sealed to this device's key.
+    RegisterPush {
+        service: PushService,
+        token: String,
+        #[serde(default)]
+        live_start_token: Option<String>,
+        #[serde(default)]
+        live_token: Option<String>,
+    },
+    /// Stops the pushes to this phone.
+    UnregisterPush,
+    /// Answers with `secret`: this device's key as an X25519 secret, in base64, for the part of
+    /// the app that opens pushes without the core.
+    PushSecret,
+    /// Answers with what a push carried, `{"type": "alert", …}` or `{"type": "work", …}`.
+    OpenPush {
+        sealed: String,
+    },
     /// Asks the auth server about the account every couple of seconds, while waiting for a server.
     WatchServers {
         on: bool,
@@ -777,6 +802,25 @@ pub enum Command {
 #[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
+    /// This device's notification settings, at start and whenever they change.
+    Notifications {
+        settings: alerts::Settings,
+    },
+    /// A server's alert, to show as `shown` says.
+    Alert {
+        alert: Alert,
+        server_name: String,
+        shown: alerts::Shown,
+    },
+    /// What every server's agents are doing, for the widgets, at start and whenever it changes.
+    Work {
+        servers: Vec<motile_protocol::alerts::ServerWork>,
+    },
+    /// How many threads wait for the user or have a reply the user hasn't seen, for the app's
+    /// badge, at start and whenever it changes.
+    Badge {
+        count: usize,
+    },
     /// The threads whose messages have `query` in them, as far as the servers have answered:
     /// `searching` while some still may. What was found for a shorter search stays while it fits.
     ThreadSearch {

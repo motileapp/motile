@@ -29,4 +29,7 @@ object Native {
 
     /** Marks up an image (`markup::markup_json`). Any thread; `flatten` off the main thread. */
     @JvmStatic external fun markup(input: String): String
+
+    /** Opens a push with the device's key in `dataDir`, without the core running: the opened `Pushed`, or empty. Any thread. */
+    @JvmStatic external fun openPush(dataDir: String, sealed: String): String
 }

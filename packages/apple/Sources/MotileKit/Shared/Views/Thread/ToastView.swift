@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// What the last git action or project add did, or what was refused, at the top of the thread,
-/// whose shadow `ThreadCorner` casts.
+/// What the last git action or project add did, what was refused, or an alert of another thread,
+/// at the top of the thread, whose shadow `ThreadCorner` casts.
 /// What follows is one click away: the push after a commit, the pull request after a push, the
-/// thread in a project that was cloned.
+/// thread in a project that was cloned, the thread an alert is about.
 struct ToastView: View {
     @Environment(AppStore.self) private var store
     let toast: Toast
@@ -25,6 +25,9 @@ struct ToastView: View {
             Group {
                 if toast.pending {
                     Spinner(size: .md)
+                } else if let alert = toast.alert {
+                    Image(alert.kind.symbol, size: .md)
+                        .foregroundStyle(alert.kind.color)
                 } else {
                     Image(toast.failed ? .circleAlert : .circleCheck, size: .md)
                         .foregroundStyle(toast.failed ? Color.themeDestructive : Color.themeSuccess)
@@ -93,6 +96,9 @@ struct ToastView: View {
         }
         if toast.projectID != nil {
             actions.append(("Open project", true, { store.openToastProject() }))
+        }
+        if let alert = toast.alert {
+            actions.append(("Open", true, { store.openThread(serverId: alert.serverID, threadId: alert.threadID) }))
         }
         return actions
     }

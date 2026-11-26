@@ -9,11 +9,32 @@
 /* Begin PBXBuildFile section */
 		A1F0000000000000000000A1 /* MotileKit in Frameworks */ = {isa = PBXBuildFile; productRef = A1F0000000000000000000B1 /* MotileKit */; };
 		A1F0000000000000000000A2 /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = A1F0000000000000000000C2 /* AppIcon.icon */; };
+		A1F00000000000000000050F /* MotileNotifications.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1F000000000000000000503 /* MotileNotifications.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A1F000000000000000000510 /* MotileWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1F000000000000000000504 /* MotileWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A1F00000000000000000051D /* MotileShared in Frameworks */ = {isa = PBXBuildFile; productRef = A1F00000000000000000051B /* MotileShared */; };
+		A1F00000000000000000051E /* MotileShared in Frameworks */ = {isa = PBXBuildFile; productRef = A1F00000000000000000051C /* MotileShared */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A1F00000000000000000050E /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A1F00000000000000000050F /* MotileNotifications.appex in Embed Foundation Extensions */,
+				A1F000000000000000000510 /* MotileWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		A1F0000000000000000000C1 /* Motile.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Motile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1F0000000000000000000C3 /* MotileUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MotileUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1F000000000000000000503 /* MotileNotifications.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MotileNotifications.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1F000000000000000000504 /* MotileWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MotileWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1F0000000000000000000C2 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; name = AppIcon.icon; path = ../macos/Resources/AppIcon.icon; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -22,8 +43,25 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				Motile.entitlements,
 			);
 			target = A1F0000000000000000000E1 /* Motile */;
+		};
+		A1F000000000000000000507 /* Exceptions for "MotileNotifications" folder in "MotileNotifications" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				MotileNotifications.entitlements,
+			);
+			target = A1F000000000000000000501 /* MotileNotifications */;
+		};
+		A1F000000000000000000508 /* Exceptions for "MotileWidgets" folder in "MotileWidgets" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+				MotileWidgets.entitlements,
+			);
+			target = A1F000000000000000000502 /* MotileWidgets */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -34,6 +72,20 @@
 			proxyType = 1;
 			remoteGlobalIDString = A1F0000000000000000000E1;
 			remoteInfo = Motile;
+		};
+		A1F000000000000000000511 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1F000000000000000000301 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1F000000000000000000501;
+			remoteInfo = MotileNotifications;
+		};
+		A1F000000000000000000512 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1F000000000000000000301 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1F000000000000000000502;
+			remoteInfo = MotileWidgets;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -51,6 +103,22 @@
 			path = Motile;
 			sourceTree = "<group>";
 		};
+		A1F000000000000000000505 /* MotileNotifications */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A1F000000000000000000507 /* Exceptions for "MotileNotifications" folder in "MotileNotifications" target */,
+			);
+			path = MotileNotifications;
+			sourceTree = "<group>";
+		};
+		A1F000000000000000000506 /* MotileWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A1F000000000000000000508 /* Exceptions for "MotileWidgets" folder in "MotileWidgets" target */,
+			);
+			path = MotileWidgets;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -62,6 +130,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1F00000000000000000050A /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1F00000000000000000051D /* MotileShared in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1F00000000000000000050C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1F00000000000000000051E /* MotileShared in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -69,6 +153,8 @@
 			isa = PBXGroup;
 			children = (
 				A1F0000000000000000000D2 /* Motile */,
+				A1F000000000000000000505 /* MotileNotifications */,
+				A1F000000000000000000506 /* MotileWidgets */,
 				A1F0000000000000000000D3 /* MotileUITests */,
 				A1F0000000000000000000C2 /* AppIcon.icon */,
 				A1F000000000000000000102 /* Products */,
@@ -80,6 +166,8 @@
 			children = (
 				A1F0000000000000000000C1 /* Motile.app */,
 				A1F0000000000000000000C3 /* MotileUITests.xctest */,
+				A1F000000000000000000503 /* MotileNotifications.appex */,
+				A1F000000000000000000504 /* MotileWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,10 +183,13 @@
 				A1F0000000000000000000F2 /* Sources */,
 				A1F0000000000000000000F1 /* Frameworks */,
 				A1F0000000000000000000F3 /* Resources */,
+				A1F00000000000000000050E /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A1F000000000000000000513 /* PBXTargetDependency */,
+				A1F000000000000000000514 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A1F0000000000000000000D2 /* Motile */,
@@ -130,6 +221,50 @@
 			productReference = A1F0000000000000000000C3 /* MotileUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		A1F000000000000000000501 /* MotileNotifications */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1F000000000000000000515 /* Build configuration list for PBXNativeTarget "MotileNotifications" */;
+			buildPhases = (
+				A1F000000000000000000509 /* Sources */,
+				A1F00000000000000000050A /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1F000000000000000000505 /* MotileNotifications */,
+			);
+			name = MotileNotifications;
+			packageProductDependencies = (
+				A1F00000000000000000051B /* MotileShared */,
+			);
+			productName = MotileNotifications;
+			productReference = A1F000000000000000000503 /* MotileNotifications.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		A1F000000000000000000502 /* MotileWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1F000000000000000000516 /* Build configuration list for PBXNativeTarget "MotileWidgets" */;
+			buildPhases = (
+				A1F00000000000000000050B /* Sources */,
+				A1F00000000000000000050C /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A1F000000000000000000506 /* MotileWidgets */,
+			);
+			name = MotileWidgets;
+			packageProductDependencies = (
+				A1F00000000000000000051C /* MotileShared */,
+			);
+			productName = MotileWidgets;
+			productReference = A1F000000000000000000504 /* MotileWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -146,6 +281,12 @@
 					A1F0000000000000000000E2 = {
 						CreatedOnToolsVersion = 26.0;
 						TestTargetID = A1F0000000000000000000E1;
+					};
+					A1F000000000000000000501 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					A1F000000000000000000502 = {
+						CreatedOnToolsVersion = 26.0;
 					};
 				};
 			};
@@ -168,6 +309,8 @@
 			targets = (
 				A1F0000000000000000000E1 /* Motile */,
 				A1F0000000000000000000E2 /* MotileUITests */,
+				A1F000000000000000000501 /* MotileNotifications */,
+				A1F000000000000000000502 /* MotileWidgets */,
 			);
 		};
 /* End PBXProject section */
@@ -220,6 +363,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A1F000000000000000000509 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1F00000000000000000050B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -227,6 +384,16 @@
 			isa = PBXTargetDependency;
 			target = A1F0000000000000000000E1 /* Motile */;
 			targetProxy = A1F000000000000000000401 /* PBXContainerItemProxy */;
+		};
+		A1F000000000000000000513 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1F000000000000000000501 /* MotileNotifications */;
+			targetProxy = A1F000000000000000000511 /* PBXContainerItemProxy */;
+		};
+		A1F000000000000000000514 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A1F000000000000000000502 /* MotileWidgets */;
+			targetProxy = A1F000000000000000000512 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -244,6 +411,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MOTILE_BUNDLE_ID = app.motile.motile;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
@@ -263,6 +431,7 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				MOTILE_BUNDLE_ID = app.motile.motile;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
@@ -272,7 +441,9 @@
 		A1F000000000000000000213 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APS_ENVIRONMENT = development;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Motile/Motile.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
@@ -303,7 +474,7 @@
 					Security,
 					"-liconv",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = app.motile.motile;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MOTILE_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 5.0;
@@ -314,7 +485,9 @@
 		A1F000000000000000000214 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				APS_ENVIRONMENT = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Motile/Motile.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
@@ -345,7 +518,7 @@
 					Security,
 					"-liconv",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = app.motile.motile;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MOTILE_BUNDLE_ID)";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "$(IOS_PROFILE_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -388,6 +561,108 @@
 			};
 			name = Release;
 		};
+		A1F000000000000000000517 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = MotileNotifications/MotileNotifications.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MotileNotifications/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Motile";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MOTILE_BUNDLE_ID).notifications";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1F000000000000000000518 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = MotileNotifications/MotileNotifications.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MotileNotifications/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Motile";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MOTILE_BUNDLE_ID).notifications";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "$(IOS_NOTIFICATIONS_PROFILE_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A1F000000000000000000519 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = MotileWidgets/MotileWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MotileWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Motile";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MOTILE_BUNDLE_ID).widgets";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A1F00000000000000000051A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = MotileWidgets/MotileWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = x86_64;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MotileWidgets/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Motile";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MOTILE_BUNDLE_ID).widgets";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "$(IOS_WIDGETS_PROFILE_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -418,6 +693,24 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		A1F000000000000000000515 /* Build configuration list for PBXNativeTarget "MotileNotifications" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1F000000000000000000517 /* Debug */,
+				A1F000000000000000000518 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1F000000000000000000516 /* Build configuration list for PBXNativeTarget "MotileWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1F000000000000000000519 /* Debug */,
+				A1F00000000000000000051A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -431,6 +724,14 @@
 		A1F0000000000000000000B1 /* MotileKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = MotileKit;
+		};
+		A1F00000000000000000051B /* MotileShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MotileShared;
+		};
+		A1F00000000000000000051C /* MotileShared */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MotileShared;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

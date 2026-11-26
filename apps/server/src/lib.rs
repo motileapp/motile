@@ -3,6 +3,7 @@ pub mod activity;
 pub mod actors;
 pub mod agent_accounts;
 pub mod agents;
+pub mod alerts;
 pub mod backup;
 pub mod computer_use;
 pub mod config;

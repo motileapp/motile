@@ -1,6 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import UIKit
+import UserNotifications
 
 /// Drives the client without a finger, for looking at it in the simulator: `MOTILE_DEMO_SCRIPT` names
 /// a file of steps, one a line, that is read again whenever it changes.
@@ -40,6 +41,7 @@ import UIKit
 ///     slide <label> <share>             drags the program's slider with that label to a share of its track
 ///     press <label>                     presses the program's button, or a transcript row's, with that label
 ///     page close                        puts a program's page open over the screen back in its row
+///     notifications quiet               lets Motile notify quietly, without the system's prompt
 enum DemoDriver {
     private static var watcher: Timer?
     private static var done = 0
@@ -287,6 +289,8 @@ enum DemoDriver {
             slider.onDrag?(.moved, CGPoint(x: slider.bounds.width * share, y: y))
             slider.onDrag?(.ended, CGPoint(x: slider.bounds.width * share, y: y))
         case "page" where rest == "close": store.closeExpandedPage()
+        case "notifications" where rest == "quiet":
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge, .provisional]) { _, _ in }
         case "press":
             let button: FlippedView? = views(ControlView.self).last { $0.title == rest }
                 ?? views(ExpandButton.self).last { !$0.isHidden && $0.words == rest }

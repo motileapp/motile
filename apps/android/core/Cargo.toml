@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 [dependencies]
 motile-core.workspace = true
 jni = "0.22"
+serde_json.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
 libc.workspace = true

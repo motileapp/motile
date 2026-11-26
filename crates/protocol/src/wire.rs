@@ -658,6 +658,9 @@ pub enum Request {
     /// What the server's machine is doing. `Stats` answers with the samples it keeps, then again
     /// with each new one, until the client stops listening.
     WatchStats,
+    /// What the user would want to hear of the server's threads: `Alert` answers with each, as it
+    /// happens, until the client stops listening.
+    WatchAlerts,
     /// Keeps the state of the program in the block `block` of an assistant item; `null` forgets
     /// it. `Ok` answers.
     SetUi {
@@ -2912,6 +2915,9 @@ pub enum Message {
     Pong,
     Stats {
         stats: MachineStats,
+    },
+    Alert {
+        alert: crate::alerts::Alert,
     },
     Sent {
         thread_id: String,

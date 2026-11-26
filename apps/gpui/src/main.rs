@@ -19,6 +19,7 @@ mod lifecycle;
 mod main_view;
 mod media;
 mod models;
+mod notifier;
 mod onboarding;
 mod panel;
 mod prefs;
@@ -74,6 +75,8 @@ fn main() {
     });
     app.run(move |cx| {
         gpui_kit::init(cx);
+        // Windows shows a toast only of an app it knows by its AppUserModelID.
+        cx.set_app_identity(notifier::APP_ID, "Motile");
         cx.set_quit_mode(QuitMode::LastWindowClosed);
         let fonts = assets::FONTS.iter().map(|bytes| std::borrow::Cow::Borrowed(*bytes)).collect();
         if let Err(error) = cx.text_system().add_fonts(fonts) {
@@ -96,12 +99,7 @@ fn main() {
         let signing_in = store.downgrade();
         cx.spawn(async move |cx| {
             while let Some(urls) = opened_urls.next().await {
-                cx.update(|cx| {
-                    cx.activate(true);
-                    if let Some(window) = cx.active_window().or_else(|| cx.windows().into_iter().next()) {
-                        let _ = window.update(cx, |_, window, _| window.activate_window());
-                    }
-                });
+                cx.update(app_window::bring_forward);
                 for url in urls {
                     if sign_in::deliver(&url) || !url.starts_with(motile_protocol::APP_REDIRECT) {
                         continue;

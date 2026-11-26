@@ -2,6 +2,7 @@
 //! state here. All of it is used on the main thread.
 
 mod account;
+mod alerts;
 mod attachments;
 mod commands;
 pub mod engaged;
@@ -43,6 +44,7 @@ use motile_protocol::wire::{ClientForm, ClientKind};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+pub use self::alerts::AlertToast;
 pub use self::git::{PendingGit, Toast, stage_label};
 pub use self::projects::RepoListing;
 pub use self::pull_requests::PullRequests;
@@ -445,6 +447,9 @@ pub struct Store {
     pub backup: Option<BackupView>,
     /// The settings every server has on, those linked later too.
     pub all_servers: AllServersView,
+    /// How this device shows the servers' alerts.
+    pub notifications: motile_core::alerts::Settings,
+    notifier: crate::notifier::Notifier,
     _events: Option<Task<()>>,
     /// The pages behind and ahead of this one, for Go Back and Go Forward.
     history: history::PageHistory,
@@ -578,6 +583,8 @@ impl Store {
             engaged: engaged::Engaged::default(),
             backup: None,
             all_servers: AllServersView::default(),
+            notifications: motile_core::alerts::Settings::default(),
+            notifier: crate::notifier::Notifier::default(),
             _events: None,
             history: history::PageHistory::default(),
             _page_watch: Self::watch_page(cx),
@@ -615,6 +622,7 @@ impl Store {
         match Bridge::start(config) {
             Ok((bridge, mut events)) => {
                 self.bridge = Some(bridge);
+                self.notifier = crate::notifier::Notifier::start(cx);
                 self._events = Some(cx.spawn(async move |this, cx| {
                     while let Some(first) = events.next().await {
                         // Whatever else has arrived by now is applied in the same update.
@@ -916,6 +924,10 @@ impl Store {
             Event::Gallery { thread_id, media } => self.apply_gallery(thread_id, media, cx),
             Event::Backup { backup } => self.backup = Some(backup),
             Event::AllServers { all_servers } => self.all_servers = all_servers,
+            Event::Notifications { settings } => self.notifications = settings,
+            Event::Alert { alert, shown, .. } => self.present_alert(alert, shown, cx),
+            Event::Badge { count } => self.notifier.badge(count),
+            Event::Work { .. } => {}
         }
     }
 

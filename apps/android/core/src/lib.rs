@@ -159,6 +159,25 @@ pub extern "system" fn Java_app_motile_core_Native_markup<'caller>(
     .resolve::<ThrowRuntimeExAndDefault>()
 }
 
+/// Opens what was pushed to this device with its key in `data_dir`, without the core running, and
+/// answers with it as JSON (`{"type": "alert", …}` or `{"type": "work", …}`), or empty if it can't.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_app_motile_core_Native_openPush<'caller>(
+    mut env: EnvUnowned<'caller>,
+    _class: JClass<'caller>,
+    data_dir: JString<'caller>,
+    sealed: JString<'caller>,
+) -> JString<'caller> {
+    env.with_env(|env| -> Result<JString<'caller>, jni::errors::Error> {
+        let data_dir = std::path::PathBuf::from(data_dir.to_string());
+        let opened = motile_core::alerts::open_push(&data_dir, &sealed.to_string())
+            .and_then(|pushed| serde_json::to_string(&pushed).ok())
+            .unwrap_or_default();
+        JString::from_str(env, opened)
+    })
+    .resolve::<ThrowRuntimeExAndDefault>()
+}
+
 /// Gives the JVM and the application to the crates that ask Android itself through `ndk_context`,
 /// like iroh's DNS resolver, which reads the system's nameservers. The reference is kept for good.
 #[cfg(target_os = "android")]

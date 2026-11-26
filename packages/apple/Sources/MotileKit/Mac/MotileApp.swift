@@ -55,6 +55,7 @@ struct MotileApp: App {
                     delegate.started = true
                     appearance.apply()
                     store.start()
+                    MacAlerts.shared.start(store)
                     menuModel.follow(store)
                     ShortcutMonitor.shared.start(store)
                     DemoDriver.startIfRequested(store: store)
@@ -180,6 +181,10 @@ struct MotileApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var started = false
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        MacAlerts.shared.install()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Needed when launched as a bare executable, without an app bundle.

@@ -3,6 +3,8 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    // Reads google-services.json, the public config of Firebase, which delivers the pushes.
+    alias(libs.plugins.google.services)
 }
 
 val root = rootDir.resolve("../..")
@@ -153,6 +155,9 @@ dependencies {
     implementation(libs.media3.ui)
     implementation(libs.maplibre)
     implementation(libs.okhttp)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+    implementation(libs.glance.appwidget)
     implementation("org.rustls:rustls-platform-verifier:$verifierVersion")
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)

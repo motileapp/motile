@@ -1,0 +1,373 @@
+//! The alerts the servers send, as this device shows them: its notification settings, how each
+//! alert shows given where the user is, the badge, and the phone's push registration.
+
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::{Path, PathBuf};
+
+use motile_protocol::alerts::{
+    AlertChoices, AlertKind, ENDED_WORK_STAYS_SECS, PushKey, Pushed, ServerWork, WorkItem, WorkState,
+};
+use motile_protocol::auth_api::{PushRegistration, PushService};
+use motile_protocol::identity::DeviceKey;
+use motile_protocol::wire::Thread;
+use serde::{Deserialize, Serialize};
+
+use crate::api::{Section, ThreadView};
+
+const FILE: &str = "notifications.json";
+const REMEMBERED_ALERTS: usize = 200;
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum Mode {
+    Off,
+    Notifications,
+    Sound,
+    #[default]
+    NotificationsAndSound,
+}
+
+impl Mode {
+    fn notifies(self) -> bool {
+        matches!(self, Self::Notifications | Self::NotificationsAndSound)
+    }
+
+    fn sounds(self) -> bool {
+        matches!(self, Self::Sound | Self::NotificationsAndSound)
+    }
+}
+
+/// This device's notification settings.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(default)]
+pub struct Settings {
+    /// On a phone, the system shows its pushes: `off` stops them and the others keep them.
+    pub mode: Mode,
+    /// While the client is in front and shows another thread, an alert shows inside it.
+    pub toasts: bool,
+    pub choices: AlertChoices,
+    /// A phone shows what the agents do while they work: a Live Activity, or an ongoing notification.
+    pub live: bool,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self { mode: Mode::default(), toasts: true, choices: AlertChoices::default(), live: true }
+    }
+}
+
+impl Settings {
+    pub fn load(data_dir: &Path) -> Self {
+        std::fs::read(data_dir.join(FILE))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn save(&self, data_dir: &Path) {
+        let Ok(bytes) = serde_json::to_vec_pretty(self) else { return };
+        if let Err(error) = std::fs::write(data_dir.join(FILE), bytes) {
+            tracing::warn!("couldn't keep the notification settings: {error}");
+        }
+    }
+}
+
+/// How an alert shows.
+#[derive(Serialize, Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Shown {
+    /// A notification of the system.
+    pub system: bool,
+    pub sound: bool,
+    /// A toast inside the client, which opens the thread.
+    pub toast: bool,
+}
+
+/// Where the user is when an alert comes.
+pub struct Where {
+    /// The client is focused: in front, with a window of it the user can see.
+    pub focused: bool,
+    /// The alert's thread is on screen.
+    pub on_thread: bool,
+    /// A phone or a tablet, whose system shows the pushes rather than the client.
+    pub pushed: bool,
+}
+
+pub fn shown(settings: &Settings, kind: AlertKind, at: &Where) -> Option<Shown> {
+    if !settings.choices.allows(kind) || at.pushed || (at.focused && at.on_thread) {
+        return None;
+    }
+    let sound = settings.mode.sounds();
+    let shown = match at.focused {
+        true => Shown { system: false, sound, toast: settings.toasts },
+        false => Shown { system: settings.mode.notifies(), sound, toast: false },
+    };
+    (shown.system || shown.sound || shown.toast).then_some(shown)
+}
+
+/// The alerts already shown, so that one heard twice shows once.
+#[derive(Default)]
+pub struct Heard {
+    order: VecDeque<String>,
+    ids: HashSet<String>,
+}
+
+impl Heard {
+    /// Whether the alert is new.
+    pub fn first_time(&mut self, id: &str) -> bool {
+        if !self.ids.insert(id.to_string()) {
+            return false;
+        }
+        self.order.push_back(id.to_string());
+        if self.order.len() > REMEMBERED_ALERTS
+            && let Some(oldest) = self.order.pop_front()
+        {
+            self.ids.remove(&oldest);
+        }
+        true
+    }
+}
+
+/// The threads the badge counts: the top-level ones, neither archived nor snoozed, that wait for
+/// the user or have a reply the user hasn't seen.
+#[derive(Default)]
+pub struct Badge {
+    counted: HashMap<String, (String, bool)>,
+    count: usize,
+}
+
+impl Badge {
+    pub fn count(&self) -> usize {
+        self.count
+    }
+
+    /// Whether the count changed.
+    pub fn upsert(&mut self, view: &ThreadView) -> bool {
+        self.counted.insert(view.thread.id.clone(), (view.server_id.clone(), counts(view)));
+        self.recount()
+    }
+
+    pub fn replace(&mut self, server_id: &str, views: &[ThreadView]) -> bool {
+        self.counted.retain(|_, (server, _)| server != server_id);
+        for view in views {
+            self.counted.insert(view.thread.id.clone(), (server_id.to_string(), counts(view)));
+        }
+        self.recount()
+    }
+
+    pub fn remove(&mut self, thread_id: &str) -> bool {
+        self.counted.remove(thread_id);
+        self.recount()
+    }
+
+    fn recount(&mut self) -> bool {
+        let count = self.counted.values().filter(|(_, counted)| *counted).count();
+        std::mem::replace(&mut self.count, count) != count
+    }
+}
+
+fn counts(view: &ThreadView) -> bool {
+    let thread = &view.thread;
+    if thread.parent.is_some() || matches!(view.section, Section::Archived | Section::Snoozed) {
+        return false;
+    }
+    let children_wait = view.children.as_ref().is_some_and(|children| !children.waiting.is_empty());
+    view.unread || thread.needs_approval || children_wait
+}
+
+const WORK_TITLE_CHARS: usize = 60;
+
+/// What a server's agents are doing, for the widgets: the top-level threads that wait for the
+/// user, then those that work, then those whose turn ended in the last 15 minutes, the latest first.
+pub fn work_of<'a>(
+    server_id: &str,
+    server_name: &str,
+    threads: impl Iterator<Item = &'a Thread>,
+    project_name: impl Fn(&str) -> String,
+    now: f64,
+) -> ServerWork {
+    let items: Vec<WorkItem> = threads
+        .filter(|thread| thread.parent.is_none() && thread.archived_at.is_none())
+        .filter_map(|thread| {
+            let (state, since) = match () {
+                _ if thread.needs_approval => (WorkState::Waiting, thread.updated_at),
+                _ if thread.running || thread.monitoring => (WorkState::Working, thread.updated_at),
+                _ => match thread.turn_ended_at {
+                    Some(ended) if now - ended < ENDED_WORK_STAYS_SECS => (WorkState::Finished, ended),
+                    _ => return None,
+                },
+            };
+            let title = thread.title.chars().take(WORK_TITLE_CHARS).collect();
+            Some(WorkItem {
+                thread_id: thread.id.clone(),
+                title,
+                project: project_name(&thread.project_id),
+                state,
+                since,
+            })
+        })
+        .collect();
+    ServerWork::new(server_id.to_string(), server_name.to_string(), items, now)
+}
+
+/// What the phone gave for its pushes, kept to send again whenever the settings change.
+#[derive(Deserialize, Clone, PartialEq, Debug)]
+pub struct PushDevice {
+    pub service: PushService,
+    pub token: String,
+    #[serde(default)]
+    pub live_start_token: Option<String>,
+    #[serde(default)]
+    pub live_token: Option<String>,
+}
+
+pub fn registration(device: &PushDevice, settings: &Settings) -> PushRegistration {
+    let notifies = settings.mode != Mode::Off;
+    PushRegistration {
+        service: device.service.clone(),
+        token: device.token.clone(),
+        choices: match notifies {
+            true => AlertChoices { sound: settings.mode.sounds(), ..settings.choices },
+            false => AlertChoices {
+                finished: false,
+                failed: false,
+                approval: false,
+                question: false,
+                limit: false,
+                sound: false,
+            },
+        },
+        live: settings.live,
+        live_start_token: device.live_start_token.clone(),
+        live_token: device.live_token.clone(),
+    }
+}
+
+/// Opens what was pushed to this device, with the device key in `data_dir`, without the core
+/// running: for a phone's push handler, which may run before the app does.
+pub fn open_push(data_dir: &Path, sealed: &str) -> Option<Pushed> {
+    let key = DeviceKey::load_or_create(&key_path(data_dir)).ok()?;
+    PushKey::of_device(&key).open_pushed(sealed)
+}
+
+/// The device key as an X25519 secret, in base64.
+pub fn push_secret(key: &DeviceKey) -> String {
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD.encode(PushKey::of_device(key).to_bytes())
+}
+
+pub fn key_path(data_dir: &Path) -> PathBuf {
+    data_dir.join("device.key")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(focused: bool, on_thread: bool) -> Where {
+        Where { focused, on_thread, pushed: false }
+    }
+
+    #[test]
+    fn an_alert_shows_by_where_the_user_is() {
+        let settings = Settings::default();
+        let away = shown(&settings, AlertKind::Finished, &at(false, false)).unwrap();
+        assert_eq!(away, Shown { system: true, sound: true, toast: false });
+        let elsewhere = shown(&settings, AlertKind::Finished, &at(true, false)).unwrap();
+        assert_eq!(elsewhere, Shown { system: false, sound: true, toast: true });
+        let quiet = Settings { mode: Mode::Notifications, ..Settings::default() };
+        assert_eq!(shown(&quiet, AlertKind::Finished, &at(false, false)).map(|shown| shown.sound), Some(false));
+        assert_eq!(shown(&settings, AlertKind::Finished, &at(true, true)), None);
+        let unfocused_on_thread = shown(&settings, AlertKind::Approval, &at(false, true)).unwrap();
+        assert!(unfocused_on_thread.system);
+    }
+
+    #[test]
+    fn settings_and_phones_silence_alerts() {
+        let phone = Where { focused: false, on_thread: false, pushed: true };
+        assert_eq!(shown(&Settings::default(), AlertKind::Approval, &phone), None);
+        let off = Settings { mode: Mode::Off, toasts: false, ..Settings::default() };
+        assert_eq!(shown(&off, AlertKind::Approval, &at(false, false)), None);
+        assert_eq!(shown(&off, AlertKind::Approval, &at(true, false)), None);
+        let sound_only = Settings { mode: Mode::Sound, ..Settings::default() };
+        assert_eq!(
+            shown(&sound_only, AlertKind::Failed, &at(false, false)),
+            Some(Shown { system: false, sound: true, toast: false })
+        );
+        let no_finished =
+            Settings { choices: AlertChoices { finished: false, ..AlertChoices::default() }, ..Settings::default() };
+        assert_eq!(shown(&no_finished, AlertKind::Finished, &at(false, false)), None);
+    }
+
+    #[test]
+    fn an_alert_heard_twice_shows_once() {
+        let mut heard = Heard::default();
+        assert!(heard.first_time("a"));
+        assert!(!heard.first_time("a"));
+        for index in 0..REMEMBERED_ALERTS {
+            heard.first_time(&index.to_string());
+        }
+        assert!(heard.first_time("a"));
+    }
+
+    #[test]
+    fn turning_notifications_off_on_a_phone_asks_for_no_alerts() {
+        let device =
+            PushDevice { service: PushService::Fcm, token: "t".into(), live_start_token: None, live_token: None };
+        let off = registration(&device, &Settings { mode: Mode::Off, ..Settings::default() });
+        assert!(!off.choices.allows(AlertKind::Approval));
+        assert!(off.live);
+        let on = registration(&device, &Settings::default());
+        assert!(on.choices.allows(AlertKind::Finished));
+        assert!(on.choices.sound);
+        let quiet = registration(&device, &Settings { mode: Mode::Notifications, ..Settings::default() });
+        assert!(!quiet.choices.sound);
+    }
+
+    #[test]
+    fn a_push_opens_with_the_device_key_on_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let key = DeviceKey::load_or_create(&key_path(dir.path())).unwrap();
+        let pushed = Pushed::Work(Default::default());
+        let sealed = motile_protocol::alerts::seal_pushed(&key.public(), &pushed).unwrap();
+        assert_eq!(open_push(dir.path(), &sealed), Some(pushed));
+    }
+
+    fn thread(id: &str, title: &str) -> Thread {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "title": title, "project_id": "p", "cwd": "/", "agent": "claude", "model": null,
+            "effort": null, "access": "full", "created_at": 0.0, "updated_at": 100.0, "done_at": null,
+            "running": false, "needs_approval": false, "turn_ended_at": null, "rev": 0
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn work_lists_what_waits_then_works_then_ended_lately() {
+        let waiting = Thread { needs_approval: true, running: true, ..thread("w", "Waits") };
+        let working = Thread { running: true, ..thread("r", "Works") };
+        let ended = Thread { turn_ended_at: Some(950.0), ..thread("e", "Ended") };
+        let long_ago = Thread { turn_ended_at: Some(1.0), ..thread("o", "Long ago") };
+        let child = Thread {
+            running: true,
+            parent: Some(motile_protocol::wire::ThreadParent { thread_id: "r".into(), tool_id: None }),
+            ..thread("c", "Child")
+        };
+        let archived = Thread { running: true, archived_at: Some(5.0), ..thread("a", "Archived") };
+        let threads = [ended, long_ago, child, archived, working, waiting];
+        let work = work_of("s", "studio", threads.iter(), |_| "motile".into(), 1000.0);
+        let listed: Vec<(&str, WorkState)> =
+            work.items.iter().map(|item| (item.thread_id.as_str(), item.state)).collect();
+        assert_eq!(listed, [("w", WorkState::Waiting), ("r", WorkState::Working), ("e", WorkState::Finished)]);
+        assert_eq!((work.working, work.waiting), (1, 1));
+        assert_eq!(work.items[0].project, "motile");
+    }
+
+    #[test]
+    fn settings_are_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(Settings::load(dir.path()), Settings::default());
+        let settings = Settings { mode: Mode::Sound, toasts: false, live: false, ..Settings::default() };
+        settings.save(dir.path());
+        assert_eq!(Settings::load(dir.path()), settings);
+    }
+}

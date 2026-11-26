@@ -1,5 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
-use motile_protocol::auth_api::{Device, DeviceKind, Me, RemovedServer, User};
+use motile_protocol::alerts::AlertChoices;
+use motile_protocol::auth_api::{Device, DeviceKind, Me, PushRegistration, PushService, RemovedServer, User};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -175,6 +176,15 @@ pub async fn link_device(
     if count >= MAX_DEVICES_PER_USER {
         return Ok(false);
     }
+    // A phone that moves to another account takes no pushes until it registers there.
+    sqlx::query(
+        "DELETE FROM push_registrations
+         WHERE device = $1 AND device IN (SELECT public_key FROM devices WHERE user_id <> $2)",
+    )
+    .bind(public_key)
+    .bind(user_id)
+    .execute(&mut *transaction)
+    .await?;
     let linked = sqlx::query(
         "INSERT INTO devices (public_key, user_id, kind, name, platform) VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (public_key) DO UPDATE SET
@@ -374,5 +384,189 @@ pub async fn cleanup(db: &PgPool) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM sign_ins WHERE expires_at < now()").execute(db).await?;
     sqlx::query("DELETE FROM enroll_tokens WHERE expires_at < now()").execute(db).await?;
     sqlx::query("DELETE FROM sessions WHERE expires_at < now()").execute(db).await?;
+    sqlx::query("DELETE FROM push_work WHERE at < now() - interval '2 hours'").execute(db).await?;
     Ok(())
+}
+
+/// A phone of an account that takes pushes.
+#[derive(Clone, Debug)]
+pub struct Phone {
+    pub device: String,
+    pub registration: PushRegistration,
+}
+
+#[derive(sqlx::FromRow)]
+struct PhoneRow {
+    device: String,
+    service: String,
+    topic: Option<String>,
+    sandbox: bool,
+    token: String,
+    choices: String,
+    live: bool,
+    live_start_token: Option<String>,
+    live_token: Option<String>,
+}
+
+impl PhoneRow {
+    fn phone(self) -> Option<Phone> {
+        let service = match self.service.as_str() {
+            "apns" => PushService::Apns { topic: self.topic?, sandbox: self.sandbox },
+            "fcm" => PushService::Fcm,
+            _ => return None,
+        };
+        let choices: AlertChoices = serde_json::from_str(&self.choices).ok()?;
+        let registration = PushRegistration {
+            service,
+            token: self.token,
+            choices,
+            live: self.live,
+            live_start_token: self.live_start_token,
+            live_token: self.live_token,
+        };
+        Some(Phone { device: self.device, registration })
+    }
+}
+
+/// What a server's agents are doing, sealed for one phone.
+#[derive(sqlx::FromRow, Clone, Debug)]
+pub struct WorkPart {
+    pub server: String,
+    pub sealed: String,
+    /// The threads that work or wait for the user.
+    pub active: i64,
+    pub at: DateTime<Utc>,
+}
+
+pub async fn set_push(db: &PgPool, device: &str, registration: &PushRegistration) -> Result<(), sqlx::Error> {
+    let (service, topic, sandbox) = match &registration.service {
+        PushService::Apns { topic, sandbox } => ("apns", Some(topic.as_str()), *sandbox),
+        PushService::Fcm => ("fcm", None, false),
+    };
+    let choices = serde_json::to_string(&registration.choices).expect("choices are JSON");
+    sqlx::query(
+        "INSERT INTO push_registrations
+             (device, service, topic, sandbox, token, choices, live, live_start_token, live_token)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         ON CONFLICT (device) DO UPDATE SET
+             service = excluded.service,
+             topic = excluded.topic,
+             sandbox = excluded.sandbox,
+             token = excluded.token,
+             choices = excluded.choices,
+             live = excluded.live,
+             live_start_token = excluded.live_start_token,
+             live_token = excluded.live_token,
+             updated_at = now()",
+    )
+    .bind(device)
+    .bind(service)
+    .bind(topic)
+    .bind(sandbox)
+    .bind(&registration.token)
+    .bind(choices)
+    .bind(registration.live)
+    .bind(&registration.live_start_token)
+    .bind(&registration.live_token)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// Drops the phone's registration and what was kept for it.
+pub async fn remove_push(db: &PgPool, device: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM push_registrations WHERE device = $1").bind(device).execute(db).await?;
+    Ok(())
+}
+
+/// Drops the registration whose token the push service no longer takes, unless the phone has
+/// registered another since.
+pub async fn drop_push(db: &PgPool, device: &str, token: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM push_registrations WHERE device = $1 AND token = $2")
+        .bind(device)
+        .bind(token)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
+/// Forgets a Live Activity token that ended or that APNs no longer takes.
+pub async fn forget_live_token(db: &PgPool, device: &str, token: &str) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE push_registrations
+         SET live_token = NULLIF(live_token, $2), live_start_token = NULLIF(live_start_token, $2)
+         WHERE device = $1",
+    )
+    .bind(device)
+    .bind(token)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// Whether a Live Activity may be started on the phone now, at most once a minute; marks it started.
+pub async fn claim_live_start(db: &PgPool, device: &str) -> Result<bool, sqlx::Error> {
+    let claimed = sqlx::query(
+        "UPDATE push_registrations SET live_started_at = now()
+         WHERE device = $1 AND (live_started_at IS NULL OR live_started_at < now() - interval '60 seconds')",
+    )
+    .bind(device)
+    .execute(db)
+    .await?;
+    Ok(claimed.rows_affected() == 1)
+}
+
+/// The registered phones of the account.
+pub async fn phones_of(db: &PgPool, user_id: Uuid) -> Result<Vec<Phone>, sqlx::Error> {
+    let rows: Vec<PhoneRow> = sqlx::query_as(
+        "SELECT push.device, push.service, push.topic, push.sandbox, push.token, push.choices, push.live,
+                push.live_start_token, push.live_token
+         FROM push_registrations push JOIN devices ON devices.public_key = push.device
+         WHERE devices.user_id = $1 AND devices.kind = $2
+         ORDER BY devices.created_at",
+    )
+    .bind(user_id)
+    .bind(kind_text(DeviceKind::Client))
+    .fetch_all(db)
+    .await?;
+    Ok(rows.into_iter().filter_map(PhoneRow::phone).collect())
+}
+
+pub async fn store_work(
+    db: &PgPool,
+    device: &str,
+    server: &str,
+    working: u32,
+    waiting: u32,
+    sealed: &str,
+) -> Result<(), sqlx::Error> {
+    let count = |count: u32| count.min(i32::MAX as u32) as i32;
+    sqlx::query(
+        "INSERT INTO push_work (device, server, working, waiting, sealed) VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (device, server) DO UPDATE SET
+             working = excluded.working, waiting = excluded.waiting, sealed = excluded.sealed, at = now()",
+    )
+    .bind(device)
+    .bind(server)
+    .bind(count(working))
+    .bind(count(waiting))
+    .bind(sealed)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+/// What the account's servers said their agents are doing in the last two hours, sealed for the
+/// phone, by server.
+pub async fn fresh_work(db: &PgPool, device: &str, user_id: Uuid) -> Result<Vec<WorkPart>, sqlx::Error> {
+    sqlx::query_as(
+        "SELECT work.server, work.sealed, work.working::BIGINT + work.waiting::BIGINT AS active, work.at
+         FROM push_work work JOIN devices ON devices.public_key = work.server
+         WHERE work.device = $1 AND devices.user_id = $2 AND work.at > now() - interval '2 hours'
+         ORDER BY work.server",
+    )
+    .bind(device)
+    .bind(user_id)
+    .fetch_all(db)
+    .await
 }

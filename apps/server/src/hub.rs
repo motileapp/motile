@@ -3754,7 +3754,10 @@ impl Hub {
     /// stopped it. The messages that waited stay until they are sent.
     fn end_without_agent(&self, live: &mut Live, error: Option<String>) -> anyhow::Result<()> {
         match error {
-            Some(message) => live.append(&self.store, ItemKind::Error { message, sign_in: None })?,
+            Some(message) => {
+                live.append(&self.store, ItemKind::Error { message, sign_in: None })?;
+                live.keep_turn(&self.store, new_id(), TurnOutcome::Failed);
+            }
             None => live.settle(&self.store, None, None, "", true)?,
         }
         // No agent ran, so nothing changed.
