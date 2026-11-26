@@ -653,6 +653,12 @@ pub enum Command {
     },
     /// Answers with the `path` of `keybindings.json`, made if there was none.
     KeybindingsFile,
+    /// Whether the dropdown that shows a server's machine is open. While it is, `server_stats`
+    /// events follow what the machine does.
+    WatchServerStats {
+        server_id: String,
+        on: bool,
+    },
     /// Whether a view that shows the account's gateway is open: the Gateway page or the Limits tab.
     /// While one is, the core stays connected to the gateway and `gateway` events follow its state.
     WatchGateway {
@@ -812,6 +818,14 @@ pub enum Event {
     Projects {
         server_id: String,
         projects: Vec<ProjectView>,
+    },
+    /// What a server's machine does, while its dropdown is open, or why it can't be shown.
+    ServerStats {
+        server_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        stats: Option<crate::server_stats::StatsView>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
     },
     /// How far a server's download of its update is. `total` is missing when it isn't known. With
     /// `waiting` the update is installed and the server restarts once its agents have finished.

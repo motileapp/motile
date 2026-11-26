@@ -297,7 +297,7 @@ private fun RenameAccountDialog(account: GatewayAccount, onDismiss: () -> Unit) 
 @Composable
 internal fun SheetTitle(title: String, subtitle: String? = null) {
     val close = LocalCloseModal.current
-    CompositionLocalProvider(LocalBarLeading provides BarLeading.Close { close() }) { SettingsBar(title, subtitle = subtitle) }
+    CompositionLocalProvider(LocalBarBack provides null) { SettingsBar(title, subtitle = subtitle) }
 }
 
 /**

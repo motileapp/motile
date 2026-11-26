@@ -73,7 +73,7 @@ fun SignInAgainSheet(request: ThreadSignIn) {
         { ActionButton("Continue", variant = ButtonVariant.Primary, onClick = ::goOn) }
     } else null
     Column(Modifier.fillMaxSize()) {
-        CompositionLocalProvider(LocalBarLeading provides BarLeading.Close(close)) { SettingsBar("Sign In to $agentName", trailing) }
+        CompositionLocalProvider(LocalBarBack provides null) { SettingsBar("Sign In to $agentName", trailing) }
         SettingsList(Modifier.weight(1f)) {
             group(
                 headerContent = { Text(message, size = NOTE_TEXT, weight = FontWeight.Medium, color = LocalPalette.current.mutedForeground) },

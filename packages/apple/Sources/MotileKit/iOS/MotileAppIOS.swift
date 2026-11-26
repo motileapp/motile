@@ -201,6 +201,7 @@ private enum RootSheet: Identifiable {
     case threadSettings
     case customSnooze(CustomSnooze)
     case signIn(ThreadSignIn)
+    case serverStats(Server)
 
     var id: String {
         switch self {
@@ -212,6 +213,7 @@ private enum RootSheet: Identifiable {
         case .threadSettings: "thread-settings"
         case .customSnooze(let snooze): "snooze-\(snooze.id)"
         case .signIn(let request): "sign-in-\(request.id)"
+        case .serverStats(let server): "server-stats-\(server.id)"
         }
     }
 }
@@ -260,6 +262,8 @@ struct RootView: View {
                     CustomSnoozeSheet(snooze: snooze)
                 case .signIn(let request):
                     SignInAgainSheet(request: request)
+                case .serverStats(let server):
+                    ServerStatsSheet(server: server)
                 }
             }
             .sheetSurface()
@@ -298,6 +302,7 @@ struct RootView: View {
             if store.showsThreadSettings { return .threadSettings }
             if let snooze = store.customSnooze { return .customSnooze(snooze) }
             if let request = store.signingInThread { return .signIn(request) }
+            if let server = store.server(store.statsServerID) { return .serverStats(server) }
             return nil
         } set: { new in
             guard new == nil else { return }
@@ -308,6 +313,7 @@ struct RootView: View {
             if store.showsUsage { return store.showsUsage = false }
             if store.customSnooze != nil { return store.customSnooze = nil }
             if store.signingInThread != nil { return store.signingInThread = nil }
+            if store.statsServerID != nil { return store.statsServerID = nil }
             store.showsThreadSettings = false
             store.showsBranches = false
         }

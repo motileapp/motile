@@ -47,11 +47,9 @@ import app.motile.theme.ControlSize
 import app.motile.theme.LocalPalette
 import app.motile.theme.Surface
 import app.motile.theme.TextSize
-import app.motile.ui.SheetBackButton
 import app.motile.ui.SheetBar
 import app.motile.ui.HighlightButton
 import app.motile.ui.InputField
-import app.motile.ui.SheetCloseButton
 import app.motile.ui.Text
 
 /** A page the settings push over their list. */
@@ -82,13 +80,8 @@ class SettingsNavigator(val push: (SettingsRoute) -> Unit, val pop: () -> Unit)
 
 val LocalSettingsNavigator = compositionLocalOf { SettingsNavigator({}, {}) }
 
-/** What stands at the start of a page's bar: the sheet's close button, the way back, or nothing beside the sections' list. */
-sealed interface BarLeading {
-    class Close(val action: () -> Unit) : BarLeading
-    class Back(val action: () -> Unit) : BarLeading
-}
-
-val LocalBarLeading = compositionLocalOf<BarLeading?> { null }
+/** The way back from a page a sheet pushed, at the start of its bar; none on a sheet's first page. */
+val LocalBarBack = compositionLocalOf<(() -> Unit)?> { null }
 
 /** A sheet at least this wide has the sections beside the open one. */
 private val wideSheet = 700.dp
@@ -137,14 +130,14 @@ private fun Stack(store: AppStore, close: () -> Unit) {
     val navigator = LocalSettingsNavigator.current
     Pages(SettingsPath.routes) { route ->
         if (route == null) {
-            CompositionLocalProvider(LocalBarLeading provides BarLeading.Close(close)) {
+            CompositionLocalProvider(LocalBarBack provides null) {
                 SettingsSections(selected = null) { section ->
                     SettingsPath.routes = listOf(SettingsRoute.Section(section))
                     if (section != store.settings) store.openSettings(section, store.settingsTarget)
                 }
             }
         } else {
-            CompositionLocalProvider(LocalBarLeading provides BarLeading.Back(navigator.pop)) { RoutePage(route) }
+            CompositionLocalProvider(LocalBarBack provides navigator.pop) { RoutePage(route) }
         }
     }
 }
@@ -156,15 +149,15 @@ private fun Split(close: () -> Unit) {
     val section = store.settings ?: SettingsSection.General
     Row(Modifier.fillMaxSize()) {
         Box(Modifier.width(SIDEBAR_WIDTH.dp).fillMaxHeight()) {
-            CompositionLocalProvider(LocalBarLeading provides BarLeading.Close(close)) {
+            CompositionLocalProvider(LocalBarBack provides null) {
                 SettingsSections(selected = section) { store.openSettings(it, store.settingsTarget) }
             }
         }
         Box(Modifier.width(1.dp).fillMaxHeight().background(Surface.Background.border))
         Box(Modifier.weight(1f).fillMaxHeight()) {
             Pages(listOf(SettingsRoute.Section(section)) + SettingsPath.routes, root = true) { route ->
-                val leading = if (route is SettingsRoute.Section) null else BarLeading.Back(navigator.pop)
-                CompositionLocalProvider(LocalBarLeading provides leading) { route?.let { RoutePage(it) } }
+                val back = if (route is SettingsRoute.Section) null else navigator.pop
+                CompositionLocalProvider(LocalBarBack provides back) { route?.let { RoutePage(it) } }
             }
         }
     }
@@ -217,12 +210,8 @@ fun SettingsScreen(title: String, trailing: (@Composable () -> Unit)? = null, co
 
 @Composable
 fun SettingsBar(title: String, trailing: (@Composable () -> Unit)? = null, subtitle: String? = null) {
-    val leading: (@Composable () -> Unit)? = when (val shown = LocalBarLeading.current) {
-        is BarLeading.Close -> ({ SheetCloseButton(onClose = shown.action) })
-        is BarLeading.Back -> ({ SheetBackButton(shown.action) })
-        null -> null
-    }
-    SheetBar(title, subtitle = subtitle, leading = leading, trailing = trailing)
+    val back = LocalBarBack.current
+    SheetBar(title, subtitle = subtitle, back = back, trailing = trailing?.let { { it() } })
 }
 
 private val sectionGroups = listOf(

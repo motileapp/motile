@@ -39,6 +39,7 @@ import app.motile.core.EngagedWindow
 import app.motile.core.CustomSnooze
 import app.motile.core.PanelPage
 import app.motile.core.Project
+import app.motile.core.Server
 import app.motile.core.ThreadSignIn
 import app.motile.layout.Drawer
 import app.motile.layout.MainScreen
@@ -58,6 +59,7 @@ import app.motile.theme.Surface
 import app.motile.theme.TextSize
 import app.motile.theme.Theme
 import app.motile.sidebar.CustomSnoozeSheet
+import app.motile.sidebar.ServerStatsSheet
 import app.motile.thread.CommitSheet
 import app.motile.thread.ThreadSettingsSheet
 import app.motile.transcript.canvas.ConfettiLayer
@@ -83,6 +85,7 @@ private sealed interface RootSheet {
     data object ThreadSettings : RootSheet
     data class Snooze(val snooze: CustomSnooze) : RootSheet
     data class SignIn(val request: ThreadSignIn) : RootSheet
+    data class ServerStats(val server: Server) : RootSheet
 }
 
 private val AppStore.sheet: RootSheet?
@@ -95,6 +98,7 @@ private val AppStore.sheet: RootSheet?
         if (showsThreadSettings) return RootSheet.ThreadSettings
         customSnooze?.let { return RootSheet.Snooze(it) }
         signingInThread?.let { return RootSheet.SignIn(it) }
+        server(statsServerID)?.let { return RootSheet.ServerStats(it) }
         return null
     }
 
@@ -107,6 +111,7 @@ private fun AppStore.closeSheet() {
         showsUsage -> showsUsage = false
         customSnooze != null -> customSnooze = null
         signingInThread != null -> signingInThread = null
+        statsServerID != null -> statsServerID = null
         else -> {
             showsThreadSettings = false
             showsBranches = false
@@ -231,6 +236,7 @@ private fun Sheets(store: AppStore) {
                     RootSheet.ThreadSettings -> ThreadSettingsSheet()
                     is RootSheet.Snooze -> CustomSnoozeSheet(sheet.snooze)
                     is RootSheet.SignIn -> SignInAgainSheet(sheet.request)
+                    is RootSheet.ServerStats -> ServerStatsSheet(sheet.server)
                 }
             }
         }

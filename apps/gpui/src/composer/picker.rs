@@ -14,12 +14,14 @@ use motile_protocol::wire::{Access, Agent, AgentAccount, ModelContext, ModelInfo
 use super::{access_symbol, effort_label, effort_symbol};
 use crate::models::{ACCESSES, AGENTS, ComposerPickerPart, ModelInfoExt, access_detail, access_label, agent_name};
 use crate::store::Store;
-use crate::theme::{ControlSize, IconSize, Layer, Radius, Surface, TextSize, colors};
+use crate::theme::{ControlSize, IconSize, Radius, Surface, TextSize, colors};
 use crate::ui::dropdown::{GAP, backdrop, over_content};
 use crate::ui::dropdown_list::{self as list, PADDING};
 use crate::ui::menu::Anchor;
 use crate::ui::parts::{hidden_edges, with_edge_fades};
-use crate::ui::{ActionButton, Chip, Highlight, KeyCaps, Segmented, divider_on, edges, icons, logos, tooltip};
+use crate::ui::{
+    ActionButton, Chip, Highlight, KeyCaps, Segmented, divider_on, edges, icons, limit_pill, logos, tooltip,
+};
 
 const RAIL_WIDTH: f32 = 44.;
 const LIST_WIDTH: f32 = 232.;
@@ -829,27 +831,11 @@ fn limit_pills(account: &str, windows: &[limits::Row], cx: &App) -> Div {
         .flatten()
         .collect::<Vec<_>>()
         .join(" · ");
-        limit_bar(window.used_percent, window.tone, cx)
+        limit_pill(window.used_percent, window.tone, cx)
             .id(SharedString::from(format!("pill-{account}-{index}")))
             .flex_1()
             .tooltip(tooltip(said))
     }))
-}
-
-/// A thin pill filled as far as something was used, in its tone.
-fn limit_bar(used_percent: f64, tone: limits::Tone, cx: &App) -> Div {
-    let c = colors(cx);
-    let fill = match tone {
-        limits::Tone::Success => c.success,
-        limits::Tone::Pending => c.pending,
-        limits::Tone::Warning => c.warning,
-    };
-    div()
-        .h(px(3.))
-        .rounded_full()
-        .overflow_hidden()
-        .bg(Surface::Popover.layer(Layer::Control, c))
-        .child(div().h_full().w(relative((used_percent / 100.).clamp(0., 1.) as f32)).rounded_full().bg(fill))
 }
 
 /// How full the open thread's context is: its tokens, and under them how much of the window they
@@ -878,7 +864,7 @@ fn context_fill(fill: &ContextFill, cx: &App) -> Div {
                 }),
         )
         .when_some(fill.used_percent, |lines, percent| {
-            lines.child(limit_bar(percent, fill.tone, cx).w_full().mb(px(4.)))
+            lines.child(limit_pill(percent, fill.tone, cx).w_full().mb(px(4.)))
         })
 }
 

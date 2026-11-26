@@ -166,9 +166,4 @@ fun GlassCapsule(title: String, symbol: Symbol, onClick: () -> Unit, modifier: M
     }
 }
 
-/** What closes a sheet: a round glass button with an x. It closes the modal it lies in unless told otherwise. */
-@Composable
-fun SheetCloseButton(modifier: Modifier = Modifier, onClose: (() -> Unit)? = null) {
-    val close = LocalCloseModal.current
-    GlassButton(Symbol.X, "Close", onClick = { onClose?.invoke() ?: close() }, modifier = modifier, symbolSize = IconSize.Lg)
-}
+

@@ -20,6 +20,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,11 +35,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.motile.layout.KeyboardFocus
 import app.motile.platform.Symbol
 import app.motile.platform.scaled
 import app.motile.theme.TextSize
+import app.motile.theme.LocalRow
+import app.motile.theme.LocalSurface
+import app.motile.theme.Radius
 import app.motile.theme.iconSize
 import app.motile.theme.IconSize
 import app.motile.theme.ControlSize
@@ -48,7 +54,6 @@ import app.motile.theme.Opacity
 import app.motile.theme.opacity
 import app.motile.ui.ActionMenu
 import app.motile.ui.ButtonVariant
-import app.motile.ui.Card
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
 import app.motile.ui.InputField
@@ -57,7 +62,6 @@ import app.motile.ui.LocalEnabled
 import app.motile.ui.Switch
 import app.motile.ui.Text
 import app.motile.ui.TextArea
-import app.motile.ui.ThemeDivider
 import app.motile.ui.pressable
 import app.motile.ui.GatewayMark
 import app.motile.ui.proxied
@@ -68,6 +72,30 @@ internal val ROW_TEXT = TextSize.Md
 /** The text under a row's title, and of the headers and footers, as iOS's footnote. */
 internal val NOTE_TEXT = TextSize.Xs
 private val rowPadding = 16.dp
+
+/** Between two rows of a group: Android draws each row as a tile of its own, with no line between them. */
+private val tileGap = 2.dp
+
+/** A row's tile: the group's outer corners round more than the corners between its rows, as Android's settings do. */
+private fun tileShape(first: Boolean, last: Boolean): RoundedCornerShape {
+    val top = if (first) Radius.xxl else Radius.xs
+    val bottom = if (last) Radius.xxl else Radius.xs
+    return RoundedCornerShape(topStart = top, topEnd = top, bottomStart = bottom, bottomEnd = bottom)
+}
+
+/** A group's rows, each a tile of its own on the card's colour, or `color`. */
+@Composable
+fun SettingsTiles(rows: List<@Composable () -> Unit>, color: Color = Surface.Card.color) {
+    val palette = LocalPalette.current
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(tileGap)) {
+        rows.forEachIndexed { index, row ->
+            val shape = tileShape(first = index == 0, last = index == rows.lastIndex)
+            Column(Modifier.fillMaxWidth().clip(shape).background(color, shape)) {
+                CompositionLocalProvider(LocalSurface provides Surface.Card, LocalRow provides null, LocalForeground provides palette.foreground) { row() }
+            }
+        }
+    }
+}
 
 /** One of the system's inset groups: a header over a card of rows and a footer under it. Its `id` is what a search scrolls to. */
 class SettingsGroup(
@@ -119,8 +147,9 @@ class SettingsRows {
 }
 
 /**
- * The settings' list: the system's inset groups, drawn on the theme's colours. It scrolls to the
- * group `target` names and lights it for a moment, then calls `reached`.
+ * The settings' list: the system's inset groups, `spacing` apart, drawn on the theme's colours. It
+ * scrolls to the group `target` names and lights it for a moment, then calls `reached`. One that
+ * `fits` is only as tall as its groups, as a sheet that fits them needs.
  */
 @Composable
 fun SettingsList(
@@ -128,6 +157,8 @@ fun SettingsList(
     target: String? = null,
     reached: () -> Unit = {},
     state: LazyListState = rememberLazyListState(),
+    spacing: Dp = 20.dp,
+    fits: Boolean = false,
     build: SettingsGroups.() -> Unit,
 ) {
     val groups = SettingsGroups().apply(build).groups
@@ -149,12 +180,12 @@ fun SettingsList(
         lit = null
     }
     LazyColumn(
-        modifier.fillMaxSize(),
+        if (fits) modifier.fillMaxWidth() else modifier.fillMaxSize(),
         state = state,
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 40.dp),
     ) {
         items(groups.size, key = { groups[it].id ?: "#$it" }) { index ->
-            Group(groups[index], lit = lit != null && groups[index].names(lit))
+            Group(groups[index], lit = lit != null && groups[index].names(lit), if (index == 0) 0.dp else spacing)
         }
     }
 }
@@ -162,9 +193,9 @@ fun SettingsList(
 private fun SettingsGroup.names(target: String?): Boolean = target != null && (id == target || target in also)
 
 @Composable
-private fun Group(group: SettingsGroup, lit: Boolean) {
+private fun Group(group: SettingsGroup, lit: Boolean, spacing: Dp) {
     val palette = LocalPalette.current
-    Column(Modifier.fillMaxWidth().padding(top = 20.dp)) {
+    Column(Modifier.fillMaxWidth().padding(top = spacing)) {
         group.header?.let {
             Box(Modifier.padding(start = rowPadding, end = rowPadding, bottom = 7.dp)) {
                 CompositionLocalProvider(LocalForeground provides palette.mutedForeground) { it() }
@@ -173,21 +204,12 @@ private fun Group(group: SettingsGroup, lit: Boolean) {
         if (group.bare) {
             Column(Modifier.fillMaxWidth()) { group.rows.forEach { it() } }
         } else if (group.rows.isNotEmpty()) {
-            Card(Modifier.fillMaxWidth()) {
-                val light by animateColorAsState(
-                    if (lit) Surface.Card.color(Surface.Layer.RowSelected) else Surface.Card.color,
-                    tween(if (lit) 200 else 900),
-                    label = "found",
-                )
-                Column(Modifier.background(light)) {
-                    CompositionLocalProvider(LocalForeground provides palette.foreground) {
-                        group.rows.forEachIndexed { index, row ->
-                            if (index > 0) ThemeDivider(Modifier.padding(start = rowPadding))
-                            row()
-                        }
-                    }
-                }
-            }
+            val light by animateColorAsState(
+                if (lit) Surface.Card.color(Surface.Layer.RowSelected) else Surface.Card.color,
+                tween(if (lit) 200 else 900),
+                label = "found",
+            )
+            SettingsTiles(group.rows, light)
         }
         val footerContent = group.footerContent
         if (group.failure == null && footerContent != null) {

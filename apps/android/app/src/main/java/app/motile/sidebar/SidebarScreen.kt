@@ -665,7 +665,7 @@ private fun Footer(
 private fun Servers(store: AppStore, expanded: Boolean, toggle: () -> Unit) {
     val servers = store.servers
     if (servers.size == 1) {
-        ServerLine(servers[0], Modifier.fillMaxWidth().height(lineHeight).padding(start = sidebarEdge, end = sidebarEdge - serverButtonOutset))
+        ServerStatsLine(store, servers[0])
         ServerErrors(servers)
         return
     }
@@ -709,9 +709,15 @@ private fun ServerLines(store: AppStore) {
         state = state,
         flingBehavior = rememberSnapFlingBehavior(state, SnapPosition.Start),
     ) {
-        items(servers, key = { it.id }) { server ->
-            ServerLine(server, Modifier.fillMaxWidth().height(lineHeight).padding(start = sidebarEdge, end = sidebarEdge - serverButtonOutset))
-        }
+        items(servers, key = { it.id }) { server -> ServerStatsLine(store, server) }
+    }
+}
+
+/** A server's line, which opens the sheet of what its machine does. */
+@Composable
+private fun ServerStatsLine(store: AppStore, server: Server) {
+    HighlightButton(onClick = { store.statsServerID = server.id }, radius = 0.dp) {
+        ServerLine(server, Modifier.fillMaxWidth().height(lineHeight).padding(start = sidebarEdge, end = sidebarEdge - serverButtonOutset))
     }
 }
 

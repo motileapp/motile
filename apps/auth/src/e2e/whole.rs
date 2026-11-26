@@ -151,7 +151,8 @@ impl Client {
             | Event::Found { .. }
             | Event::Reveal { .. }
             | Event::Gateway { .. }
-            | Event::AllServers { .. } => {}
+            | Event::AllServers { .. }
+            | Event::ServerStats { .. } => {}
         }
     }
 

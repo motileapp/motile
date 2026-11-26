@@ -120,6 +120,7 @@ colours from `packages/theme/theme.css`; an opacity is one of the tokens
 - `store.rs`: SQLite. `sync.rs`: the change log and the copies of other servers' logs.
 - `activity.rs`, `search.rs`, `pricing.rs`, `limits.rs`: the activity, message search, prices and
   the accounts' limits.
+- `stats.rs`: what the machine does, sampled every few seconds, for a server's dropdown.
 - `git.rs`, `pull_requests.rs`, `github.rs`: git, pull requests and GitHub.
 - `linear.rs`, `ricrac.rs`: Linear and Ricrac. `MOTILE_LINEAR_URL`, `MOTILE_RICRAC_URL` stand in
   for them.
@@ -146,7 +147,7 @@ for tests. `api.rs` is the JSON the client and the core exchange.
 - `engaged.rs`, `usage.rs`, `activity.rs`, `limits.rs`, `gateway.rs`, `mcp_servers.rs`: the usage
   view and the gateway pages.
 - `pull_request.rs`, `linear.rs`, `ricrac.rs`, `git.rs`, `browse.rs`, `skills.rs`, `snooze.rs`,
-  `search.rs`, `markup.rs`: what those parts of the clients show.
+  `search.rs`, `markup.rs`, `server_stats.rs`: what those parts of the clients show.
 - `gallery.rs`: a thread's images and videos, for the panel's Media tab.
 - `render/`: transcripts as rows ready to draw. `render/openui/` runs the programs and resolves
   them into the trees the clients draw; `canvas/` lays out charts and drawings, `map.rs` the map's
@@ -179,7 +180,9 @@ each, named alike (`KitMac.swift`, `KitIOS.swift`).
 ### apps/android (Kotlin, Jetpack Compose)
 
 The iOS app in Kotlin, from Android 10. Run `./gradlew` from `apps/android` with a JDK 21.
-Package `app.motile`, application `app.motile.motile`.
+Package `app.motile`, application `app.motile.motile`. It does what the iOS app does, but looks like
+Android where the systems differ: a sheet's bar is Android's top app bar (the title at the start, no
+close button), and a list's rows are tiles of their own with no lines between them.
 
 - `core/`: the core's JNI crate. `scripts/build-core.sh` builds it; Gradle runs it before every
   build, and `-Pmotile.skipCore` keeps the last one.

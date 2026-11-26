@@ -926,11 +926,13 @@ private struct ServersShelf: View {
         if servers.count == 1 {
             VStack(spacing: 0) {
                 ThemeDivider()
-                ServerLine(server: servers[0])
-                    .padding(.leading, sidebarEdge)
-                    .padding(.trailing, sidebarEdge - serverButtonOutset)
-                    .frame(height: doneRowHeight)
-                    .padding(.vertical, 3)
+                ServerStatsButton(server: servers[0], radius: 0) {
+                    ServerLine(server: servers[0])
+                        .padding(.leading, sidebarEdge)
+                        .padding(.trailing, sidebarEdge - serverButtonOutset)
+                        .frame(height: doneRowHeight)
+                        .padding(.vertical, 3)
+                }
                 ServerErrors(servers: servers)
             }
         } else {
@@ -941,11 +943,12 @@ private struct ServersShelf: View {
                         SidebarChevron(expanded: expanded)
                     }
                 } row: { server in
-                    ServerLine(server: server)
-                        .padding(.leading, sidebarRowPadding)
-                        .padding(.trailing, sidebarRowPadding - serverButtonOutset)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(rowMargin)
+                    ServerStatsButton(server: server, inset: rowMargin) {
+                        ServerLine(server: server)
+                            .padding(.leading, sidebarRowPadding)
+                            .padding(.trailing, sidebarRowPadding - serverButtonOutset)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                 }
                 ServerErrors(servers: servers)
             }

@@ -1101,6 +1101,18 @@ async fn a_question_claude_asks_is_answered_by_the_user() {
 }
 
 #[tokio::test]
+async fn a_client_watching_the_machine_gets_the_kept_samples_then_each_new_one() {
+    let harness = Harness::start(fixture(Agent::Claude), "0").await;
+    let connection = harness.connect().await;
+    let mut stats = connection.follow(&Request::WatchStats).await.unwrap();
+    assert!(matches!(next(&mut stats).await, Message::Stats { .. }));
+    let Message::Stats { stats: sampled } = next(&mut stats).await else { panic!("the server sent something else") };
+    assert_eq!(sampled.samples.len(), 1);
+    assert!(sampled.cores > 0 && sampled.memory_total > 0 && sampled.disk_total > 0);
+    assert!(sampled.samples[0].memory_used > 0 && sampled.disk_used <= sampled.disk_total);
+}
+
+#[tokio::test]
 async fn a_question_codex_asks_is_answered_by_the_user() {
     a_question_the_agent_asks_is_answered_by_the_user(Agent::Codex).await;
 }

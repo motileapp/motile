@@ -12,6 +12,7 @@
 //!   updater available 9.9.9                             shows the update row in that state
 //!   active on | active off                              as if the window came to the front or left it
 //!   open <title>                                        opens the thread with that title
+//!   stats <short name>                                  opens that server's dropdown of what its machine does
 //!   slide <label> <share> | press <label>               drags the latest program's slider with that label
 //!                                                       to a share of its track, or presses its button
 
@@ -286,6 +287,14 @@ fn act(verb: &str, rest: &str, store: &Entity<Store>, window: &mut Window, cx: &
                     return tracing::warn!("the dev driver found no thread {title}");
                 };
                 store.select(crate::store::Selection::Thread(id), cx);
+                cx.notify();
+            });
+        }
+        "stats" => {
+            store.update(cx, |store, cx| {
+                if !crate::sidebar::show_stats(store, rest.trim()) {
+                    return tracing::warn!("the dev driver found no server {}", rest.trim());
+                }
                 cx.notify();
             });
         }

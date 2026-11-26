@@ -334,6 +334,7 @@ struct SidebarScreen: View {
                 .padding(.leading, sidebarEdge)
                 .padding(.trailing, sidebarEdge - serverButtonOutset)
                 .frame(height: ServerLines.lineHeight)
+                .button(.highlight(radius: 0)) { store.statsServerID = servers[0].id }
         } else if servers.count > 1 {
             Button {
                 // Out of the tap's update, which the button animates.
@@ -410,16 +411,18 @@ private struct ServerLines: View {
     static let lineHeight: CGFloat = 44
     private static let mostShown = 5
 
+    @Environment(AppStore.self) private var store
     let servers: [Server]
 
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                ForEach(servers) {
-                    ServerLine(server: $0)
+                ForEach(servers) { server in
+                    ServerLine(server: server)
                         .padding(.leading, sidebarEdge)
                         .padding(.trailing, sidebarEdge - serverButtonOutset)
                         .frame(height: Self.lineHeight)
+                        .button(.highlight(radius: 0)) { store.statsServerID = server.id }
                 }
             }
             .scrollTargetLayout()

@@ -32,6 +32,7 @@ pub mod pull_request;
 pub mod render;
 pub mod ricrac;
 pub mod search;
+pub mod server_stats;
 pub mod skills;
 pub mod snooze;
 pub mod svg;

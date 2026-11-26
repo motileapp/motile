@@ -655,6 +655,9 @@ pub enum Request {
     },
     /// Whether the connection still carries requests. `Pong` answers at once.
     Ping,
+    /// What the server's machine is doing. `Stats` answers with the samples it keeps, then again
+    /// with each new one, until the client stops listening.
+    WatchStats,
     /// Keeps the state of the program in the block `block` of an assistant item; `null` forgets
     /// it. `Ok` answers.
     SetUi {
@@ -2752,6 +2755,31 @@ pub struct ServerInfo {
     pub all_servers: Option<AllServers>,
 }
 
+/// The server's machine: what it has, and samples of what it did, oldest first. Each sample after
+/// the first message is sent alone.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+pub struct MachineStats {
+    pub cores: u32,
+    pub memory_total: u64,
+    pub disk_used: u64,
+    pub disk_total: u64,
+    pub uptime_secs: u64,
+    /// How many seconds apart the samples are.
+    pub every_secs: f64,
+    pub samples: Vec<StatsSample>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug, Default)]
+pub struct StatsSample {
+    pub at: f64,
+    /// Of every core together, from 0 to 100.
+    pub cpu: f32,
+    pub memory_used: u64,
+    /// Bytes per second.
+    pub received: u64,
+    pub sent: u64,
+}
+
 /// Where an update of the server is.
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(tag = "state", rename_all = "snake_case")]
@@ -2882,6 +2910,9 @@ pub enum Message {
 
     Ok,
     Pong,
+    Stats {
+        stats: MachineStats,
+    },
     Sent {
         thread_id: String,
     },

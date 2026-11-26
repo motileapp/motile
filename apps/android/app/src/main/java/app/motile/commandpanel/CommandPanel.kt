@@ -60,9 +60,7 @@ import app.motile.theme.TextSize
 import app.motile.ui.GlassButton
 import app.motile.ui.InputField
 import app.motile.ui.InputVariant
-import app.motile.ui.SheetBackButton
 import app.motile.ui.SheetBar
-import app.motile.ui.SheetCloseButton
 import app.motile.ui.Text
 import app.motile.ui.glassButton
 import kotlinx.coroutines.flow.drop
@@ -138,16 +136,14 @@ fun CommandPanel(start: PanelPage, inStack: Boolean = false, onLeave: (() -> Uni
     ) {
         SheetBar(
             state.title(page),
-            leading = {
-                when {
-                    inStack -> SheetBackButton { if (state.pages.size > 1) state.back() else state.leave() }
-                    state.pages.size > 1 -> SheetBackButton { state.back() }
-                    else -> SheetCloseButton(onClose = { state.close() })
-                }
+            back = when {
+                inStack -> ({ if (state.pages.size > 1) state.back() else state.leave() })
+                state.pages.size > 1 -> ({ state.back() })
+                else -> null
             },
             trailing = page.githubID?.let { id ->
                 {
-                    GlassButton(Symbol.RotateCw, "Refresh", onClick = { store.loadRepos(id, fresh = true) }, pending = id in store.listingRepos)
+                    GlassButton(Symbol.RotateCw, "Refresh", onClick = { store.loadRepos(id, fresh = true) }, bare = true, pending = id in store.listingRepos)
                 }
             },
         )
