@@ -306,6 +306,7 @@ class AppStore(private val context: Context) {
     private val serverUpdates = mutableStateMapOf<String, ServerUpdate>()
     /** What each server's machine does, as its sheet last showed it. */
     val serverStats = mutableStateMapOf<String, ServerStats.Shown>()
+    private var statsPlaceholders by mutableStateOf<ServerStats.Placeholders?>(null)
     /** The server whose sheet of what its machine does is open. */
     var statsServerID by mutableStateOf<String?>(null)
     /** The servers whose sheet is open. */
@@ -638,6 +639,10 @@ class AppStore(private val context: Context) {
                 return {
                     if (serverID in watchedStats && serverStats[serverID] != shown) serverStats[serverID] = shown
                 }
+            }
+            "stats_placeholders" -> {
+                val placeholders = ServerStats.Placeholders(event)
+                return { statsPlaceholders = placeholders }
             }
             "server_update" -> {
                 val serverID = event.string("server_id")
@@ -1682,6 +1687,13 @@ class AppStore(private val context: Context) {
 
     /** Whether the server can wait for its agents before it restarts, or stop them and go on with them after. */
     fun canChooseRestart(server: Server): Boolean = server.protocolVersion >= 14
+
+    /** What the server's sheet shows: its machine, or the rows with nothing in them while it loads or once it can't. */
+    fun stats(serverID: String): ServerStats? = when (val shown = serverStats[serverID] ?: ServerStats.Shown.Loading) {
+        is ServerStats.Shown.Showing -> shown.stats
+        ServerStats.Shown.Loading -> statsPlaceholders?.loading
+        ServerStats.Shown.Unknown -> statsPlaceholders?.unknown
+    }
 
     /** Follows what the server's machine does while its sheet is open. One opened again shows what it last showed until the server answers. */
     fun watchStats(serverID: String, on: Boolean) {

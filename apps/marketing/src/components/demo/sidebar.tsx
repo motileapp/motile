@@ -264,7 +264,7 @@ export function Sidebar({
           <Chevron open={serversOpen} />
         </button>
         {serversOpen && (
-          <div className="pb-1">
+          <div>
             {servers.map((server) => (
               <ServerRow key={server.name} server={server} />
             ))}
@@ -607,7 +607,7 @@ function ServerRow({ server }: { server: Server }) {
         type="button"
         onClick={() => setOpen(!open)}
         className={cn(
-          "flex h-8 w-full items-center gap-[7px] px-4 text-left hover:bg-background-accent-larger",
+          "flex h-[36px] w-full items-center gap-[7px] px-4 text-left hover:bg-background-accent-larger",
           open && "bg-background-accent-larger"
         )}
       >

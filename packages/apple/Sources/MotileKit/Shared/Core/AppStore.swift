@@ -349,6 +349,7 @@ final class AppStore {
     private var serverUpdates: [String: ServerUpdate] = [:]
     /// What each server's machine does, as its dropdown last showed it.
     private(set) var serverStats: [String: ServerStats.Shown] = [:]
+    private var statsPlaceholders: ServerStats.Placeholders?
     /// The server whose sheet of what its machine does is open, on iOS.
     var statsServerID: String?
     /// The servers whose dropdown is open.
@@ -690,11 +691,16 @@ final class AppStore {
             return { [weak self] in self?.apply(projects: projects, serverID: serverID) }
         case "server_stats":
             let serverID = event.string("server_id")
-            let shown: ServerStats.Shown = event.object("stats").map { .shown(ServerStats(json: $0)) } ?? .failed(event.string("error"))
+            let shown: ServerStats.Shown = event.object("stats").map { .shown(ServerStats(json: $0)) } ?? .unknown
             return { [weak self] in
                 guard let self, self.watchedStats.contains(serverID), self.serverStats[serverID] != shown else { return }
                 self.serverStats[serverID] = shown
             }
+        case "stats_placeholders":
+            let placeholders = ServerStats.Placeholders(
+                loading: ServerStats(json: event.object("loading") ?? [:]), unknown: ServerStats(json: event.object("unknown") ?? [:])
+            )
+            return { [weak self] in self?.statsPlaceholders = placeholders }
         case "server_update":
             let serverID = event.string("server_id")
             let (received, total) = (event.double("received"), event.optionalDouble("total"))
@@ -1732,6 +1738,16 @@ final class AppStore {
     /// them after.
     func canChooseRestart(_ server: Server) -> Bool {
         server.protocolVersion >= 14
+    }
+
+    /// What the server's dropdown shows: its machine, or the rows with nothing in them while it
+    /// loads or once it can't.
+    func stats(of serverID: String) -> ServerStats? {
+        switch serverStats[serverID] ?? .loading {
+        case .shown(let stats): stats
+        case .loading: statsPlaceholders?.loading
+        case .unknown: statsPlaceholders?.unknown
+        }
     }
 
     /// Follows what the server's machine does while its dropdown is open. One opened again shows

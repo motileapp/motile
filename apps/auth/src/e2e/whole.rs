@@ -152,7 +152,8 @@ impl Client {
             | Event::Reveal { .. }
             | Event::Gateway { .. }
             | Event::AllServers { .. }
-            | Event::ServerStats { .. } => {}
+            | Event::ServerStats { .. }
+            | Event::StatsPlaceholders { .. } => {}
         }
     }
 

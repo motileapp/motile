@@ -139,6 +139,20 @@ pub fn view(stats: &MachineStats) -> StatsView {
     StatsView { uptime: uptime(stats.uptime_secs), rows }
 }
 
+/// The rows with nothing in them and `value` where their amounts go: "Loading" before the server
+/// answers, "Unknown" once it can't. They take the room the stats will, so nothing moves when
+/// they come.
+pub fn placeholder(value: &str) -> StatsView {
+    let mut view = view(&MachineStats::default());
+    view.uptime = value.to_string();
+    for row in &mut view.rows {
+        row.detail = None;
+        row.used = None;
+        row.value = value.to_string();
+    }
+    view
+}
+
 /// A bar for each slot, the empty ones first while fewer samples have come.
 fn bars(samples: &[StatsSample], switches: Switches, share: impl Fn(&StatsSample) -> f64) -> Vec<Bar> {
     let shown = &samples[samples.len().saturating_sub(SLOTS)..];
@@ -241,6 +255,28 @@ mod tests {
         let tones = |row: usize| view.rows[row].bars[SLOTS - 3..].iter().map(|bar| bar.tone).collect::<Vec<_>>();
         assert_eq!(tones(0), [Tone::Success, Tone::Pending, Tone::Warning]);
         assert_eq!(tones(2), [Tone::Success; 3]);
+    }
+
+    #[test]
+    fn a_placeholder_has_every_row_empty_with_its_value() {
+        let view = placeholder("Loading");
+        assert_eq!(view.uptime, "Loading");
+        let lines: Vec<_> =
+            view.rows.iter().map(|row| (row.label.as_str(), row.detail.as_deref(), row.value.as_str())).collect();
+        assert_eq!(
+            lines,
+            [
+                ("CPU", None, "Loading"),
+                ("RAM", None, "Loading"),
+                ("Download", None, "Loading"),
+                ("Upload", None, "Loading"),
+                ("Disk", None, "Loading"),
+            ]
+        );
+        assert!(
+            view.rows[..4].iter().all(|row| row.bars.len() == SLOTS && row.bars.iter().all(|bar| bar.height == 0.0))
+        );
+        assert_eq!(view.rows[4].fill.map(|fill| fill.height), Some(0.0));
     }
 
     #[test]

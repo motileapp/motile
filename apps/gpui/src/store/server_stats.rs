@@ -1,9 +1,10 @@
 //! What a server's machine does, for the dropdown its line in the sidebar opens.
 
 use std::collections::HashMap;
+use std::sync::LazyLock;
 
 use motile_core::api::Command;
-use motile_core::server_stats::StatsView;
+use motile_core::server_stats::{StatsView, placeholder};
 
 use super::Store;
 
@@ -11,15 +12,21 @@ use super::Store;
 pub enum ShownStats {
     Loading,
     Shown(StatsView),
-    Failed(String),
+    /// The server can't say.
+    Unknown,
 }
 
+static LOADING_VIEW: LazyLock<StatsView> = LazyLock::new(|| placeholder("Loading"));
+static UNKNOWN_VIEW: LazyLock<StatsView> = LazyLock::new(|| placeholder("Unknown"));
+
 impl ShownStats {
-    /// How long the machine has been up, "2d 10h", once the server has said.
-    pub fn uptime(&self) -> Option<&str> {
+    /// The machine, or the rows with nothing in them while it loads or once it can't, so that
+    /// nothing moves when the stats come.
+    pub fn view(&self) -> &StatsView {
         match self {
-            ShownStats::Shown(stats) => Some(&stats.uptime),
-            ShownStats::Loading | ShownStats::Failed(_) => None,
+            ShownStats::Shown(stats) => stats,
+            ShownStats::Loading => &LOADING_VIEW,
+            ShownStats::Unknown => &UNKNOWN_VIEW,
         }
     }
 }
@@ -56,16 +63,12 @@ impl ServerStats {
         self.open.take()
     }
 
-    /// Takes what a server's machine does, or why it can't be shown, while its dropdown is open.
-    fn apply(&mut self, server_id: String, stats: Option<StatsView>, error: Option<String>) {
+    /// Takes what a server's machine does, or that it can't be shown, while its dropdown is open.
+    fn apply(&mut self, server_id: String, stats: Option<StatsView>) {
         if self.open.as_deref() != Some(server_id.as_str()) {
             return;
         }
-        let shown = match stats {
-            Some(stats) => ShownStats::Shown(stats),
-            None => ShownStats::Failed(error.unwrap_or_default()),
-        };
-        self.shown.insert(server_id, shown);
+        self.shown.insert(server_id, stats.map_or(ShownStats::Unknown, ShownStats::Shown));
     }
 }
 
@@ -86,8 +89,8 @@ impl Store {
         self.send(Command::WatchServerStats { server_id: closed, on: false });
     }
 
-    pub(super) fn apply_server_stats(&mut self, server_id: String, stats: Option<StatsView>, error: Option<String>) {
-        self.server_stats.apply(server_id, stats, error);
+    pub(super) fn apply_server_stats(&mut self, server_id: String, stats: Option<StatsView>) {
+        self.server_stats.apply(server_id, stats);
     }
 }
 
@@ -104,25 +107,25 @@ mod tests {
         let mut watched = ServerStats::default();
         watched.open("a");
         assert_eq!(watched.of("a"), &ShownStats::Loading);
-        watched.apply("a".into(), Some(stats("1h")), None);
+        watched.apply("a".into(), Some(stats("1h")));
         watched.close();
-        watched.apply("a".into(), Some(stats("2h")), None);
-        assert_eq!(watched.of("a").uptime(), Some("1h"));
+        watched.apply("a".into(), Some(stats("2h")));
+        assert_eq!(watched.of("a").view().uptime, "1h");
         watched.open("a");
-        assert_eq!(watched.of("a").uptime(), Some("1h"));
-        watched.apply("a".into(), Some(stats("3h")), None);
-        assert_eq!(watched.of("a").uptime(), Some("3h"));
+        assert_eq!(watched.of("a").view().uptime, "1h");
+        watched.apply("a".into(), Some(stats("3h")));
+        assert_eq!(watched.of("a").view().uptime, "3h");
     }
 
     #[test]
     fn a_failed_dropdown_loads_again_and_another_server_closes_it() {
         let mut watched = ServerStats::default();
         watched.open("a");
-        watched.apply("a".into(), None, Some("Update studio to see this".into()));
-        assert_eq!(watched.of("a"), &ShownStats::Failed("Update studio to see this".into()));
+        watched.apply("a".into(), None);
+        assert_eq!(watched.of("a").view().uptime, "Unknown");
         assert_eq!(watched.open("b"), Some("a".into()));
         assert_eq!(watched.open("a"), Some("b".into()));
-        assert_eq!(watched.of("a"), &ShownStats::Loading);
+        assert_eq!(watched.of("a").view().uptime, "Loading");
         assert_eq!(watched.open("a"), None);
         assert_eq!(watched.close(), Some("a".into()));
     }

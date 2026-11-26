@@ -24,20 +24,10 @@ struct ServerStatsSheet: View {
                         .listRowInsets(Self.headerInsets)
                 }
                 Section {
-                    switch store.serverStats[server.id] ?? .loading {
-                    case .loading:
-                        Spinner(size: .xl)
-                            .frame(maxWidth: .infinity)
-                    case .failed(let error):
-                        Text(error)
-                            .font(.footnote)
-                            .foregroundStyle(Color.themeMutedForeground)
-                    case .shown(let stats):
-                        ForEach(stats.rows) { row in
-                            ServerStatsRow(row: row)
-                                .padding(.vertical, Self.rowPadding)
-                                .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
-                        }
+                    ForEach(store.stats(of: server.id)?.rows ?? []) { row in
+                        ServerStatsRow(row: row)
+                            .padding(.vertical, Self.rowPadding)
+                            .alignmentGuide(.listRowSeparatorLeading) { $0[.leading] }
                     }
                 }
             }

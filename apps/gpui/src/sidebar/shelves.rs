@@ -13,17 +13,17 @@ use super::list::{Layout, place};
 use super::rows::row_light;
 use super::stats;
 use super::updates::ServerUpdateStatus;
-use super::{
-    BUTTON_OUTSET, DONE_ROW_HEIGHT, ROW_GAP, ROW_PADDING, SHELF_LIST_TOP, SIDEBAR_EDGE, Shelf, Sidebar, row_margin,
-};
+use super::{BUTTON_OUTSET, DONE_ROW_HEIGHT, ROW_GAP, ROW_PADDING, SIDEBAR_EDGE, Shelf, Sidebar, row_margin};
 use crate::models::{Server, ThreadInfo, section_label};
 use crate::prefs::Prefs;
 use crate::store::{Store, UndoNotice};
 use crate::theme::{self, IconSize, Opacity, TextSize, colors};
 use crate::ui::{Highlight, divider, ease_out, icons, tabular_numbers, tooltip};
 
-/// How tall a shelf's list can get at least, when there is room, and before it is resized.
-const SHELF_MIN_HEIGHT: f32 = 4. * (DONE_ROW_HEIGHT + ROW_GAP) + 4.;
+/// How many rows a shelf's list shows at least, when there is room, and before it is resized.
+const SHELF_MIN_ROWS: f32 = 4.;
+/// A shelf's line, and a server's line in its list.
+const LINE_HEIGHT: f32 = DONE_ROW_HEIGHT + 6.;
 const SHELF_DEFAULT_HEIGHT: f32 = 250.;
 /// How long the offer to undo takes to come and go.
 pub const UNDO_FADE: Duration = Duration::from_millis(150);
@@ -105,6 +105,16 @@ impl Shelf {
         }
     }
 
+    /// Whether its rows are lines as its header is: as tall, with nothing between them or around them.
+    fn lines(self) -> bool {
+        self == Shelf::Servers
+    }
+
+    /// How far apart its rows are, and the room around them all.
+    fn spacing(self) -> (f32, f32) {
+        if self.lines() { (LINE_HEIGHT, 0.) } else { (DONE_ROW_HEIGHT + ROW_GAP, 4.) }
+    }
+
     fn list_id(self) -> &'static str {
         match self {
             Shelf::Working => "working-list",
@@ -116,10 +126,10 @@ impl Shelf {
 }
 
 /// The heights a shelf's list can have: from the least to as tall as its rows, up to `max`.
-fn heights(count: usize, max: f32) -> (f32, f32) {
-    let content = count as f32 * (DONE_ROW_HEIGHT + ROW_GAP) + 4.;
-    let tallest = max.min(content);
-    (SHELF_MIN_HEIGHT.min(tallest), tallest)
+fn heights(shelf: Shelf, count: usize, max: f32) -> (f32, f32) {
+    let (row, around) = shelf.spacing();
+    let tallest = max.min(count as f32 * row + around);
+    ((SHELF_MIN_ROWS * row + around).min(tallest), tallest)
 }
 
 /// The chevron that opens and closes a line's list, at the line's end, a step quieter than its
@@ -406,7 +416,7 @@ impl Sidebar {
             .flex_shrink_0()
             .on_hover(self.row_hover(group.into(), None, cx))
             .pt(px(3.))
-            .pb(px(if expanded { 3. - ROW_GAP / 2. } else { 3. }))
+            .pb(px(if expanded && !shelf.lines() { 3. - ROW_GAP / 2. } else { 3. }))
             .child(Highlight::new().radius(0.).render(group, cx))
             .child(
                 div()
@@ -456,7 +466,7 @@ impl Sidebar {
     /// How tall the shelf's list is: as it was left, pulled as far as the line is being dragged,
     /// within what it can be.
     fn shelf_list_height(&self, shelf: Shelf, count: usize, max: f32, cx: &App) -> f32 {
-        let (lowest, tallest) = heights(count, max);
+        let (lowest, tallest) = heights(shelf, count, max);
         let resting = self.store.read(cx).prefs.f32_or(shelf.height_key(), SHELF_DEFAULT_HEIGHT).clamp(lowest, tallest);
         let pulled = self.pulling.filter(|(pulling, ..)| *pulling == shelf).map_or(0., |(_, start, now)| start - now);
         (resting + pulled).clamp(lowest, tallest)
@@ -490,8 +500,8 @@ impl Sidebar {
     ) -> Div {
         let count = layout.tops.len();
         self.shelf_room.insert(shelf, (count, max));
-        let (lowest, tallest) = heights(count, max);
-        let list_height = self.shelf_list_height(shelf, count, max, cx);
+        let (lowest, tallest) = heights(shelf, count, max);
+        let list_height = self.shelf_list_height(shelf, count, max, cx) + if shelf.lines() { 0. } else { ROW_GAP / 2. };
         let fill = colors(cx).background;
         let element = self.list(shelf).element(shelf.list_id(), layout, rows, fill);
         div()
@@ -507,7 +517,7 @@ impl Sidebar {
             .when(expanded, |shelf| {
                 shelf.child(
                     div()
-                        .h(px(list_height + ROW_GAP / 2.))
+                        .h(px(list_height))
                         .flex_shrink_0()
                         .on_scroll_wheel(cx.listener(|this, _, _, cx| this.forget_pointer(cx)))
                         .child(element),
@@ -564,11 +574,10 @@ impl Sidebar {
             )
             .into_any_element();
         self.list_mut(Shelf::Servers).set_ids(servers.iter().map(|server| server.id.clone()).collect());
-        let heights = servers.iter().map(|server| height(server) + ROW_GAP).collect();
-        let layout = Layout::new(heights, SHELF_LIST_TOP, 4. - ROW_GAP / 2.);
+        let heights = servers.iter().map(|server| height(server) + LINE_HEIGHT - DONE_ROW_HEIGHT).collect();
+        let layout = Layout::new(heights, 0., 0.);
         let mut rows = Vec::new();
         if expanded {
-            let margin = row_margin();
             let visible = self.list_mut(Shelf::Servers).visible(&layout, window);
             for index in visible {
                 let server = &servers[index];
@@ -576,10 +585,9 @@ impl Sidebar {
                 let line = div()
                     .relative()
                     .size_full()
-                    .pt(px(margin.top))
-                    .pb(px(margin.bottom))
-                    .pl(px(margin.left + ROW_PADDING))
-                    .pr(px(margin.right + ROW_PADDING - BUTTON_OUTSET))
+                    .py(px((LINE_HEIGHT - DONE_ROW_HEIGHT) / 2.))
+                    .pl(px(SIDEBAR_EDGE))
+                    .pr(px(SIDEBAR_EDGE - BUTTON_OUTSET))
                     .flex()
                     .items_center()
                     .child(self.server_line(server, cx));
@@ -666,13 +674,14 @@ impl Sidebar {
 
 #[cfg(test)]
 mod tests {
-    use super::{SHELF_MIN_HEIGHT, capitalized, heights};
+    use super::{Shelf, capitalized, heights};
 
     #[test]
     fn a_shelf_is_as_tall_as_its_rows_up_to_its_room() {
-        assert_eq!(heights(2, 400.), (72., 72.));
-        assert_eq!(heights(20, 400.), (SHELF_MIN_HEIGHT, 400.));
-        assert_eq!(heights(20, 100.), (100., 100.));
+        assert_eq!(heights(Shelf::Archived, 2, 400.), (72., 72.));
+        assert_eq!(heights(Shelf::Archived, 20, 400.), (140., 400.));
+        assert_eq!(heights(Shelf::Archived, 20, 100.), (100., 100.));
+        assert_eq!(heights(Shelf::Servers, 3, 400.), (114., 114.));
     }
 
     #[test]

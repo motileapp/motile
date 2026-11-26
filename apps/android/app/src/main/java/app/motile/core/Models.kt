@@ -1943,9 +1943,14 @@ data class ServerStats(
     sealed interface Shown {
         data object Loading : Shown
         data class Showing(val stats: ServerStats) : Shown
-        data class Failed(val error: String) : Shown
 
-        val uptime: String? get() = (this as? Showing)?.stats?.uptime
+        /** The server can't say. */
+        data object Unknown : Shown
+    }
+
+    /** What a sheet shows before its machine answers, and once it can't: the rows with nothing in them, so that nothing moves when the stats come. */
+    data class Placeholders(val loading: ServerStats, val unknown: ServerStats) {
+        constructor(event: JSON) : this(ServerStats(event.obj("loading") ?: EmptyJSON), ServerStats(event.obj("unknown") ?: EmptyJSON))
     }
 
     data class Row(
@@ -1984,7 +1989,7 @@ data class ServerStats(
     constructor(json: JSON) : this(uptime = json.string("uptime"), rows = json.objects("rows").map(::Row))
 
     companion object {
-        /** What a `server_stats` event says: the stats, or why they can't be shown. */
-        fun shown(event: JSON): Shown = event.obj("stats")?.let { Shown.Showing(ServerStats(it)) } ?: Shown.Failed(event.string("error"))
+        /** What a `server_stats` event says: the stats, or that they can't be shown. */
+        fun shown(event: JSON): Shown = event.obj("stats")?.let { Shown.Showing(ServerStats(it)) } ?: Shown.Unknown
     }
 }

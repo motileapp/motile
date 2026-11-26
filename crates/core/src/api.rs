@@ -819,13 +819,16 @@ pub enum Event {
         server_id: String,
         projects: Vec<ProjectView>,
     },
-    /// What a server's machine does, while its dropdown is open, or why it can't be shown.
+    /// What a server's machine does, while its dropdown is open, or none when it can't be shown.
     ServerStats {
         server_id: String,
         #[serde(skip_serializing_if = "Option::is_none")]
         stats: Option<crate::server_stats::StatsView>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        error: Option<String>,
+    },
+    /// What a server's dropdown shows before its machine answers, and once it can't, at start.
+    StatsPlaceholders {
+        loading: crate::server_stats::StatsView,
+        unknown: crate::server_stats::StatsView,
     },
     /// How far a server's download of its update is. `total` is missing when it isn't known. With
     /// `waiting` the update is installed and the server restarts once its agents have finished.
