@@ -14,6 +14,8 @@ struct MediaViewer: View {
 
     @Environment(AppStore.self) private var store
     let viewing: Viewing
+    /// The page swiped to, the viewer's own so that the store catching up never moves the pages.
+    @State private var page: Int
     @State private var pulled: CGFloat = 0
     @State private var zoomed = false
     @State private var shared: URL?
@@ -29,15 +31,20 @@ struct MediaViewer: View {
     /// The checkerboard behind the picture shown: on the light one, the viewer's chrome is light.
     @State private var checker: Pictures.Checker?
 
+    init(viewing: Viewing) {
+        self.viewing = viewing
+        _page = State(initialValue: viewing.index)
+    }
+
     var body: some View {
         let item = viewing.item
         ZStack {
             Color.themeOverlay
                 .opacity(max(Opacity.overlayPulled.fixed, 1 - Double(abs(pulled)) / 500))
                 .ignoresSafeArea()
-            TabView(selection: index) {
+            TabView(selection: $page) {
                 ForEach(Array(viewing.items.enumerated()), id: \.offset) { position, item in
-                    let current = position == viewing.index
+                    let current = position == page
                     MediaPage(
                         item: item, shown: current, zoomed: $zoomed,
                         file: current ? $shared : .constant(nil), picture: current ? $picture : .constant(nil),
@@ -85,7 +92,14 @@ struct MediaViewer: View {
         } message: {
             Text("The image stays as it was.")
         }
-        .onChange(of: viewing.index) { endMarkup() }
+        .onChange(of: page) {
+            guard page != viewing.index else { return }
+            store.viewNext(page - viewing.index)
+        }
+        .onChange(of: viewing.index) {
+            page = viewing.index
+            endMarkup()
+        }
         .onChange(of: store.markupStep) { follow(store.markupStep) }
         .onChange(of: shared) { MarkupSession.read(viewing.item.video ? nil : shared) }
         .onDisappear {
@@ -99,15 +113,6 @@ struct MediaViewer: View {
         .task(id: copied) {
             guard copied, (try? await Task.sleep(for: .seconds(1.2))) != nil else { return }
             copied = false
-        }
-    }
-
-    private var index: Binding<Int> {
-        Binding {
-            viewing.index
-        } set: { new in
-            (shared, picture) = (nil, nil)
-            store.viewNext(new - viewing.index)
         }
     }
 
@@ -324,7 +329,8 @@ private extension View {
     }
 }
 
-/// One image or video of the viewer, fetched when it is the one shown.
+/// One image or video of the viewer, fetched as soon as the pages beside the one shown are made,
+/// so that a page never changes under a swipe.
 private struct MediaPage: View {
     private static let playedHere: Set<String> = ["mp4", "mov", "m4v"]
     /// The room between a zoomed-in picture's edge and the buttons it is brought clear of.
@@ -355,6 +361,7 @@ private struct MediaPage: View {
     let controls: EdgeInsets
     let tapped: () -> Void
     @State private var loaded: Loaded?
+    @State private var fetched: URL?
     @State private var failed = false
     @State private var fraction: Double?
     /// The checkerboard behind a picture with see-through parts.
@@ -364,25 +371,36 @@ private struct MediaPage: View {
     /// The picture's size in points, known before it is decoded.
     @State private var pictureSize: CGSize?
 
-    private enum Loaded {
+    private enum Loaded: Equatable {
         case image(CGImage, scale: CGFloat)
         case video(AVPlayer)
         /// A video the system's player can't play.
         case other(URL)
+
+        static func == (one: Loaded, other: Loaded) -> Bool {
+            switch (one, other) {
+            case (.image(let a, _), .image(let b, _)): a === b
+            case (.video(let a), .video(let b)): a === b
+            case (.other(let a), .other(let b)): a == b
+            default: false
+            }
+        }
     }
 
     var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .task(id: shown) {
-                guard shown else { return pause() }
-                guard loaded == nil else {
-                    shownChecker = checker
-                    if case .image(let image, _) = loaded { picture = image }
-                    return play()
-                }
+            .task {
+                guard loaded == nil, fetched == nil else { return }
                 load()
             }
+            .task(id: shown) {
+                guard shown else { return pause() }
+                handOver()
+            }
+            .onChange(of: loaded) { handOver() }
+            .onChange(of: fetched) { handOver() }
+            .onChange(of: checker) { handOver() }
             .onReceive(NotificationCenter.default.publisher(for: .mediaProgress)) { note in
                 guard case .media(let id) = item.source, note.userInfo?["id"] as? String == id else { return }
                 fraction = note.userInfo?["fraction"] as? Double
@@ -439,7 +457,11 @@ private struct MediaPage: View {
         }
     }
 
-    private func play() {
+    /// Gives the viewer what the page has, while it is the one shown, and plays its video.
+    private func handOver() {
+        guard shown else { return }
+        (file, shownChecker) = (fetched, checker)
+        picture = if case .image(let image, _) = loaded { image } else { nil }
         guard case .video(let player) = loaded else { return }
         player.play()
     }
@@ -450,27 +472,23 @@ private struct MediaPage: View {
     }
 
     private func load() {
-        (failed, fraction, shownChecker) = (false, nil, nil)
+        (failed, fraction) = (false, nil)
         showRowPicture()
         let show = { (url: URL?) in
             guard let url else { return failed = true }
-            file = url
+            fetched = url
             guard item.video else {
                 let scale = Platform.pixelsPerPoint
                 return Pictures.decode(url, id: "view:\(url.path)", maxPixels: 6144) { image in
                     let id = "view:\(url.path)"
                     checker = Pictures.isSeenThrough(id) ? Pictures.checker(behind: id) : nil
                     svgSize = Pictures.svgSize(id)
-                    if shown { shownChecker = checker }
                     loaded = image.map { .image($0, scale: scale) } ?? loaded
                     failed = loaded == nil
-                    if shown { picture = image }
                 }
             }
             guard Self.playedHere.contains(url.pathExtension.lowercased()) else { return loaded = .other(url) }
-            let player = AVPlayer(url: url)
-            loaded = .video(player)
-            if shown { player.play() }
+            loaded = .video(AVPlayer(url: url))
         }
         switch item.source {
         case .file(let url): show(url)
@@ -486,7 +504,6 @@ private struct MediaPage: View {
         checker = Pictures.isSeenThrough(id) ? Pictures.checker(behind: id) : nil
         svgSize = Pictures.svgSize(id)
         pictureSize = item.pixels.map { CGSize(width: $0.width / scale, height: $0.height / scale) }
-        if shown { (shownChecker, picture) = (checker, row) }
         loaded = .image(row, scale: scale)
     }
 }
