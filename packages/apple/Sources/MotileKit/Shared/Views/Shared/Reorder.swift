@@ -316,8 +316,6 @@ private struct ReorderGesture: ViewModifier {
     let id: String
     let reorder: Reorder
     let stack: ReorderStack
-    /// Ends with the gesture however it ends, also when something takes it.
-    @GestureState private var holding = false
 
     @ViewBuilder
     func body(content: Content) -> some View {
@@ -332,25 +330,51 @@ private struct ReorderGesture: ViewModifier {
                 .sensoryFeedback(.selection, trigger: reorder.order ?? []) { _, _ in reorder.dragged == id }
         } else {
             content
-                .simultaneousGesture(
-                    LongPressGesture(minimumDuration: 0.3)
-                        .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .named(reorder.space)))
-                        .updating($holding) { value, holding, _ in
-                            if case .second(true, _) = value { holding = true }
-                        }
-                        .onChanged { value in
-                            guard case .second(true, let drag) = value else { return }
-                            if reorder.dragged == nil { reorder.pickUp(id, among: stack.ids) }
-                            guard let drag else { return }
-                            reorder.carry(by: reorder.axis == .horizontal ? drag.translation.width : drag.translation.height)
-                        }
-                        .onEnded { _ in reorder.drop(stack.move) }
-                )
-                .onChange(of: holding) { _, holding in
-                    if !holding { reorder.drop(stack.move) }
-                }
+                .gesture(ReorderHold(id: id, reorder: reorder, stack: stack))
                 .sensoryFeedback(.impact(weight: .medium), trigger: reorder.dragged == id) { _, lifted in lifted }
                 .sensoryFeedback(.selection, trigger: reorder.order ?? []) { _, _ in reorder.dragged == id }
+        }
+    }
+}
+
+/// UIKit's hold, which gives up as soon as the finger moves before it lifts, so a swipe that sets
+/// out on the view is still the drawer's.
+private struct ReorderHold: UIGestureRecognizerRepresentable {
+    let id: String
+    let reorder: Reorder
+    let stack: ReorderStack
+
+    func makeCoordinator(converter: CoordinateSpaceConverter) -> Coordinator { Coordinator() }
+
+    func makeUIGestureRecognizer(context: Context) -> UILongPressGestureRecognizer {
+        let hold = UILongPressGestureRecognizer()
+        hold.minimumPressDuration = 0.3
+        hold.delegate = context.coordinator
+        return hold
+    }
+
+    func handleUIGestureRecognizerAction(_ hold: UILongPressGestureRecognizer, context: Context) {
+        let point = context.converter.location(in: .named(reorder.space))
+        let along = reorder.axis == .horizontal ? point.x : point.y
+        switch hold.state {
+        case .began:
+            context.coordinator.start = along
+            reorder.pickUp(id, among: stack.ids)
+        case .changed:
+            reorder.carry(by: along - context.coordinator.start)
+        case .ended, .cancelled, .failed:
+            reorder.drop(stack.move)
+        default:
+            break
+        }
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var start: CGFloat = 0
+
+        /// The view's button keeps its press beside the hold; a swipe or a scroll is one or the other.
+        func gestureRecognizer(_ hold: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+            !(other is UIPanGestureRecognizer)
         }
     }
 }
