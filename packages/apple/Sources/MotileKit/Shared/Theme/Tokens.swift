@@ -354,7 +354,7 @@ extension Color {
 
 /// How much of a colour shows: every opacity in the clients is one of these.
 enum Opacity {
-    case overlay, overlayStronger, overlayPulled, disabled, lit, shadow, shadowStronger, shadowStrongest, colorTint, colorTintStronger, colorTintChart, colorTintChartStronger, colorTintChartStrongest, shimmerBandEdge, shimmerBandMiddle, glow, glowFaint, glowBright, glassTint, accentOpacity, accentTint
+    case overlay, overlayStronger, overlayPulled, disabled, lit, litPicture, shadow, shadowStronger, shadowStrongest, colorTint, colorTintStronger, colorTintChart, colorTintChartStronger, colorTintChartStrongest, shimmerBandEdge, shimmerBandMiddle, glow, glowFaint, glowBright, glassTint, accentOpacity, accentTint
 
     var light: CGFloat {
         switch self {
@@ -363,6 +363,7 @@ enum Opacity {
         case .overlayPulled: 0.4
         case .disabled: 0.45
         case .lit: 0.88
+        case .litPicture: 0.8
         case .shadow: 0.06
         case .shadowStronger: 0.1
         case .shadowStrongest: 0.24
@@ -389,6 +390,7 @@ enum Opacity {
         case .overlayPulled: 0.4
         case .disabled: 0.45
         case .lit: 0.88
+        case .litPicture: 0.7
         case .shadow: 0.3
         case .shadowStronger: 0.6
         case .shadowStrongest: 0.7

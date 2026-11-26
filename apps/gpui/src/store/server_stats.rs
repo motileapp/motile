@@ -15,7 +15,7 @@ pub enum ShownStats {
 }
 
 impl ShownStats {
-    /// "Uptime: 2d 10h", once the server has said.
+    /// How long the machine has been up, "2d 10h", once the server has said.
     pub fn uptime(&self) -> Option<&str> {
         match self {
             ShownStats::Shown(stats) => Some(&stats.uptime),
@@ -104,14 +104,14 @@ mod tests {
         let mut watched = ServerStats::default();
         watched.open("a");
         assert_eq!(watched.of("a"), &ShownStats::Loading);
-        watched.apply("a".into(), Some(stats("Uptime: 1h")), None);
+        watched.apply("a".into(), Some(stats("1h")), None);
         watched.close();
-        watched.apply("a".into(), Some(stats("Uptime: 2h")), None);
-        assert_eq!(watched.of("a").uptime(), Some("Uptime: 1h"));
+        watched.apply("a".into(), Some(stats("2h")), None);
+        assert_eq!(watched.of("a").uptime(), Some("1h"));
         watched.open("a");
-        assert_eq!(watched.of("a").uptime(), Some("Uptime: 1h"));
-        watched.apply("a".into(), Some(stats("Uptime: 3h")), None);
-        assert_eq!(watched.of("a").uptime(), Some("Uptime: 3h"));
+        assert_eq!(watched.of("a").uptime(), Some("1h"));
+        watched.apply("a".into(), Some(stats("3h")), None);
+        assert_eq!(watched.of("a").uptime(), Some("3h"));
     }
 
     #[test]

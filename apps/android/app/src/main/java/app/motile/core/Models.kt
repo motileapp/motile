@@ -1936,7 +1936,7 @@ data class MessageMatch(
 
 /** A server's machine as its sheet shows it, ready to draw. */
 data class ServerStats(
-    /** "Uptime: 2d 10h". */
+    /** How long the machine has been up: "2d 10h". */
     val uptime: String,
     val rows: List<Row>,
 ) {

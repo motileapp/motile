@@ -17,17 +17,17 @@ use crate::ui::{FadingScroll, Spinner, divider_on, dropdown_card, icons, limit_p
 
 const WIDTH: f32 = 300.;
 const EDGE: f32 = 14.;
-const HEADER_TOP: f32 = 8.;
+const HEADER_TOP: f32 = 10.;
 const HEADER_BOTTOM: f32 = 10.;
 /// The update's button stands as far from the header's side as from its top and bottom.
 const BUTTON_SIDE: f32 = 12.;
 /// Between the line over the rows and the first.
-const ROWS_TOP: f32 = 10.;
+const ROWS_TOP: f32 = 12.;
 /// Between one part's chart and the next part's name: clearly more than a name and its chart.
 const ROW_GAP: f32 = 20.;
 const SYMBOL_GAP: f32 = 5.;
 /// Between a part's name and its chart, so that they read as one.
-const CHART_GAP: f32 = 4.;
+const CHART_GAP: f32 = 6.;
 /// A meter is a thin line, so it stands further from its name than a chart's bars do.
 const METER_GAP: f32 = CHART_GAP + 4.;
 const BARS_HEIGHT: f32 = 12.;
@@ -139,7 +139,7 @@ fn header(store: &Entity<Store>, server: &Server, cx: &App) -> Div {
     let c = colors(cx);
     let state = store.read(cx);
     // The line keeps its room while the stats come, so that nothing under it moves.
-    let uptime = state.server_stats.of(&server.id).uptime().unwrap_or(" ").to_string();
+    let uptime = state.server_stats.of(&server.id).uptime().map(str::to_string);
     let note = state.server_update(server).map(update_note).map(|(text, spins)| {
         div()
             .flex()
@@ -168,11 +168,15 @@ fn header(store: &Entity<Store>, server: &Server, cx: &App) -> Div {
         )
         .child(
             div()
-                .truncate()
-                .text_size(TextSize::Xs)
+                .flex()
+                .gap(px(4.))
+                .text_size(TextSize::Sm)
                 .text_color(c.muted_foreground)
                 .font_features(tabular_numbers())
-                .child(uptime),
+                .child(if uptime.is_some() { "Uptime:" } else { " " })
+                .children(uptime.map(|uptime| {
+                    div().truncate().font_weight(FontWeight::MEDIUM).text_color(c.foreground).child(uptime)
+                })),
         );
     let button =
         ServerUpdateStatus::new(store, server).button_only().size(ControlSize::Regular).surface(Surface::Popover);

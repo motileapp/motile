@@ -602,12 +602,12 @@ function ServerRow({ server }: { server: Server }) {
   }, [open])
 
   return (
-    <div ref={row} className="relative mx-2">
+    <div ref={row} className="relative">
       <button
         type="button"
         onClick={() => setOpen(!open)}
         className={cn(
-          "flex h-8 w-full items-center gap-[7px] rounded-md px-2 text-left hover:bg-background-accent-larger",
+          "flex h-8 w-full items-center gap-[7px] px-4 text-left hover:bg-background-accent-larger",
           open && "bg-background-accent-larger"
         )}
       >
@@ -618,7 +618,7 @@ function ServerRow({ server }: { server: Server }) {
         </span>
       </button>
       {open && (
-        <div className="absolute bottom-full left-0 z-40 mb-1.5">
+        <div className="absolute bottom-full left-2 z-40 mb-1.5">
           <ServerStatsCard server={server} />
         </div>
       )}

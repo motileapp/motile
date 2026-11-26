@@ -271,9 +271,9 @@ class ModelsTest {
         val bars = listOf(mapOf("height" to 0.0, "tone" to "success"), mapOf("height" to 0.9, "tone" to "warning"))
         val cpu = mapOf("kind" to "cpu", "label" to "CPU", "detail" to "12 cores", "value" to "76%", "bars" to bars)
         val disk = mapOf("kind" to "disk", "label" to "Disk", "used" to "120 GB", "value" to "24%", "bars" to emptyList<Any>(), "fill" to mapOf("height" to 0.24, "tone" to "pending"))
-        val shown = ServerStats.shown(json("server_id" to "s", "stats" to mapOf("uptime" to "Uptime: 11d 5h", "rows" to listOf(cpu, disk))))
+        val shown = ServerStats.shown(json("server_id" to "s", "stats" to mapOf("uptime" to "11d 5h", "rows" to listOf(cpu, disk))))
         val stats = (shown as ServerStats.Shown.Showing).stats
-        assertEquals("Uptime: 11d 5h", shown.uptime)
+        assertEquals("11d 5h", shown.uptime)
         assertEquals(listOf(ServerStats.Row.Kind.Cpu, ServerStats.Row.Kind.Disk), stats.rows.map { it.kind })
         assertEquals("12 cores", stats.rows[0].detail)
         assertNull(stats.rows[0].used)

@@ -115,12 +115,12 @@ struct HighlightButtonStyle: ButtonStyle {
 }
 
 /// A button whose own look says what it does, like a picture: under a finger it is lit, at
-/// opacity lit.
+/// opacity lit-picture.
 struct DimButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .contentShape(Rectangle())
-            .opacity(.lit, when: configuration.isPressed)
+            .opacity(.litPicture, when: configuration.isPressed)
     }
 }
 

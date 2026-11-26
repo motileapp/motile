@@ -27,8 +27,10 @@ const GAP: f32 = 2.;
 /// decode it again at every size.
 const DECODE_STEP: f32 = 64.;
 
-/// How many columns the squares are in, and how wide each is, for the grid's width.
+/// How many columns the squares are in, and how wide each is, for the grid's width. The grid keeps
+/// half a gap at its edges, which the squares' own halves make as wide as the gap between them.
 pub fn grid(width: f32) -> (usize, f32) {
+    let width = (width - GAP).max(0.);
     let columns = FEWEST_COLUMNS.max((width / SMALLEST_SIDE) as usize);
     (columns, width / columns as f32)
 }
@@ -118,6 +120,8 @@ impl Render for MediaView {
                 uniform_list("media-grid", rows, cx.processor(|this, range, window, cx| this.rows(range, window, cx)))
                     .track_scroll(&self.scroll)
                     .size_full()
+                    .px(px(GAP / 2.))
+                    .pt(px(GAP / 2.))
                     .pb(px(super::END_ROOM)),
             );
         RightPanelView::surface(bar, body.into_any_element())
@@ -126,7 +130,7 @@ impl Render for MediaView {
 
 const SQUARE: &str = "gallery-square";
 
-/// One image or video, cropped to a square, its picture at opacity lit under the pointer. The gap around it is only drawn: the square takes
+/// One image or video, cropped to a square, its picture at opacity lit-picture under the pointer. The gap around it is only drawn: the square takes
 /// clicks up to its neighbours'.
 fn square(
     store: &Entity<Store>,
@@ -161,7 +165,7 @@ fn square(
     let play = open.clone();
     let (menu_store, shown_in, menu_media, name) =
         (store.clone(), gallery::shown_in(shown), shown.media.clone(), shown.name.clone());
-    let lit = c.opacity(Opacity::Lit);
+    let lit = c.opacity(Opacity::LitPicture);
     div()
         .id(("gallery-square", index))
         .group(SQUARE)
@@ -232,9 +236,9 @@ mod tests {
 
     #[test]
     fn the_squares_fill_the_width_in_columns_no_narrower_than_the_smallest_side_but_three_at_least() {
-        assert_eq!(grid(340.), (3, 340. / 3.));
-        assert_eq!(grid(512.), (4, 128.));
-        assert_eq!(grid(900.), (7, 900. / 7.));
+        assert_eq!(grid(342.), (3, 340. / 3.));
+        assert_eq!(grid(514.), (4, 128.));
+        assert_eq!(grid(902.), (7, 900. / 7.));
     }
 
     #[test]

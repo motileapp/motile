@@ -2035,7 +2035,7 @@ struct ServerStats: Equatable {
         }
     }
 
-    /// "Uptime: 2d 10h".
+    /// How long the machine has been up: "2d 10h".
     let uptime: String
     let rows: [Row]
 

@@ -114,9 +114,13 @@ private fun MediaGrid(gallery: Gallery) {
             Text(gallery.summary, Modifier.weight(1f), size = TextSize.Xs, weight = FontWeight.Medium, color = palette.mutedForeground, maxLines = 1)
         }
         BoxWithConstraints(Modifier.fillMaxSize()) {
-            val columns = MediaGrid.columns(maxWidth.value)
-            val side = maxWidth / columns
-            LazyVerticalGrid(GridCells.Fixed(columns), Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = panelEndRoom)) {
+            // Half a gap at the edges, which the squares' own halves make as wide as the gap between them.
+            val edge = MediaGrid.gap / 2
+            val width = maxWidth - MediaGrid.gap
+            val columns = MediaGrid.columns(width.value)
+            val side = width / columns
+            val padding = PaddingValues(start = edge, end = edge, top = edge, bottom = panelEndRoom)
+            LazyVerticalGrid(GridCells.Fixed(columns), Modifier.fillMaxSize(), contentPadding = padding) {
                 itemsIndexed(gallery.media, key = { _, media -> media.id }) { index, media ->
                     MediaSquare(media, side) { store.view(gallery.media.map { it.viewed }, index) }
                 }
@@ -127,7 +131,7 @@ private fun MediaGrid(gallery: Gallery) {
 
 /**
  * One image or video, cropped to a square, its picture decoded off the main thread at the square's size
- * and at opacity lit while pressed or under the pointer.
+ * and at opacity lit-picture while pressed or under the pointer.
  */
 @Composable
 private fun MediaSquare(media: GalleryMedia, side: Dp, open: () -> Unit) {
@@ -148,7 +152,7 @@ private fun MediaSquare(media: GalleryMedia, side: Dp, open: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val hovering by interaction.collectIsHoveredAsState()
-    val lit = Opacity.Lit.value(LocalDark.current)
+    val lit = Opacity.LitPicture.value(LocalDark.current)
     ContextMenuArea(
         items = {
             item("Show in Chat", Symbol.MessageSquareText) { store.showInChat(media.shownIn) }

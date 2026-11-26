@@ -10,6 +10,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@21}"
+export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 
 VERSION="$(sed -n 's/^version = "\(.*\)"/\1/p' ../../Cargo.toml | head -1)"
 export MOTILE_VERSION_CODE="${VERSION##*.}"

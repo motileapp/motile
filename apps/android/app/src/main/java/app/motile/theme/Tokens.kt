@@ -476,6 +476,7 @@ enum class Opacity(val light: Float, val dark: Float) {
     OverlayPulled(0.4f, 0.4f),
     Disabled(0.45f, 0.45f),
     Lit(0.88f, 0.88f),
+    LitPicture(0.8f, 0.7f),
     Shadow(0.06f, 0.3f),
     ShadowStronger(0.1f, 0.6f),
     ShadowStrongest(0.24f, 0.7f),

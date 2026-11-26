@@ -286,7 +286,7 @@ private fun ContextSection(fill: ContextFill) {
                             fill.window?.let { withStyle(muted) { append(" / $it") } }
                         }
                         Text(tokens, Modifier.weight(1f), size = rowText, maxLines = 1)
-                        fill.used?.let { Text(it, size = rowText, color = Theme.colors.mutedForeground, maxLines = 1) }
+                        fill.used?.let { Text(it, size = rowText, color = Theme.colors.foreground, maxLines = 1) }
                     }
                     fill.usedPercent?.let { LimitBar(it, fill.tone, Modifier.padding(bottom = 4.dp)) }
                 }

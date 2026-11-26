@@ -120,6 +120,7 @@
   --opacity-overlay-pulled: 40%;
   --opacity-disabled: 45%;
   --opacity-lit: 88%;
+  --opacity-lit-picture: 80%;
   --opacity-shadow: 6%;
   --opacity-shadow-stronger: 10%;
   --opacity-shadow-strongest: 24%;
@@ -257,6 +258,7 @@
   --opacity-overlay-pulled: 40%;
   --opacity-disabled: 45%;
   --opacity-lit: 88%;
+  --opacity-lit-picture: 70%;
   --opacity-shadow: 30%;
   --opacity-shadow-stronger: 60%;
   --opacity-shadow-strongest: 70%;

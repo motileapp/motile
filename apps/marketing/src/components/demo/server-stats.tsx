@@ -153,16 +153,16 @@ export function ServerStatsCard({ server }: { server: Server }) {
 
   return (
     <div className="w-[300px] overflow-hidden rounded-md border border-border-popover bg-popover shadow-md">
-      <div className="flex flex-col gap-0.5 pt-2 pr-3 pb-2.5 pl-3.5">
+      <div className="flex flex-col gap-0.5 pt-2.5 pr-3 pb-2.5 pl-3.5">
         <p className="text-(length:--type-sm) leading-4 font-medium text-foreground">
           {server.name}
         </p>
-        <p className="text-(length:--type-xs) leading-[15px] text-muted-foreground tabular-nums">
-          Uptime: {machine.uptime}
+        <p className="text-(length:--type-sm) leading-4 text-muted-foreground tabular-nums">
+          Uptime: <span className="font-medium text-foreground">{machine.uptime}</span>
         </p>
       </div>
       <div className="h-px bg-border-popover" />
-      <div className="flex flex-col gap-5 px-3.5 pt-2.5 pb-3.5">
+      <div className="flex flex-col gap-5 px-3.5 pt-3 pb-3.5">
         <StatsRow
           icon={CpuIcon}
           label="CPU"
@@ -238,7 +238,7 @@ function StatsRow({
   children: ReactNode
 }) {
   return (
-    <div className={`flex flex-col ${meter ? "gap-2" : "gap-1"}`}>
+    <div className={`flex flex-col ${meter ? "gap-2.5" : "gap-1.5"}`}>
       <div className="flex items-center text-(length:--type-sm) leading-4 whitespace-nowrap tabular-nums">
         <Icon className="mr-[5px] size-3.5 shrink-0 text-muted-foreground" />
         <span className="text-muted-foreground">

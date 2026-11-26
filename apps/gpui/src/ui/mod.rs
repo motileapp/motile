@@ -245,9 +245,9 @@ pub fn highlight(group: impl Into<SharedString>, radius: f32, inset: Edges<f32>,
 }
 
 /// Makes the element a button whose own look says what it does, like a picture: pressed, it is
-/// at opacity lit.
+/// at opacity lit-picture.
 pub fn dims<E: StatefulInteractiveElement + Styled>(element: E, cx: &App) -> E {
-    let lit = colors(cx).opacity(Opacity::Lit);
+    let lit = colors(cx).opacity(Opacity::LitPicture);
     element.active(move |element| element.opacity(lit))
 }
 

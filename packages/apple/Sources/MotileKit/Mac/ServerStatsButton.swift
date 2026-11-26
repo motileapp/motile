@@ -6,9 +6,6 @@ import SwiftUI
 struct ServerStatsButton<Label: View>: View {
     @Environment(AppStore.self) private var store
     let server: Server
-    var radius = Radius.md
-    /// The room around the line's light that still takes its clicks.
-    var inset = EdgeInsets()
     @ViewBuilder let label: () -> Label
     @State private var anchor = ViewAnchor()
     @State private var open = false
@@ -16,8 +13,7 @@ struct ServerStatsButton<Label: View>: View {
     var body: some View {
         label()
             .background(ViewAnchorView(anchor: anchor))
-            .padding(inset)
-            .button(.highlight(radius: radius, lit: open, inset: inset, opaque: true)) { toggle() }
+            .button(.highlight(radius: 0, lit: open, opaque: true)) { toggle() }
     }
 
     private func toggle() {

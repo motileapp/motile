@@ -49,8 +49,9 @@ private struct MediaGrid: View {
                     Spacer()
                 }
                 GeometryReader { space in
-                    let columns = max(Self.fewestColumns, Int(space.size.width / Self.smallestSide))
-                    let side = space.size.width / CGFloat(columns)
+                    let width = space.size.width - MediaSquare.gap
+                    let columns = max(Self.fewestColumns, Int(width / Self.smallestSide))
+                    let side = width / CGFloat(columns)
                     ScrollView {
                         LazyVGrid(columns: Array(repeating: GridItem(.fixed(side), spacing: 0), count: columns), spacing: 0) {
                             ForEach(Array(media.enumerated()), id: \.element.id) { index, shown in
@@ -59,6 +60,8 @@ private struct MediaGrid: View {
                                 }
                             }
                         }
+                        // The squares' own halves of the gap and this make it as wide at the edges as between them.
+                        .padding([.horizontal, .top], MediaSquare.gap / 2)
                         .padding(.bottom, panelEndRoom)
                     }
                 }
@@ -77,7 +80,7 @@ private struct MediaGrid: View {
 /// One image or video, cropped to a square. The gap around it is only drawn: the square takes
 /// clicks up to its neighbours'.
 private struct MediaSquare: View {
-    private static let gap: CGFloat = 2
+    static let gap: CGFloat = 2
 
     @Environment(AppStore.self) private var store
     let media: GalleryMedia
@@ -160,13 +163,13 @@ private struct MediaSquare: View {
     }
 }
 
-/// The square's picture at opacity lit under the pointer and under a finger; the play mark over it stays.
+/// The square's picture at opacity lit-picture under the pointer and under a finger; the play mark over it stays.
 private struct PictureButtonStyle: ButtonStyle {
     let hovering: Bool
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .contentShape(Rectangle())
-            .opacity(.lit, when: hovering || configuration.isPressed)
+            .opacity(.litPicture, when: hovering || configuration.isPressed)
     }
 }
