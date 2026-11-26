@@ -14,7 +14,7 @@ struct MediaViewer: View {
 
     @Environment(AppStore.self) private var store
     let viewing: Viewing
-    /// The page swiped to, the viewer's own so that the store catching up never moves the pages.
+    /// The page swiped to, once the swipe has settled.
     @State private var page: Int
     @State private var pulled: CGFloat = 0
     @State private var zoomed = false
@@ -42,21 +42,17 @@ struct MediaViewer: View {
             Color.themeOverlay
                 .opacity(max(Opacity.overlayPulled.fixed, 1 - Double(abs(pulled)) / 500))
                 .ignoresSafeArea()
-            TabView(selection: $page) {
-                ForEach(Array(viewing.items.enumerated()), id: \.offset) { position, item in
-                    let current = position == page
-                    MediaPage(
-                        item: item, shown: current, zoomed: $zoomed,
-                        file: current ? $shared : .constant(nil), picture: current ? $picture : .constant(nil),
-                        shownChecker: current ? $checker : .constant(nil), room: room,
-                        markup: current ? markup : nil, markupPicture: current ? markupPicture : nil,
-                        controls: current && markup != nil ? Self.markupControls : EdgeInsets(), tapped: toggleChrome
-                    )
-                    .tag(position)
-                }
+            MediaPager(count: viewing.items.count, index: $page, swipes: markup == nil) { position in
+                let current = position == page
+                return MediaPage(
+                    item: viewing.items[position], shown: current, zoomed: $zoomed,
+                    file: current ? $shared : .constant(nil), picture: current ? $picture : .constant(nil),
+                    shownChecker: current ? $checker : .constant(nil), room: room,
+                    markup: current ? markup : nil, markupPicture: current ? markupPicture : nil,
+                    controls: current && markup != nil ? Self.markupControls : EdgeInsets(), tapped: toggleChrome
+                )
+                .environment(store)
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .scrollDisabled(markup != nil)
             .ignoresSafeArea()
             .offset(y: pulled)
         }
@@ -329,8 +325,92 @@ private extension View {
     }
 }
 
-/// One image or video of the viewer, fetched as soon as the pages beside the one shown are made,
-/// so that a page never changes under a swipe.
+/// Swipes through the viewer's pages as Photos does: a page view controller, each page zooming in
+/// a scroll view of its own. `index` follows a swipe once it has settled.
+private struct MediaPager<Page: View>: UIViewControllerRepresentable {
+    private static var gap: CGFloat { 24 }
+
+    let count: Int
+    @Binding var index: Int
+    let swipes: Bool
+    let page: (Int) -> Page
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIViewController(context: Context) -> UIPageViewController {
+        let pager = UIPageViewController(transitionStyle: .scroll, navigationOrientation: .horizontal, options: [.interPageSpacing: Self.gap])
+        pager.delegate = context.coordinator
+        pager.view.backgroundColor = .clear
+        pager.setViewControllers([context.coordinator.controller(at: index)], direction: .forward, animated: false)
+        return pager
+    }
+
+    func updateUIViewController(_ pager: UIPageViewController, context: Context) {
+        let coordinator = context.coordinator
+        coordinator.pager = self
+        coordinator.refresh()
+        pager.dataSource = swipes && count > 1 ? coordinator : nil
+        guard let shown = pager.viewControllers?.first as? PageController, shown.index != index else { return }
+        pager.setViewControllers([coordinator.controller(at: index)], direction: index > shown.index ? .forward : .reverse, animated: false)
+    }
+
+    final class PageController: UIHostingController<Page> {
+        let index: Int
+
+        init(index: Int, page: Page) {
+            self.index = index
+            super.init(rootView: page)
+            view.backgroundColor = .clear
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { fatalError("not used") }
+    }
+
+    final class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
+        var pager: MediaPager
+        /// The pages made and still held by the page view controller.
+        private let pages = NSMapTable<NSNumber, PageController>.strongToWeakObjects()
+
+        init(_ pager: MediaPager) {
+            self.pager = pager
+        }
+
+        func controller(at index: Int) -> PageController {
+            if let page = pages.object(forKey: index as NSNumber) { return page }
+            let page = PageController(index: index, page: pager.page(index))
+            pages.setObject(page, forKey: index as NSNumber)
+            return page
+        }
+
+        func refresh() {
+            for case let page as PageController in pages.objectEnumerator() ?? NSEnumerator() {
+                page.rootView = pager.page(page.index)
+            }
+        }
+
+        func pageViewController(_ pageViewController: UIPageViewController, viewControllerBefore viewController: UIViewController) -> UIViewController? {
+            guard let page = viewController as? PageController, page.index > 0 else { return nil }
+            return controller(at: page.index - 1)
+        }
+
+        func pageViewController(_ pageViewController: UIPageViewController, viewControllerAfter viewController: UIViewController) -> UIViewController? {
+            guard let page = viewController as? PageController, page.index < pager.count - 1 else { return nil }
+            return controller(at: page.index + 1)
+        }
+
+        func pageViewController(
+            _ pageViewController: UIPageViewController, didFinishAnimating finished: Bool, previousViewControllers: [UIViewController],
+            transitionCompleted completed: Bool
+        ) {
+            guard completed, let shown = pageViewController.viewControllers?.first as? PageController else { return }
+            pager.index = shown.index
+        }
+    }
+}
+
+/// One image or video of the viewer, fetched as soon as its page is made, which is before it is
+/// swiped to.
 private struct MediaPage: View {
     private static let playedHere: Set<String> = ["mp4", "mov", "m4v"]
     /// The room between a zoomed-in picture's edge and the buttons it is brought clear of.
