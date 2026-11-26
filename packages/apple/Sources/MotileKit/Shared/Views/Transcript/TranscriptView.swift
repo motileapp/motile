@@ -1040,10 +1040,13 @@ final class TranscriptView: FlippedView, RowOwner {
     }
 
     /// Scrolls to the row, and to that part of its text in the middle of the viewport unless it is
-    /// in sight already, between the bars. A long message that hides it opens.
+    /// in sight already, between the bars. A long message that hides it opens. Until the row comes,
+    /// the view stops following the end, so that the turns loaded for it aren't trimmed away.
     func reveal(rowID: String, range: NSRange?) {
         guard bounds.width > 0, viewportHeight > 0, rows.contains(where: { $0.id == rowID }) else {
             revealing = (rowID, range)
+            stopGlide()
+            pinned = false
             return
         }
         stopGlide()

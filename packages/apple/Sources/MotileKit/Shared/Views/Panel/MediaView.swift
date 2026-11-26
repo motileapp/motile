@@ -108,6 +108,7 @@ private struct MediaSquare: View {
         }
         .frame(width: shown, height: shown)
         .clipped()
+        .mediaSource(media.viewed, picture: image, fills: true)
         .frame(width: side, height: side)
         .button(PictureButtonStyle(hovering: hovering), action: open)
         .overlay {

@@ -268,12 +268,7 @@ struct RootView: View {
             }
             .sheetSurface()
         }
-        .fullScreenCover(isPresented: Binding(get: { store.viewing != nil }, set: { if !$0 { store.closeViewer() } })) {
-            if let viewing = store.viewing {
-                MediaViewer(viewing: viewing)
-                    .environment(store)
-            }
-        }
+        .background(MediaViewerPresenter(store: store, open: store.viewing != nil))
         .fullScreenCover(isPresented: Binding(get: { store.expandedPage != nil }, set: { if !$0 { store.closeExpandedPage() } })) {
             if let page = store.expandedPage {
                 ExpandedPageCover(page: page)

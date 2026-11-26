@@ -1,11 +1,28 @@
 package app.motile.media
 
+import kotlinx.coroutines.CoroutineStart
+import app.motile.core.AppStore
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionOnScreen
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.toSize
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
 import android.net.Uri
 import android.view.ViewGroup
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -66,6 +83,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.layout.onSizeChanged
@@ -155,13 +173,17 @@ import kotlin.math.min
  * The images and videos of a message or of the composer, one at a time over the whole screen, with
  * its name and a close button on glass at the top and copy and share at the bottom. A swipe goes
  * through them, a pinch or a double tap zooms an image, a tap hides or shows the buttons, and a
- * pull down closes it. It is always dark.
+ * pull up or down closes it. It is always dark.
+ *
+ * Its picture grows out of the one it was opened from as the black fades in, and flies back into the
+ * one it shows once `closing`, after which it calls `onClosed`. A pull moves the picture and shrinks
+ * it, and fades the black, as Photos does.
  */
 @Composable
-fun MediaViewer(viewing: Viewing) {
+fun MediaViewer(viewing: Viewing, closing: Boolean, onClosed: () -> Unit) {
     val dark = Palette.dark
     CompositionLocalProvider(LocalPalette provides dark, LocalDark provides true, LocalForeground provides dark.foreground) {
-        Viewer(viewing)
+        Viewer(viewing, closing, onClosed)
     }
 }
 
@@ -179,21 +201,87 @@ private object Viewer {
     val pinMargin = 16.dp
     /** How far clear of the buttons at the top and bottom a zoomed picture's edges can be brought. */
     val edgeGap = 16.dp
+    /** How the picture flies out of its thumbnail and back into it: about a quarter of a second. */
+    val flight = spring<Float>(dampingRatio = 0.9f, stiffness = 700f)
+    /** How long the black takes to fade in, and out as the viewer closes. */
+    const val FADE_IN = 250
+    const val FADE_OUT = 200
+    /** Of the screen's height, how far a pull goes before the black starts to fade, and how much further until it is gone. */
+    const val FADE_START = 0.06f
+    const val FADE_LENGTH = 0.47f
+    /** How much smaller the picture gets for a pull the screen's height long. */
+    const val SHRINK = 0.5f
+    /** Let go after a pull longer than this share of the screen's height, or faster than `closeSpeed`, the viewer closes. */
+    const val CLOSE_DISTANCE = 1f / 12
+    val closeSpeed = 1000.dp
+}
+
+/** A picture flying from one place on the screen to another, in pixels, its corners rounded by `fromRadius` to `toRadius`. */
+private class Flight(val picture: ImageBitmap, val from: Rect, val to: Rect, val fromRadius: Float, val toRadius: Float) {
+    val progress = Animatable(0f)
+}
+
+/** Where the viewer's page shows the picture on the `area` of the screen, as its framing fits it. */
+private fun shownFrame(item: ViewedMedia, picture: ImageBitmap, area: Rect, density: Float, svgSize: Pair<Float, Float>?): Rect {
+    val actual = svgSize?.let { Size(it.first * density, it.second * density) }
+        ?: item.pixels?.let { Size(it.first, it.second) }
+        ?: Size(picture.width.toFloat(), picture.height.toFloat())
+    if (actual.width <= 0f || actual.height <= 0f) return area
+    val scale = minOf(Framing.largestFit(svgSize, item.drawnSize), area.width / actual.width, area.height / actual.height)
+    val width = actual.width * scale
+    val height = actual.height * scale
+    return Rect(area.center.x - width / 2, area.center.y - height / 2, area.center.x + width / 2, area.center.y + height / 2)
+}
+
+/** The flying picture, cropped to where it is. */
+@Composable
+private fun FlightPicture(flight: Flight, area: Rect) {
+    Box(
+        Modifier
+            .layout { measurable, constraints ->
+                val at = lerp(flight.from, flight.to, flight.progress.value)
+                val placeable = measurable.measure(Constraints.fixed(at.width.roundToInt().coerceAtLeast(1), at.height.roundToInt().coerceAtLeast(1)))
+                layout(constraints.maxWidth, constraints.maxHeight) {
+                    placeable.place((at.left - area.left).roundToInt(), (at.top - area.top).roundToInt())
+                }
+            }
+            .graphicsLayer {
+                shape = RoundedCornerShape(lerp(flight.fromRadius, flight.toRadius, flight.progress.value))
+                clip = true
+            },
+    ) {
+        Image(flight.picture, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+    }
 }
 
 @Composable
-private fun Viewer(viewing: Viewing) {
+private fun Viewer(viewing: Viewing, closing: Boolean, onClosed: () -> Unit) {
     val store = LocalStore.current
     val palette = LocalPalette.current
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
     val pager = rememberPagerState(initialPage = viewing.index) { viewing.items.size }
     val pulled = remember { Animatable(0f) }
+    /** The viewer on the screen, in pixels. */
+    var area by remember { mutableStateOf(Rect.Zero) }
+    /** How far the black has faded in, and the pages: they show once the flying picture has landed. */
+    val black = remember { Animatable(0f) }
+    val pages = remember { Animatable(0f) }
+    var flight by remember { mutableStateOf<Flight?>(null) }
+    /** The pages are made once the flying picture has landed: making them on the frames it flies would stop it. */
+    var pagesMade by remember { mutableStateOf(false) }
+    /** The checkerboards behind see-through pictures, which fade as the picture is pulled or flies. */
+    val boards = remember { Animatable(1f) }
+    /** Let go after a pull far enough to close, which closes it at once, before the store says so. */
+    var leaving by remember { mutableStateOf(false) }
+    val closingNow = closing || leaving
     var zoomed by remember { mutableStateOf(false) }
     var chrome by remember { mutableStateOf(true) }
     var copied by remember { mutableStateOf(false) }
     val files = remember { mutableStateMapOf<Int, File>() }
     val pictures = remember { mutableStateMapOf<Int, ImageBitmap>() }
+    /** Where each page shows its picture, in its own pixels. */
+    val frames = remember { mutableStateMapOf<Int, Rect>() }
     /** The checkerboard each page's picture lies on: on the light one, the viewer's chrome is light. */
     val checkers = remember { mutableStateMapOf<Int, Checker>() }
     var markup by remember { mutableStateOf<MarkupSession?>(null) }
@@ -203,9 +291,12 @@ private fun Viewer(viewing: Viewing) {
     var markupFailed by remember { mutableStateOf(false) }
     val item = viewing.item
     val page = pager.currentPage
-    val markable = !item.video && files[page] != null && pictures[page] != null
+    // Shown with the other buttons; marking up starts once the page has its picture.
+    val markable = !item.video && files[page] != null
     /** The system's player draws its own controls, so a video keeps the buttons. */
-    val buttonsShown = (chrome || item.video || markup != null) && pulled.value == 0f
+    val buttonsShown = chrome || item.video || markup != null
+    /** Hidden with a tap, the buttons slide away; pulled or closing, they only fade. They come in with the black as the picture flies in. */
+    val buttonsOpacity by animateFloatAsState(if (pulled.value == 0f && !closingNow) 1f else 0f, tween(250))
     val lightChrome = !item.video && checkers[page] == Checker.Light
 
     fun endMarkup() {
@@ -271,6 +362,16 @@ private fun Viewer(viewing: Viewing) {
         val session = markup ?: return@BackHandler
         if (session.selected != null) session.deselect() else cancelMarkup()
     }
+    // The file is fetched with the viewer, not with its page, so that copy and share are there as it opens.
+    LaunchedEffect(pager.currentPage) {
+        val shown = pager.currentPage
+        if (files[shown] != null) return@LaunchedEffect
+        val file = when (val source = viewing.items[shown].source) {
+            is ViewedMedia.Source.LocalFile -> source.file
+            is ViewedMedia.Source.Media -> store.mediaFile(source.id)
+        }
+        if (file != null && files[shown] == null) files[shown] = file
+    }
     LaunchedEffect(pager.settledPage) {
         if (pager.settledPage != viewing.index) store.viewNext(pager.settledPage - viewing.index)
     }
@@ -282,26 +383,130 @@ private fun Viewer(viewing: Viewing) {
         delay(1200)
         copied = false
     }
-    StatusBarShown(buttonsShown, dark = !lightChrome)
+    // Hiding the status bar moves the thread under the viewer, so it only goes with a tap, not as
+    // the viewer opens, is pulled or closes.
+    StatusBarShown(buttonsShown || closingNow, dark = !lightChrome)
+    val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+    SideEffect {
+        window?.setWindowAnimations(0)
+        window?.setDimAmount(0f)
+    }
 
-    val closeAt = with(density) { 110.dp.toPx() }
-    val fling = with(density) { 1200.dp.toPx() }
-    val pull = rememberDraggableState { delta -> scope.launch { pulled.snapTo(max(0f, pulled.value + delta)) } }
-    val overlay = max(Opacity.OverlayPulled.value(true), 1 - abs(pulled.value) / with(density) { 500.dp.toPx() })
+    LaunchedEffect(Unit) {
+        val screen = snapshotFlow { area }.first { it.width > 0f }
+        val source = MediaSources.source(item, screen)
+        if (source == null) {
+            pagesMade = true
+            coroutineScope {
+                launch { black.animateTo(1f, tween(Viewer.FADE_IN)) }
+                pages.animateTo(1f, tween(Viewer.FADE_IN))
+            }
+            return@LaunchedEffect
+        }
+        val flying = Flight(source.picture, source.frame, shownFrame(item, source.picture, screen, density.density, store.svgSize(item)), source.radius, 0f)
+        flight = flying
+        boards.snapTo(0f)
+        // The window's first frames take long to make; the thumbnail hides and the picture starts
+        // moving once they are drawn, so that the thumbnail never blinks.
+        repeat(2) { withFrameNanos {} }
+        MediaSources.hidden[source.key] = Unit
+        coroutineScope {
+            launch { black.animateTo(1f, tween(Viewer.FADE_IN)) }
+            flying.progress.animateTo(1f, Viewer.flight)
+        }
+        pagesMade = true
+        withTimeoutOrNull(1000) { snapshotFlow { item.video || frames[pager.currentPage] != null }.first { it } }
+        val shown = frames[pager.currentPage]?.translate(screen.topLeft)
+        if (shown != null && (abs(shown.left - flying.to.left) > 1f || abs(shown.width - flying.to.width) > 1f || abs(shown.top - flying.to.top) > 1f)) {
+            val settling = Flight(source.picture, flying.to, shown, 0f, 0f)
+            flight = settling
+            settling.progress.animateTo(1f, tween(150))
+        }
+        pages.snapTo(1f)
+        flight = null
+        MediaSources.hidden.remove(source.key)
+        boards.animateTo(1f, tween(200))
+    }
+    LaunchedEffect(closingNow) {
+        if (!closingNow) return@LaunchedEffect
+        val screen = area
+        val shown = item
+        val picture = pictures[pager.currentPage]
+        val source = MediaSources.source(shown, screen)
+        flight = null
+        pages.snapTo(1f)
+        if (source == null || picture == null || shown.video) {
+            val away = if (pulled.value < 0f) -screen.height else screen.height
+            coroutineScope {
+                launch { black.animateTo(0f, tween(Viewer.FADE_OUT, easing = LinearEasing)) }
+                pulled.animateTo(away, tween(Viewer.FADE_OUT, easing = LinearEasing))
+            }
+            onClosed()
+            return@LaunchedEffect
+        }
+        MediaSources.hidden[source.key] = Unit
+        // From where the page draws the picture, as far as a pull has moved and shrunk it.
+        val scale = pulledScale(pulled.value, screen.height)
+        val center = screen.center
+        val from = (frames[pager.currentPage]?.translate(screen.topLeft) ?: shownFrame(shown, picture, screen, density.density, null)).let {
+            Rect(
+                center.x + (it.left - center.x) * scale, center.y + (it.top - center.y) * scale + pulled.value,
+                center.x + (it.right - center.x) * scale, center.y + (it.bottom - center.y) * scale + pulled.value,
+            )
+        }
+        // The thumbnail's own picture, which lands on exactly what the thumbnail shows.
+        val flying = Flight(source.picture, from, source.frame, 0f, source.radius)
+        flight = flying
+        pages.snapTo(0f)
+        coroutineScope {
+            launch { black.animateTo(0f, tween(Viewer.FADE_OUT, easing = LinearEasing)) }
+            flying.progress.animateTo(1f, Viewer.flight)
+        }
+        MediaSources.hidden.remove(source.key)
+        // The thumbnail is drawn again before the viewer's window goes, so that it never blinks.
+        repeat(2) { withFrameNanos {} }
+        onClosed()
+    }
+
+    val fling = with(density) { Viewer.closeSpeed.toPx() }
+    var pulledFrom by remember { mutableStateOf<String?>(null) }
+    // Moved at once, so that a move still on its way never stops the picture springing back.
+    val pull = rememberDraggableState { delta -> scope.launch(start = CoroutineStart.UNDISPATCHED) { pulled.snapTo(pulled.value + delta) } }
+    val height = area.height.coerceAtLeast(1f)
+    val faded = ((abs(pulled.value) / height - Viewer.FADE_START) / Viewer.FADE_LENGTH).coerceIn(0f, 1f)
     Box(
         Modifier
             .fillMaxSize()
-            .background(palette.overlay.copy(alpha = overlay))
+            .onGloballyPositioned { area = Rect(it.positionOnScreen(), it.size.toSize()) }
             .draggable(
-                pull, Orientation.Vertical, enabled = !zoomed && markup == null,
+                pull, Orientation.Vertical, enabled = !zoomed && markup == null && pages.value == 1f && !closingNow,
+                onDragStarted = {
+                    pulledFrom = MediaSources.source(item, area)?.key
+                    pulledFrom?.let { MediaSources.hidden[it] = Unit }
+                    launch { boards.animateTo(0f, tween(200)) }
+                },
                 onDragStopped = { velocity ->
-                    if (pulled.value > closeAt || velocity > fling) store.closeViewer() else pulled.animateTo(0f, spring())
+                    if (abs(pulled.value) > height * Viewer.CLOSE_DISTANCE || abs(velocity) > fling) {
+                        leaving = true
+                        store.closeViewer()
+                        return@draggable
+                    }
+                    launch { boards.animateTo(1f, tween(200)) }
+                    pulled.animateTo(0f, Viewer.flight)
+                    pulledFrom?.let { MediaSources.hidden.remove(it) }
                 },
             ),
     ) {
-        HorizontalPager(
+        Box(Modifier.fillMaxSize().graphicsLayer { alpha = black.value * (1 - faded) }.background(palette.overlay))
+        if (pagesMade) HorizontalPager(
             pager,
-            Modifier.fillMaxSize().offset { IntOffset(0, pulled.value.roundToInt()) },
+            Modifier.fillMaxSize().graphicsLayer {
+                alpha = pages.value
+                val scale = pulledScale(pulled.value, height)
+                scaleX = scale
+                scaleY = scale
+                translationY = pulled.value
+            },
             userScrollEnabled = !zoomed && markup == null,
             key = { it },
         ) { shown ->
@@ -315,6 +520,8 @@ private fun Viewer(viewing: Viewing) {
                 onZoom = { zoomed = it },
                 onFile = { files[shown] = it },
                 onPicture = { pictures[shown] = it },
+                onFrame = { frames[shown] = it },
+                boards = { boards.value },
                 onChecker = { checker -> if (checker == null) checkers.remove(shown) else checkers[shown] = checker },
                 tapped = { chrome = !chrome },
             )
@@ -322,7 +529,7 @@ private fun Viewer(viewing: Viewing) {
         ViewerChrome(dark = !lightChrome) {
             val chromePalette = LocalPalette.current
             AnimatedVisibility(
-                buttonsShown, Modifier.align(Alignment.TopCenter),
+                buttonsShown, Modifier.align(Alignment.TopCenter).graphicsLayer { alpha = min(buttonsOpacity, black.value) },
                 enter = fadeIn(tween(300)) + slideInVertically(spring()) { -it * 2 },
                 exit = fadeOut(tween(300)) + slideOutVertically(spring()) { -it * 2 },
             ) {
@@ -362,7 +569,7 @@ private fun Viewer(viewing: Viewing) {
             }
             val file = files[page]
             AnimatedVisibility(
-                buttonsShown && file != null && markup == null, Modifier.align(Alignment.BottomEnd),
+                buttonsShown && file != null && markup == null, Modifier.align(Alignment.BottomEnd).graphicsLayer { alpha = min(buttonsOpacity, black.value) },
                 enter = fadeIn(tween(300)) + slideInVertically(spring()) { it },
                 exit = fadeOut(tween(300)) + slideOutVertically(spring()) { it },
             ) {
@@ -409,6 +616,7 @@ private fun Viewer(viewing: Viewing) {
                 }
             }
         }
+        flight?.let { FlightPicture(it, area) }
         Asking(if (discarding) Unit else null, { discarding = false }) {
             Confirmation(
                 "Discard your marks?", "The image stays as it was.",
@@ -417,6 +625,20 @@ private fun Viewer(viewing: Viewing) {
         }
     }
 }
+
+/** An SVG's own size, as the viewer's page reads it from its file, which its row has already fetched. */
+private suspend fun AppStore.svgSize(item: ViewedMedia): Pair<Float, Float>? {
+    if (!item.name.endsWith(".svg", ignoreCase = true)) return null
+    val file = when (val source = item.source) {
+        is ViewedMedia.Source.LocalFile -> source.file
+        is ViewedMedia.Source.Media -> withTimeoutOrNull(100) { mediaFile(source.id) }
+    } ?: return null
+    if (!file.extension.equals("svg", ignoreCase = true)) return null
+    return withContext(Dispatchers.IO) { runCatching { Pictures.svgSize(file.readText()) }.getOrNull() }
+}
+
+/** How large the picture is for a pull `pulled` pixels long on a screen `height` pixels tall. */
+private fun pulledScale(pulled: Float, height: Float): Float = max(0.5f, 1 - abs(pulled) / height * Viewer.SHRINK)
 
 /** What else can be done with an image or a video of the open thread. */
 @Composable
@@ -508,6 +730,10 @@ private fun MediaPage(
     onZoom: (Boolean) -> Unit,
     onFile: (File) -> Unit,
     onPicture: (ImageBitmap) -> Unit,
+    /** Called with where the picture is on the page, in pixels. */
+    onFrame: (Rect) -> Unit,
+    /** How much of the checkerboard behind a see-through picture is drawn. */
+    boards: () -> Float,
     /** Called with the checkerboard the picture lies on, or nothing. */
     onChecker: (Checker?) -> Unit,
     tapped: () -> Unit,
@@ -546,7 +772,7 @@ private fun MediaPage(
     when (val shownNow = loaded) {
         is Loaded.Picture -> {
             val (svgSize, pixels) = if (original == null) shownNow.svgSize to item.pixels else null to null
-            ZoomableImage(original ?: shownNow.image, svgSize, pixels, item.drawnSize, checker, markup, controls, onZoom, tapped)
+            ZoomableImage(original ?: shownNow.image, svgSize, pixels, item.drawnSize, checker, markup, controls, onZoom, onFrame, boards, tapped)
         }
         is Loaded.Video -> VideoPlayer(shownNow.file, playing = shown, Modifier.fillMaxSize().padding(vertical = Viewer.room)) {
             loaded = Loaded.Other(shownNow.file)
@@ -631,6 +857,8 @@ private class Framing {
             return minOf(largest * actual, across, down).coerceAtLeast(0.0001f)
         }
     val fitted: Boolean get() = abs(zoom - fit) < 0.001f
+    /** Where the picture is on the screen, in pixels. */
+    val shown: Rect get() = Rect(origin, Size(width * zoom, height * zoom))
     val zoomed: Boolean get() = zoom > fit + 0.001f
     /** An image enlarged to fit can still be shown at its real size. */
     private val smallest: Float get() = min(fit, actual)
@@ -754,7 +982,7 @@ private class Framing {
  * zoom it. It fits between the `controls` over it and keeps the pin whose note is written in sight.
  */
 @Composable
-private fun ZoomableImage(image: ImageBitmap, svgSize: Pair<Float, Float>?, pixels: Pair<Float, Float>?, drawnSize: Pair<Float, Float>?, checker: Checker?, markup: MarkupSession?, controls: PaddingValues?, onZoom: (Boolean) -> Unit, tapped: () -> Unit) {
+private fun ZoomableImage(image: ImageBitmap, svgSize: Pair<Float, Float>?, pixels: Pair<Float, Float>?, drawnSize: Pair<Float, Float>?, checker: Checker?, markup: MarkupSession?, controls: PaddingValues?, onZoom: (Boolean) -> Unit, onFrame: (Rect) -> Unit, boards: () -> Float, tapped: () -> Unit) {
     val scope = rememberCoroutineScope()
     val density = LocalDensity.current
     val framing = remember { Framing() }
@@ -783,6 +1011,7 @@ private fun ZoomableImage(image: ImageBitmap, svgSize: Pair<Float, Float>?, pixe
     LaunchedEffect(clear) { framing.keepClear(scope, clear, pinRows(), pinMargin) }
     LaunchedEffect(markup?.selected) { framing.bringIntoSight(scope, pinRows(), pinMargin) }
     LaunchedEffect(framing) { snapshotFlow { framing.zoomed }.collect(onZoom) }
+    LaunchedEffect(framing) { snapshotFlow { framing.shown }.collect { if (it.width > 0f) onFrame(it) } }
     fun pinched(event: PointerEvent) {
         framing.zoom(framing.zoom * event.calculateZoom(), event.calculateCentroid(useCurrent = true), event.calculatePan())
         event.changes.forEach { if (it.positionChanged()) it.consume() }
@@ -846,7 +1075,7 @@ private fun ZoomableImage(image: ImageBitmap, svgSize: Pair<Float, Float>?, pixe
             val zoom = framing.zoom
             if (zoom == 0f) return@Canvas
             // A see-through picture lies on a checkerboard that fills the viewer and stays put while it zooms and pans.
-            squares?.let { drawRect(it) }
+            squares?.let { drawRect(it, alpha = boards()) }
             withTransform({
                 translate(framing.origin.x, framing.origin.y)
                 scale(zoom, zoom, Offset.Zero)
@@ -857,6 +1086,7 @@ private fun ZoomableImage(image: ImageBitmap, svgSize: Pair<Float, Float>?, pixe
                 frame,
                 topLeft = framing.origin - Offset(line / 2, line / 2),
                 size = Size(image.width * zoom + line, image.height * zoom + line),
+                alpha = boards(),
                 style = Stroke(line),
             )
         }

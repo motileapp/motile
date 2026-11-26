@@ -121,7 +121,11 @@ final class AttachedFilesView: FlippedView {
         required init?(coder: NSCoder) { fatalError("not used") }
 
         func show(_ file: AttachedFile, owner: RowOwner?, onClick: @escaping () -> Void) {
-            onPress = { _ in onClick() }
+            onPress = { [weak self] _ in
+                guard let self else { return }
+                MediaSources.press(self.picture)
+                onClick()
+            }
             menuActions = { [weak self, weak owner] in
                 guard let self, let id = file.media else { return [] }
                 return MediaFiles.actions(video: file.video, name: file.name, from: self) { done in
@@ -133,6 +137,7 @@ final class AttachedFilesView: FlippedView {
             }
             tip = file.name
             describe(file.name)
+            MediaSources.mark(picture, as: file.media.map { ViewedMedia(name: file.name, video: file.video, source: .media($0)) })
             playButton.isHidden = !file.video
             guard file != shown || picture.picture == nil else { return }
             shown = file

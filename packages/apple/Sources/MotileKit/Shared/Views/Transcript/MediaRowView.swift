@@ -493,6 +493,7 @@ final class MediaBox: FlippedView {
         guard media.id != content?.id else { return }
         content = media
         file = nil
+        MediaSources.mark(picture, as: viewed)
         tip = media.alt.isEmpty ? nil : media.alt
         describe(media.alt.isEmpty ? media.name : media.alt)
         playButton.isHidden = !media.video
@@ -622,9 +623,14 @@ final class MediaBox: FlippedView {
         return !buttons.contains { $0.frame.contains(point) }
     }
 
+    private var viewed: ViewedMedia? {
+        content.map { ViewedMedia(name: $0.name, video: $0.video, source: .media($0.id), drawnSize: $0.svgSize, pixels: $0.pixels) }
+    }
+
     /// Opens the image or the video in the viewer, which plays a video and fills the screen with it.
     private func pressed() {
-        guard let media = content, media.video || picture.picture != nil else { return }
-        owner?.view([ViewedMedia(name: media.name, video: media.video, source: .media(media.id), drawnSize: media.svgSize, pixels: media.pixels)], at: 0)
+        guard let viewed, viewed.video || picture.picture != nil else { return }
+        MediaSources.press(picture)
+        owner?.view([viewed], at: 0)
     }
 }

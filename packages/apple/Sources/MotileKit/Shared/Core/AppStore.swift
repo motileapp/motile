@@ -488,6 +488,8 @@ final class AppStore {
     private var attachmentsByKey: [String: [Attachment]] = [:]
     /// The images and videos the viewer has open over the window.
     private(set) var viewing: Viewing?
+    /// Told as soon as the viewer opens, so that it starts moving in the frame after the tap.
+    @ObservationIgnored var opensViewer: (() -> Void)?
     /// An HtmlView's page open over the window.
     private(set) var expandedPage: ExpandedPage?
 
@@ -3353,6 +3355,7 @@ final class AppStore {
     func view(_ media: [ViewedMedia], at index: Int) {
         guard media.indices.contains(index) else { return }
         viewing = Viewing(items: media, index: index)
+        opensViewer?()
     }
 
     /// Shows the image or video before or after the one that is shown, around the ends.

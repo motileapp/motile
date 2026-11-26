@@ -2907,19 +2907,20 @@ impl Core {
         self.emit(event);
     }
 
-    /// Brings the current match into sight: its turn loaded, its fold open.
+    /// Brings the current match into sight: its turn loaded, its fold open. The client hears of
+    /// the reveal first, so that it holds its rows while they come.
     fn reveal_found(&mut self, thread_id: &str) {
         let hit = self.open.get(thread_id).and_then(|open| open.find.as_ref()?.current());
         let Some(hit) = hit else { return };
-        self.show_row(thread_id, hit.seq, &hit.row_id);
         self.emit(Event::Reveal {
             thread_id: thread_id.to_string(),
-            row_id: hit.row_id,
+            row_id: hit.row_id.clone(),
             range: Some([hit.start, hit.len]),
         });
+        self.show_row(thread_id, hit.seq, &hit.row_id);
     }
 
-    /// Brings the row into sight, or without one the item's first.
+    /// Brings the row into sight, or without one the item's first, told before its rows come.
     fn reveal_item(&mut self, thread_id: &str, item_id: &str, row_id: Option<String>) {
         let Some(open) = self.open.get(thread_id) else { return };
         let item = open.transcript.item(item_id).cloned().or_else(|| self.cache.item(thread_id, item_id));
@@ -2927,8 +2928,8 @@ impl Core {
         let row_id = row_id
             .or_else(|| crate::render::rows::rendered(&item, open.transcript.cwd()).first().map(|row| row.id.clone()));
         let Some(row_id) = row_id else { return };
+        self.emit(Event::Reveal { thread_id: thread_id.to_string(), row_id: row_id.clone(), range: None });
         self.show_row(thread_id, item.seq, &row_id);
-        self.emit(Event::Reveal { thread_id: thread_id.to_string(), row_id, range: None });
     }
 
     /// Loads the turns back to the item at `seq` and opens the fold the row is in.

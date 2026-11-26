@@ -485,7 +485,6 @@ fn hex(value: u32) -> Hsla {
 pub enum Opacity {
     Overlay,
     OverlayStronger,
-    OverlayPulled,
     Disabled,
     Lit,
     LitPicture,
@@ -512,7 +511,6 @@ impl Opacity {
         match self {
             Opacity::Overlay => 0.5,
             Opacity::OverlayStronger => 0.75,
-            Opacity::OverlayPulled => 0.4,
             Opacity::Disabled => 0.45,
             Opacity::Lit => 0.88,
             Opacity::LitPicture => 0.8,
@@ -539,7 +537,6 @@ impl Opacity {
         match self {
             Opacity::Overlay => 0.6,
             Opacity::OverlayStronger => 0.8,
-            Opacity::OverlayPulled => 0.4,
             Opacity::Disabled => 0.45,
             Opacity::Lit => 0.88,
             Opacity::LitPicture => 0.7,

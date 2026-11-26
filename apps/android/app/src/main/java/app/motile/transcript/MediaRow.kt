@@ -1,5 +1,6 @@
 package app.motile.transcript
 
+import app.motile.media.mediaSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -95,7 +96,8 @@ fun MediaBox(media: MediaContent, radius: Dp = PictureBox.radius) {
     ) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val drawn = media.drawn(maxWidth.value)?.let { (width, height) -> DpSize(width.dp, height.dp) }
-            PictureBox(picture, Modifier.fillMaxSize(), radius, PictureCache.checker(media.picture, palette), drawn) {
+            val box = Modifier.fillMaxSize().mediaSource(mediaViewed(media), picture, fills = false, radius = radius, drawn = drawn)
+            PictureBox(picture, box, radius, PictureCache.checker(media.picture, palette), drawn) {
                 if (media.video) OverlayButton(Symbol.Play, "Play", ControlSize.Large, Modifier.align(Alignment.Center), onClick = open)
                 if (media.video && media.poster == null) {
                     Text(
