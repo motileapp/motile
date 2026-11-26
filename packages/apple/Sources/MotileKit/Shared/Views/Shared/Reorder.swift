@@ -112,8 +112,40 @@ final class Reorder {
         carry(by: axis == .horizontal ? point.x - frame.midX : point.y - frame.midY)
     }
 
+    #if os(macOS)
+    @ObservationIgnored private var pointer: Any?
+
+    /// Carries the copy with the pointer until the button is let go, wherever the pointer goes. A
+    /// pull SwiftUI tells goes quiet while the view it lies on slides from under the pointer, as a
+    /// lifted view does each time the others make way. `translation` is how far it came already.
+    fileprivate func follow(from translation: CGSize, move: @escaping (String, Int) -> Void) {
+        stopFollowing()
+        let start = NSEvent.mouseLocation
+        let carried = { [weak self] in
+            guard let self else { return }
+            let now = NSEvent.mouseLocation
+            let along = axis == .horizontal ? translation.width + now.x - start.x : translation.height + start.y - now.y
+            carry(by: along)
+        }
+        carried()
+        pointer = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDragged, .leftMouseUp]) { [weak self] event in
+            if event.type == .leftMouseUp { self?.drop(move) } else { carried() }
+            return event
+        }
+    }
+
+    private func stopFollowing() {
+        guard let pointer else { return }
+        NSEvent.removeMonitor(pointer)
+        self.pointer = nil
+    }
+    #endif
+
     /// Lets the copy slide into the gap, then keeps the order.
     fileprivate func drop(_ move: @escaping (String, Int) -> Void) {
+        #if os(macOS)
+        stopFollowing()
+        #endif
         guard let dragged, !settling, let lift, let frame = lifted[dragged] else { return }
         settling = true
         withAnimation(.easeOut(duration: 0.2)) {
@@ -158,6 +190,11 @@ final class Reorder {
     /// How big the view is laid out.
     fileprivate func size(of id: String) -> CGSize? {
         frames[id]?.size
+    }
+
+    /// The view laid out under `point`, among `ids`.
+    fileprivate func item(at point: CGPoint, among ids: [String]) -> String? {
+        ids.first { frames[$0]?.contains(point) == true }
     }
 
     private func reset() {
@@ -242,7 +279,11 @@ private struct ReorderSpace<Copy: View>: ViewModifier {
                 .onDrop(of: [.text], delegate: ReorderDrop(reorder: reorder, move: move))
             #endif
         } else {
-            stacked.overlay(alignment: .topLeading) {
+            stacked
+            #if os(macOS)
+            .modifier(ReorderPull(reorder: reorder, ids: ids, move: move))
+            #endif
+            .overlay(alignment: .topLeading) {
                 if let id = reorder.dragged, let frame = reorder.floating {
                     lifted(id)
                         .frame(width: frame.width, height: frame.height)
@@ -280,32 +321,35 @@ private struct Reorderable: ViewModifier {
             #endif
             .contentShape(Rectangle())
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(reorder.space)) } action: { reorder.measured(id, $0) }
+            #if os(iOS)
             .modifier(ReorderGesture(id: id, reorder: reorder, stack: stack))
+            #endif
     }
 }
 
 #if os(macOS)
-/// A pull lifts the view, as it lifts a row of the sidebar.
-private struct ReorderGesture: ViewModifier {
-    let id: String
+/// A pull on a view of the stack lifts it, as it lifts a row of the sidebar.
+private struct ReorderPull: ViewModifier {
     let reorder: Reorder
-    let stack: ReorderStack
+    let ids: [String]
+    let move: (String, Int) -> Void
     /// Ends with the gesture however it ends, also when something takes it.
     @GestureState private var pulling = false
 
     func body(content: Content) -> some View {
         content
             .highPriorityGesture(
-                DragGesture(minimumDistance: 3, coordinateSpace: .named(reorder.space))
+                DragGesture(minimumDistance: 3)
                     .updating($pulling) { _, pulling, _ in pulling = true }
                     .onChanged { value in
-                        if reorder.dragged == nil { reorder.pickUp(id, among: stack.ids) }
-                        reorder.carry(by: reorder.axis == .horizontal ? value.translation.width : value.translation.height)
+                        guard reorder.dragged == nil, let id = reorder.item(at: value.startLocation, among: ids) else { return }
+                        reorder.pickUp(id, among: ids)
+                        reorder.follow(from: value.translation, move: move)
                     }
-                    .onEnded { _ in reorder.drop(stack.move) }
+                    .onEnded { _ in reorder.drop(move) }
             )
             .onChange(of: pulling) { _, pulling in
-                if !pulling { reorder.drop(stack.move) }
+                if !pulling { reorder.drop(move) }
             }
     }
 }
