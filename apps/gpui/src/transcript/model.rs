@@ -265,6 +265,10 @@ pub struct Transcript {
     pub found: Rc<HashMap<String, Marks>>,
     /// The row to scroll to, and the part of its text, which the view takes.
     pub revealing: Option<(String, Option<[u32; 2]>)>,
+    /// The server's row that took the place of the message on its way.
+    pub replaced_pending: Option<String>,
+    /// Counts up whenever the rows are laid out anew, as when another thread opens.
+    pub resets: u64,
 }
 
 impl Transcript {
@@ -292,6 +296,8 @@ impl Transcript {
             version: 0,
             found: Rc::default(),
             revealing: None,
+            replaced_pending: None,
+            resets: 0,
         }
     }
 
@@ -456,6 +462,7 @@ impl Transcript {
     }
 
     fn clear(&mut self) {
+        self.resets += 1;
         self.rows = Rc::default();
         self.activity = Activity::default();
         self.end_of_running_turn = None;
@@ -557,9 +564,10 @@ impl Transcript {
     ) {
         self.earlier = earlier;
         // The server has the message now, so the copy shown while it travelled goes.
-        let sent = self.pending.is_some() && rows.iter().any(|row| row.is_sent_message());
-        if sent {
+        let sent = rows.iter().rev().find(|row| row.is_sent_message()).filter(|_| self.pending.is_some());
+        if let Some(sent) = sent {
             self.pending = None;
+            self.replaced_pending = Some(sent.row.id.clone());
         }
         let changed: HashSet<String> = rows.iter().map(|row| row.row.id.clone()).collect();
         if reset {
@@ -567,6 +575,7 @@ impl Transcript {
                 self.activity = std::mem::take(&mut self.opened_activity);
             }
             self.rows = Rc::new(rows);
+            self.resets += 1;
             self.end_of_running_turn = None;
             self.fresh.clear();
             self.grown.clear();
@@ -610,12 +619,11 @@ impl Transcript {
         }
     }
 
+    /// Shows a message on its way, or takes it away. The view goes to the end with it.
     pub fn set_pending(&mut self, pending: Option<RowModel>) {
         self.pending = pending.map(Arc::new);
+        self.replaced_pending = None;
         self.sync_with(&HashSet::new(), true);
-        if self.pending.is_some() {
-            self.list.scroll_to_end();
-        }
     }
 
     pub fn set_activity(&mut self, activity: Activity) {

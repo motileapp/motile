@@ -33,6 +33,7 @@ use self::strips::{
 use crate::models::{ComposerPickerPart, ThreadInfo, access_label, section_label};
 use crate::store::Store;
 use crate::theme::{self, ControlSize, IconSize, Surface, TextSize, colors};
+use crate::transcript::throw::Written;
 use crate::ui::control::Look;
 use crate::ui::menu::{Anchor, Menu};
 use crate::ui::{ActionButton, GatewayMark, Variant, edges, icons, logos, text_width};
@@ -116,6 +117,8 @@ pub struct Composer {
     settings_anchor: Anchor,
     picker: Option<Entity<ComposerPicker>>,
     placeholder_shown: String,
+    /// The placeholder is drawn by the composer instead, fading back in after a message was thrown.
+    placeholder_fading: bool,
     /// Redraws the strips' times: every second while the agent monitors, every 30 seconds while
     /// an interruption says when the thread goes on.
     ticker: Option<(u64, Task<()>)>,
@@ -164,6 +167,7 @@ impl Composer {
             settings_anchor: Anchor::default(),
             picker: None,
             placeholder_shown: String::new(),
+            placeholder_fading: false,
             ticker: None,
             row: Rc::default(),
             strips: Rc::default(),
@@ -267,7 +271,9 @@ impl Composer {
         self.follow_skills(window, cx);
         if self.placeholder_shown != placeholder {
             self.placeholder_shown = placeholder.clone();
-            self.text.update(cx, |text, cx| text.set_placeholder(placeholder, window, cx));
+            if !self.placeholder_fading {
+                self.text.update(cx, |text, cx| text.set_placeholder(placeholder, window, cx));
+            }
         }
         if wants_picker && self.branch_picker.is_none() {
             let store = self.store.clone();
@@ -696,11 +702,27 @@ impl Composer {
             })
     }
 
+    /// How much of the placeholder shows while it comes back after a message was thrown from
+    /// here, which the composer draws itself until it is all back.
+    fn fade_placeholder(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<f32> {
+        let shown = crate::transcript::throw::placeholder_shown();
+        if shown.is_some() {
+            window.request_animation_frame();
+        }
+        if self.placeholder_fading != shown.is_some() {
+            self.placeholder_fading = shown.is_some();
+            let placeholder = if self.placeholder_fading { String::new() } else { self.placeholder_shown.clone() };
+            self.text.update(cx, |text, cx| text.set_placeholder(placeholder, window, cx));
+        }
+        shown
+    }
+
     /// The box: the done banner, the attachments, the text and the controls under it.
     fn box_(
         &self,
         thread: Option<&ThreadInfo>,
         labels: Labels,
+        placeholder: Option<f32>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
@@ -708,6 +730,7 @@ impl Composer {
         let store = self.store.read(cx);
         let continues = store.selected_draft().is_some_and(|draft| draft.from.is_some());
         let has_attachments = continues || !store.attachments().is_empty();
+        let attachments = store.attachments().len();
         let store_handle = self.store.clone();
         let pasted = self.skills.pasted.clone();
         let text = Textarea::new(&self.text)
@@ -780,11 +803,47 @@ impl Composer {
                             .max_h(px(MAX_TEXT_HEIGHT + 12.))
                             .text_size(TEXT_SIZE)
                             .line_height(px(LINE_HEIGHT))
-                            .child(text),
+                            .child(text)
+                            .child(written(self.text.clone(), attachments))
+                            .children(placeholder.filter(|_| self.text.read(cx).value().is_empty()).map(|shown| {
+                                div()
+                                    .absolute()
+                                    .top(px(12. + TEXT_TOP))
+                                    .left(px(TEXT_SIDE))
+                                    .right(px(TEXT_SIDE))
+                                    .truncate()
+                                    .text_color(c.muted_stronger_foreground.opacity(shown))
+                                    .child(self.placeholder_shown.clone())
+                            })),
                     ),
             )
             .child(self.controls(labels, window, cx))
     }
+}
+
+/// Keeps what is written and where its letters are, which a message is thrown in from when sent.
+fn written(text: Entity<TextareaState>, attachments: usize) -> impl IntoElement {
+    canvas(
+        move |_, _, cx| {
+            let text = text.read(cx);
+            let input = text.input_bounds();
+            let trim = px(crate::transcript::rows::trim(TEXT_SIZE, LINE_HEIGHT));
+            let written = Written {
+                text: text.value().to_string(),
+                origin: point(input.left(), input.top() + text.scroll_offset().y + trim),
+                width: input.size.width,
+                font: Some(crate::transcript::rows::font(theme::UI_FONT, FontWeight::NORMAL, false)),
+                size: TEXT_SIZE.into(),
+                line: px(LINE_HEIGHT),
+                trim,
+                tiles: Vec::new(),
+            };
+            crate::transcript::throw::record_written(written, attachments);
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .size_full()
 }
 
 /// The line between the parts of the composer's rows. It takes no room and no clicks, so the
@@ -977,6 +1036,7 @@ pub fn choose_files(store: Entity<Store>, cx: &mut App) {
 
 impl Render for Composer {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let placeholder = self.fade_placeholder(window, cx);
         let c = colors(cx);
         let labels = self.labels(window, cx);
         let store = self.store.read(cx);
@@ -1102,7 +1162,7 @@ impl Render for Composer {
             .children(top_strip.map(|strip| div().relative().child(measure(true, self.strips.clone())).child(strip)))
             .child(match &unlinked {
                 Some(server) => unlinked::unlinked_box(&self.store, server, cx).into_any_element(),
-                None => self.box_(thread.as_ref(), labels, window, cx).into_any_element(),
+                None => self.box_(thread.as_ref(), labels, placeholder, window, cx).into_any_element(),
             })
             .children(
                 bottom_strip.map(|strip| div().relative().child(measure(false, self.strips.clone())).child(strip)),

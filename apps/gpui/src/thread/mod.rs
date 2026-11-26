@@ -512,6 +512,8 @@ impl Render for ThreadPane {
         let inset = self.composer_height.get();
         let transcript = if shown_agent.is_some() { self.agent_transcript.clone() } else { self.transcript.clone() };
         transcript.update(cx, |transcript, cx| transcript.set_bottom_inset(inset, cx));
+        let thread_shown = !is_start && shown_agent.is_none();
+        self.transcript.update(cx, |transcript, _| transcript.set_shown(thread_shown));
         let below: AnyElement = match &shown_agent {
             Some(agent) => agent_bar(&self.store, agent, cx).into_any_element(),
             None => self.composer.clone().into_any_element(),
