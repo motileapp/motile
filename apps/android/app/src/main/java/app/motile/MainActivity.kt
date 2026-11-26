@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import app.motile.core.SignInSession
+import app.motile.core.ThreadLink
 import app.motile.platform.Platform
 
 /**
@@ -66,10 +67,15 @@ class MainActivity : ComponentActivity() {
 
     private val engagement get() = (application as MotileApplication).store.engagement
 
-    /** A `motile://` address the browser was sent back to, after a sign-in, connecting Linear or Ricrac, or signing an MCP server in. */
+    /**
+     * A `motile://` address: a thread a notification or the widget opens, or where the browser was
+     * sent back to, after a sign-in, connecting Linear or Ricrac, or signing an MCP server in.
+     */
     private fun opened(intent: Intent) {
         val data = intent.data ?: return
         if (data.scheme != "motile") return
+        val thread = ThreadLink.of(data.toString())
+        if (thread != null) return (application as MotileApplication).store.openThread(thread)
         SignInSession.opened(data.toString())
     }
 

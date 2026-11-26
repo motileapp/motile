@@ -379,6 +379,27 @@ impl Store {
         Ok(())
     }
 
+    /// How the thread's latest turn that ended after `after` and by `until` started and ended.
+    pub fn turn_ended_since(
+        &self,
+        thread_id: &str,
+        after: Option<f64>,
+        until: f64,
+    ) -> rusqlite::Result<Option<(TurnStarter, TurnOutcome)>> {
+        let found = self
+            .reader()
+            .query_row(
+                "SELECT starter, outcome FROM turns WHERE thread_id = ?1 AND ended_at > ?2 AND ended_at <= ?3
+                 ORDER BY ended_at DESC LIMIT 1",
+                params![thread_id, after.unwrap_or(f64::MIN), until],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .optional()?;
+        Ok(found.map(|(starter, outcome)| {
+            (from_text(&starter).unwrap_or(TurnStarter::Other), from_text(&outcome).unwrap_or(TurnOutcome::Other))
+        }))
+    }
+
     pub fn save_action(&self, action: &ActionRecord) -> rusqlite::Result<()> {
         self.connection().execute(
             &format!("INSERT INTO actions ({ACTION_COLUMNS}) VALUES ({})", placeholders(0, 9)),

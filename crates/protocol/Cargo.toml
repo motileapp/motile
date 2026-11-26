@@ -20,6 +20,8 @@ pulldown-cmark = { version = "0.13", default-features = false }
 unicode-normalization = "0.1"
 ed25519-dalek = "2"
 getrandom = "0.3"
+hpke = { version = "0.15", default-features = false, features = ["x25519", "chacha", "getrandom", "alloc"] }
+base64.workspace = true
 tokio = { version = "1", features = ["io-util"] }
 reqwest = { workspace = true, optional = true }
 rustls = { workspace = true, optional = true }

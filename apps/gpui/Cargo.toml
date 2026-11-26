@@ -37,7 +37,7 @@ lyon = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSMenu", "NSMenuItem", "NSEvent", "block2", "NSView", "NSImage", "NSResponder", "NSApplication", "NSAppearance", "NSWindow", "objc2-core-foundation", "NSSavePanel", "NSPanel", "NSPasteboard", "NSPasteboardItem", "NSWorkspace", "NSAccessibility", "NSColor"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSMenu", "NSMenuItem", "NSEvent", "block2", "NSView", "NSImage", "NSResponder", "NSApplication", "NSAppearance", "NSWindow", "objc2-core-foundation", "NSSavePanel", "NSPanel", "NSPasteboard", "NSPasteboardItem", "NSWorkspace", "NSAccessibility", "NSColor", "NSDockTile", "NSGraphics"] }
 raw-window-handle = "0.6"
 block2 = "0.6"
 objc2-authentication-services = { version = "0.3", default-features = false, features = ["std", "block2", "ASFoundation", "ASWebAuthenticationSession"] }
@@ -58,10 +58,14 @@ wry = { package = "lb-wry", version = "0.53.3" }
 netwatch = "0.19"
 n0-watcher = "1"
 
+# The desktop's notifications and the dock's count on the app's icon.
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "5"
+
 [target.'cfg(windows)'.dependencies]
 uds_windows = "1"
 windows-registry = "0.6"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Media_Audio", "Win32_UI_WindowsAndMessaging"] }
 raw-window-handle = "0.6"
 
 # GPUI's headless window and its screenshots, for the tests only.

@@ -10,6 +10,7 @@ use std::time::{Duration, SystemTime};
 use futures_lite::StreamExt;
 use iroh::endpoint::PathEvent;
 use iroh::{Endpoint, TransportAddr};
+use motile_protocol::alerts::Alert;
 use motile_protocol::wire::{ClientInfo, FileKind, GitStage, Item, MachineStats, Message, Request, RestartWhen};
 use serde::Serialize;
 use tokio::sync::{Notify, mpsc};
@@ -38,6 +39,8 @@ const SUSPECT_AFTER: Duration = Duration::from_secs(10);
 const CHECK_EVERY: Duration = Duration::from_secs(30);
 /// How long a check waits for the server's `Pong`.
 const PING_WITHIN: Duration = Duration::from_secs(5);
+/// The first protocol whose servers answer `WatchAlerts`.
+pub const ALERTS_PROTOCOL: u32 = 43;
 /// The first protocol whose servers answer `Ping`.
 const PING_PROTOCOL: u32 = 37;
 
@@ -51,6 +54,7 @@ pub enum LinkEvent {
         thread_id: String,
         message: Message,
     },
+    Alert(Alert),
 }
 
 #[derive(Serialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -375,6 +379,7 @@ impl Link {
     }
 
     async fn follow_list(self: Arc<Self>, connection: Connection) {
+        let mut alerts: Option<AbortHandle> = None;
         // The stream ends when the client fell behind; following again starts from a fresh list.
         while let Ok(mut follow) = connection.follow(&Request::Subscribe).await {
             loop {
@@ -389,6 +394,9 @@ impl Link {
                 let welcomed = matches!(message, Message::Welcome { .. });
                 if let Message::Welcome { server, .. } = &message {
                     self.lock().protocol = server.protocol;
+                    if server.protocol >= ALERTS_PROTOCOL && alerts.as_ref().is_none_or(AbortHandle::is_finished) {
+                        alerts = Some(tokio::spawn(self.clone().follow_alerts(connection.clone())).abort_handle());
+                    }
                 }
                 self.emit(LinkEvent::List(message));
                 if !welcomed {
@@ -406,7 +414,26 @@ impl Link {
             }
             tokio::time::sleep(Duration::from_millis(200)).await;
         }
+        if let Some(alerts) = alerts {
+            alerts.abort();
+        }
         connection.close();
+    }
+
+    async fn follow_alerts(self: Arc<Self>, connection: Connection) {
+        while let Ok(mut follow) = connection.follow(&Request::WatchAlerts).await {
+            loop {
+                match follow.next().await {
+                    Ok(Some(Message::Alert { alert })) => self.emit(LinkEvent::Alert(alert)),
+                    Ok(Some(Message::Error { message })) => {
+                        return tracing::warn!(server = self.server_id, "the alerts stopped: {message}");
+                    }
+                    Ok(Some(_)) => {}
+                    Ok(None) | Err(_) => break,
+                }
+            }
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
     }
 
     async fn follow_thread(self: Arc<Self>, connection: Connection, thread_id: String) {

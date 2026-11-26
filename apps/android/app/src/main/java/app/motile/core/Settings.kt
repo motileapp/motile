@@ -6,12 +6,13 @@ import app.motile.platform.Symbol
 /** A page of the settings, listed in the settings' sidebar. */
 enum class SettingsSection(val raw: String) {
     // In the order they are reached for: what the client is, then what it works with, and the keys last.
-    General("general"), Accounts("accounts"), Servers("servers"), AgentGateway("agentGateway"), McpGateway("mcpGateway"), Projects("projects"),
+    General("general"), Notifications("notifications"), Accounts("accounts"), Servers("servers"), AgentGateway("agentGateway"), McpGateway("mcpGateway"), Projects("projects"),
     PullRequests("pullRequests"), TextGeneration("textGeneration"), Integrations("integrations"), Keyboard("keyboard");
 
     val title: String
         get() = when (this) {
             General -> "General"
+            Notifications -> "Notifications"
             Keyboard -> "Keybindings"
             Servers -> "Servers"
             Accounts -> "Providers"
@@ -26,6 +27,7 @@ enum class SettingsSection(val raw: String) {
     val symbol: Symbol
         get() = when (this) {
             General -> Symbol.SlidersHorizontal
+            Notifications -> Symbol.Bell
             Keyboard -> Symbol.Keyboard
             Servers -> Symbol.Server
             Accounts -> Symbol.Bot
@@ -73,6 +75,9 @@ data class SettingsEntry(
             SettingsEntry("turn-changes", "Turn changes", SettingsSection.General, "transcript diff files changed edits end of turn hide"),
             SettingsEntry("storage", "Images and videos", SettingsSection.General, "storage cache clear media disk"),
             SettingsEntry("log", "Log", SettingsSection.General, "troubleshooting debug problem connecting logs file"),
+            SettingsEntry("notifications", NotificationsText.title, SettingsSection.Notifications, "alerts sound banner permission system off"),
+            SettingsEntry("alert-choices", NotificationsText.choices, SettingsSection.Notifications, "finishes fails approval question plan usage limit alerts"),
+            SettingsEntry("live-activities", NotificationsText.live, SettingsSection.Notifications, "live update notification shade working agents widget"),
             SettingsEntry("agent-accounts", "Provider Accounts", SettingsSection.Accounts, "agents claude codex sign in account folder subscription plan api key router"),
             SettingsEntry("servers", "Servers", SettingsSection.Servers, "add remove unlink unlinked delete copies machine agents connected"),
             SettingsEntry("backup", "Backup", SettingsSection.Servers, "s3 bucket r2 b2 minio storage sync media restore"),

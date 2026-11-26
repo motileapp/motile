@@ -14,6 +14,7 @@ use crate::models::{Server, agent_name};
 pub enum SettingsSection {
     #[default]
     General,
+    Notifications,
     Accounts,
     Servers,
     Projects,
@@ -28,8 +29,9 @@ pub enum SettingsSection {
 impl SettingsSection {
     /// In the order they are reached for: what the client is, then what it works with, and the
     /// keys last.
-    pub const ALL: [SettingsSection; 10] = [
+    pub const ALL: [SettingsSection; 11] = [
         SettingsSection::General,
+        SettingsSection::Notifications,
         SettingsSection::Accounts,
         SettingsSection::Servers,
         SettingsSection::AgentGateway,
@@ -44,6 +46,7 @@ impl SettingsSection {
     pub fn title(self) -> &'static str {
         match self {
             SettingsSection::General => "General",
+            SettingsSection::Notifications => "Notifications",
             SettingsSection::Keyboard => "Keybindings",
             SettingsSection::Servers => "Servers",
             SettingsSection::Accounts => "Providers",
@@ -59,6 +62,7 @@ impl SettingsSection {
     pub fn symbol(self) -> &'static str {
         match self {
             SettingsSection::General => "sliders-horizontal",
+            SettingsSection::Notifications => "bell",
             SettingsSection::Keyboard => "keyboard",
             SettingsSection::Servers => "server",
             SettingsSection::Accounts => "bot",
@@ -86,10 +90,13 @@ pub struct SettingsEntry {
     pub keywords: &'static str,
 }
 
+/// The title of the switches of the alerts the user wants.
+pub const ALERT_CHOICES: &str = "Alert me when an agent";
+
 const WORKING_SHELF: &str = "sidebar.workingShelf";
 const TURN_CHANGES: &str = "transcript.turnChanges";
 
-const ENTRIES: [(&str, &str, SettingsSection, &str); 30] = [
+const ENTRIES: [(&str, &str, SettingsSection, &str); 33] = [
     ("account", "Account", SettingsSection::General, "signed in email sign out"),
     ("updates", "Updates", SettingsSection::General, "version check for updates release"),
     ("appearance", "Theme", SettingsSection::General, "appearance light dark system mode"),
@@ -109,6 +116,14 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 30] = [
     ("turn-changes", "Turn changes", SettingsSection::General, "transcript diff files changed edits end of turn hide"),
     ("storage", "Images and videos", SettingsSection::General, "storage cache clear media disk"),
     ("log", "Log", SettingsSection::General, "troubleshooting debug problem connecting logs file"),
+    ("notifications", "Notifications", SettingsSection::Notifications, "alerts sound banner permission system off"),
+    ("toasts", "Show alerts inside Motile", SettingsSection::Notifications, "in-app toast alerts banner"),
+    (
+        "alert-choices",
+        ALERT_CHOICES,
+        SettingsSection::Notifications,
+        "finishes fails approval question plan usage limit alerts",
+    ),
     (
         "agent-accounts",
         "Provider Accounts",
@@ -479,6 +494,7 @@ mod tests {
         assert_eq!(ids("THEME"), vec!["appearance"]);
         assert_eq!(ids("new thread"), vec!["manage-new-threads", "shortcut-chat.new"]);
         assert_eq!(ids("continue restart"), vec!["continue-restarts"]);
+        assert_eq!(ids("alert plan"), vec!["alert-choices"]);
         assert!(ids("  ").is_empty());
         assert!(ids("usage tokens cost").is_empty());
     }

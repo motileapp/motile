@@ -119,6 +119,11 @@ impl Access {
         self.relay.subscribe()
     }
 
+    /// The auth server and the key the server signs its requests with, when it has an account.
+    pub fn auth(&self) -> Option<(&AuthClient, &DeviceKey)> {
+        self.account.as_ref().map(|account| (&account.auth, &account.key))
+    }
+
     async fn refreshed_recently(&self) -> bool {
         let Some(account) = &self.account else { return true };
         account.last_refresh.lock().await.is_some_and(|at| at.elapsed() < MIN_REFRESH_GAP)

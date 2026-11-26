@@ -20,6 +20,13 @@ pub fn bounds(prefs: &Prefs, cx: &App) -> WindowBounds {
     )
 }
 
+/// Brings the app and its window to the front.
+pub fn bring_forward(cx: &mut App) {
+    cx.activate(true);
+    let Some(window) = cx.active_window().or_else(|| cx.windows().into_iter().next()) else { return };
+    let _ = window.update(cx, |_, window, _| window.activate_window());
+}
+
 /// Keeps the window's frame, as it is when not full screen or zoomed.
 pub fn save_frame(prefs: &mut Prefs, window: &Window) {
     let frame = window.window_bounds().get_bounds();

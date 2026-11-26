@@ -4,7 +4,7 @@ import Foundation
 enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     /// In the order they are reached for: what the client is, then what it works with, and the
     /// keys last.
-    case general, accounts, servers, agentGateway, mcpGateway, projects, pullRequests, textGeneration, integrations, keyboard
+    case general, notifications, accounts, servers, agentGateway, mcpGateway, projects, pullRequests, textGeneration, integrations, keyboard
 
     var id: String { rawValue }
 
@@ -16,6 +16,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     var title: String {
         switch self {
         case .general: "General"
+        case .notifications: "Notifications"
         case .keyboard: "Keybindings"
         case .servers: "Servers"
         case .agentGateway: "Agent Gateway"
@@ -31,6 +32,7 @@ enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     var symbol: Symbol {
         switch self {
         case .general: .slidersHorizontal
+        case .notifications: .bell
         case .keyboard: .keyboard
         case .servers: .server
         case .agentGateway: .waypoints
@@ -62,6 +64,14 @@ struct SettingsEntry: Identifiable, Hashable {
     let section: SettingsSection
     /// Words the group is also found by, beyond its title and its section's.
     let keywords: String
+    /// Only on a desktop, or only on a phone; nil on both.
+    var desktop: Bool?
+
+    /// Whether this client has the group.
+    var shown: Bool {
+        guard let desktop else { return true }
+        return desktop == (Platform.name == "macos")
+    }
 
     static let all: [SettingsEntry] = [
         SettingsEntry(id: "account", title: "Account", section: .general, keywords: "signed in email sign out"),
@@ -73,6 +83,10 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "turn-changes", title: "Turn changes", section: .general, keywords: "transcript diff files changed edits end of turn hide"),
         SettingsEntry(id: "storage", title: "Images and videos", section: .general, keywords: "storage cache clear media disk"),
         SettingsEntry(id: "log", title: "Log", section: .general, keywords: "troubleshooting debug problem connecting logs file"),
+        SettingsEntry(id: "notifications", title: "Notifications", section: .notifications, keywords: "alerts sound banner permission system off"),
+        SettingsEntry(id: "toasts", title: "Show alerts inside Motile", section: .notifications, keywords: "in-app toast alerts banner", desktop: true),
+        SettingsEntry(id: "alert-choices", title: NotificationsText.choices, section: .notifications, keywords: "finishes fails approval question plan usage limit alerts"),
+        SettingsEntry(id: "live-activities", title: "Live Activities", section: .notifications, keywords: "lock screen dynamic island working agents widget", desktop: false),
         SettingsEntry(id: "agent-accounts", title: "Provider Accounts", section: .accounts, keywords: "agents claude codex sign in account folder subscription plan api key router"),
         SettingsEntry(id: "servers", title: "Servers", section: .servers, keywords: "add remove unlink unlinked delete copies machine agents connected"),
         SettingsEntry(id: "backup", title: "Backup", section: .servers, keywords: "s3 bucket r2 b2 minio storage sync media restore"),
@@ -106,7 +120,7 @@ struct SettingsEntry: Identifiable, Hashable {
             : []
         return (all + commands).filter { entry in
             let text = "\(entry.title) \(entry.section.title) \(entry.keywords)"
-            return SettingsSection.shown.contains(entry.section) && words.allSatisfy { text.localizedCaseInsensitiveContains($0) }
+            return entry.shown && SettingsSection.shown.contains(entry.section) && words.allSatisfy { text.localizedCaseInsensitiveContains($0) }
         }
     }
 }

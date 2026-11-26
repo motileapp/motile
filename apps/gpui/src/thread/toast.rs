@@ -2,9 +2,10 @@
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+use motile_protocol::alerts::AlertKind;
 
 use crate::store::{Store, Toast};
-use crate::theme::{ControlSize, IconSize, Layer, Radius, Surface, TextSize, colors};
+use crate::theme::{Colors, ControlSize, IconSize, Layer, Radius, Surface, TextSize, colors};
 use crate::ui::rich_text::RichText;
 use crate::ui::{ActionButton, FadingScroll, Spinner, Variant, icons, sharing};
 
@@ -22,20 +23,41 @@ const OUTPUT_PADDING: f32 = 8.;
 /// The room between the toast's buttons' lights, which their clicks share.
 const BUTTON_GAP: f32 = 8.;
 
+/// The symbol before the title, and its colour: what happened, or the alert's kind.
+fn symbol(toast: &Toast, c: &Colors) -> (&'static str, Hsla) {
+    let Some(alert) = &toast.alert else {
+        return if toast.failed { ("circle-alert", c.destructive) } else { ("circle-check", c.success) };
+    };
+    match alert.kind {
+        AlertKind::Finished => ("circle-check", c.success),
+        AlertKind::Failed => ("circle-alert", c.destructive),
+        AlertKind::Limit => ("circle-alert", c.warning),
+        AlertKind::Approval => ("shield-question-mark", c.foreground),
+        AlertKind::Question | AlertKind::Plan | AlertKind::Other => ("message-circle-question-mark", c.foreground),
+    }
+}
+
 /// What follows is one click away: the push after a commit, the pull request after a push, the
-/// thread in a project that was cloned.
+/// thread in a project that was cloned, the thread an alert is of.
 pub fn toast_view(store: &Entity<Store>, toast: &Toast, cx: &App) -> impl IntoElement {
     let c = colors(cx);
     let close = store.clone();
     let next = store.clone();
     let view = store.clone();
     let open = store.clone();
+    let open_thread = store.clone();
     let url = toast.url.clone();
     let next_label = toast.next_label();
     let opens_project = toast.project_id.is_some();
-    let count = [url.is_some(), next_label.is_some(), opens_project].into_iter().filter(|shown| *shown).count();
+    let alerted_thread = toast.alert.as_ref().map(|alert| alert.thread_id.clone());
+    let count = [url.is_some(), next_label.is_some(), opens_project, alerted_thread.is_some()]
+        .into_iter()
+        .filter(|shown| *shown)
+        .count();
     let next_index = usize::from(url.is_some());
     let project_index = next_index + usize::from(next_label.is_some());
+    let thread_index = project_index + usize::from(opens_project);
+    let (symbol, symbol_color) = symbol(toast, c);
     let description = toast.description.clone().map(|description| {
         let text = RichText::new(SharedString::from(format!("toast-{}", toast.serial)), description);
         if !toast.failed {
@@ -83,10 +105,7 @@ pub fn toast_view(store: &Entity<Store>, toast: &Toast, cx: &App) -> impl IntoEl
             if toast.pending {
                 return icon.child(Spinner::new(IconSize::Md).render(cx));
             }
-            icon.child(
-                icons::symbol(if toast.failed { "circle-alert" } else { "circle-check" }, IconSize::Md)
-                    .text_color(if toast.failed { c.destructive } else { c.success }),
-            )
+            icon.child(icons::symbol(symbol, IconSize::Md).text_color(symbol_color))
         }))
         .child(
             div()
@@ -150,6 +169,20 @@ pub fn toast_view(store: &Entity<Store>, toast: &Toast, cx: &App) -> impl IntoEl
                                         .on_click(move |_, _, cx| {
                                             open.update(cx, |store, cx| {
                                                 store.open_toast_project(cx);
+                                                cx.notify();
+                                            })
+                                        }),
+                                )
+                            })
+                            .when_some(alerted_thread, |row, thread_id| {
+                                row.child(
+                                    ActionButton::new("toast-thread", "Open")
+                                        .primary()
+                                        .surface(Surface::Popover)
+                                        .margin(sharing(BUTTON_GAP, thread_index, count))
+                                        .on_click(move |_, _, cx| {
+                                            open_thread.update(cx, |store, cx| {
+                                                store.open_alerted_thread(&thread_id, cx);
                                                 cx.notify();
                                             })
                                         }),

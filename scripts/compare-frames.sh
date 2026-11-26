@@ -29,7 +29,7 @@ for client in $clients; do
             ;;
         ios)
             cargo build --release --target aarch64-apple-ios-sim -p motile-core
-            (cd packages/apple && xcodebuild test -quiet -scheme MotileKit -destination "platform=iOS Simulator,name=${MOTILE_SIM:-iPhone 17}" \
+            (cd packages/apple && xcodebuild test -quiet -scheme MotileKit-Package -destination "platform=iOS Simulator,name=${MOTILE_SIM:-iPhone 17}" \
                 -only-testing:MotileKitTests/ProgramFramesTests -only-testing:MotileKitTests/ProgramPicturesTests)
             ;;
         gpui)

@@ -164,6 +164,22 @@ const GATEWAY_ACCOUNTS: &str = "Accounts with \"gateway\": true run on your gate
      give `agent` with the name, or the id.";
 
 impl Hub {
+    /// What the first tool call the thread waits to have allowed does, as the transcript words it.
+    pub async fn waiting_call(&self, thread_id: &str) -> Option<String> {
+        let live = self.live(thread_id).await?;
+        let approval = live.activity.approvals.first()?;
+        let call = ToolCall {
+            id: approval.id.clone(),
+            name: approval.tool_name.clone(),
+            input: approval.input.clone(),
+            output: None,
+            status: ToolStatus::Running,
+            agent: None,
+            decided_by: Actor::Unknown,
+        };
+        Some(doing(&call, &live.stored.thread.cwd))
+    }
+
     /// The threads the thread's agent started, theirs before them, deepest first.
     pub(super) fn descendants(&self, thread_id: &str) -> Vec<String> {
         descendants_in(&self.lock_threads(), thread_id)

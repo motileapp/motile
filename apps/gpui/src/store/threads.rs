@@ -183,6 +183,7 @@ impl Store {
             });
         });
         self.send(Command::MarkSeen { thread_id: thread.id.clone() });
+        self.forget_alerts_of(&thread.id, cx);
         self.read_git(true, None::<fn(&mut Store, Vec<motile_protocol::wire::ChangedFile>, &mut Context<Store>)>, cx);
         self.show_outbox_message(cx);
     }
