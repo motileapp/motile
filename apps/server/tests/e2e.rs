@@ -777,14 +777,17 @@ async fn a_client_ahead_of_the_server_starts_over() {
     assert_eq!(stale.items, whole.items);
 }
 
-/// The states the link goes through until it is connected.
+/// The states a new link goes through until it is connected, past the one it starts in. Its path
+/// can show up while it still dials, which says nothing new of its state.
 async fn states_until_connected(events: &mut mpsc::UnboundedReceiver<(String, LinkEvent)>) -> Vec<State> {
     let mut states = Vec::new();
-    while states.last() != Some(&State::Connected) {
+    let mut last = State::default();
+    while last != State::Connected {
         let (_, event) = tokio::time::timeout(TIMEOUT, events.recv()).await.expect("the link didn't connect").unwrap();
         let LinkEvent::Status(status) = event else { continue };
-        if states.last() != Some(&status.state) {
-            states.push(status.state);
+        if status.state != last {
+            last = status.state;
+            states.push(last);
         }
     }
     states
