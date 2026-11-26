@@ -183,6 +183,16 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(panelOrdered(lower, before: upper, along: .vertical))
     }
 
+    /// A swipe that sets out on a row of the blank tab still hides the panel.
+    func testASwipeToTheRightOnARowOfTheBlankTabHidesThePanel() {
+        openBlankPanel()
+        guard let agents = panelButton("Agents") else { return XCTFail("no row") }
+        let back = app.navigationBars.buttons["Back"]
+        let start = agents.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 300, dy: 0)), withVelocity: .fast, thenHoldForDuration: 0)
+        XCTAssertTrue(back.waitForNonExistence(timeout: 3))
+    }
+
     /// A hold lifts a tab of the panel and a move drags it before another. A hold that doesn't
     /// move still brings up the tab's menu.
     func testAHoldAndAMoveOnAPanelTabDragsItBeforeAnother() {
