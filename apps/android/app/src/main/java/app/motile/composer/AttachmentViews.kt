@@ -49,6 +49,8 @@ import app.motile.theme.OverPicture
 import app.motile.theme.Surface
 import app.motile.theme.Theme
 import app.motile.theme.scrimStronger
+import app.motile.transcript.rememberThrowAnchor
+import app.motile.transcript.throwAnchor
 import app.motile.ui.ActionButton
 import app.motile.ui.ButtonVariant
 import app.motile.ui.Chip
@@ -129,8 +131,9 @@ private fun TileLook(attachment: Attachment, open: (() -> Unit)?, content: @Comp
     val store = LocalStore.current
     val shape = RoundedCornerShape(tileRadius)
     val summary = attachment.bytes?.let { "${attachment.name}, ${Formatter.formatShortFileSize(Platform.context, it)}" } ?: attachment.name
+    val anchor = rememberThrowAnchor(attachment.attached)
     Box(Modifier.semantics { contentDescription = summary }) {
-        val framed = Modifier.size(AttachmentTile.side).clip(shape).background(Surface.ComposerBox.color).border(1.dp, Surface.ComposerBox.border, shape)
+        val framed = Modifier.throwAnchor(anchor).size(AttachmentTile.side).clip(shape).background(Surface.ComposerBox.color).border(1.dp, Surface.ComposerBox.border, shape)
         val tile: @Composable () -> Unit = {
             content()
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) { AttachmentProgress(attachment) }

@@ -237,6 +237,24 @@ final class RowModel {
 
     /// The row is a message the server has: one in the transcript, or one that waits for the agent.
     var isSentMessage: Bool { isUser || isQueued }
+
+    /// The text of a message the user sent.
+    var sentText: String? {
+        switch kind {
+        case .user(let text, _, _, _, _, _): text.string
+        case .queued(let content): content.text.string
+        default: nil
+        }
+    }
+
+    /// The files attached to a message the user sent.
+    var sentFiles: [AttachedFile] {
+        switch kind {
+        case .user(_, let files, _, _, _, _): files
+        case .queued(let content): content.attachments
+        default: []
+        }
+    }
 }
 
 /// A program row: its tree, which `ui_patch` events change, what keeps it from running, and its
