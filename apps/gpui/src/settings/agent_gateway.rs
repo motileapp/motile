@@ -654,7 +654,7 @@ impl GatewayHeader {
         let c = colors(cx);
         let name = view.name.clone().unwrap_or_else(|| "Gateway".into());
         let description = match &view.version {
-            Some(version) => format!("{} · version {version}", view.status_text),
+            Some(version) => format!("{} · Version {version}", view.status_text),
             None => view.status_text.clone(),
         };
         let error = view

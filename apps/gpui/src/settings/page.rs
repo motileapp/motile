@@ -1296,7 +1296,7 @@ fn description(server: &Server) -> String {
     let agents: Vec<String> =
         agents.into_iter().map(|(agent, version)| format!("{} {version}", agent_name(*agent))).collect();
     let installed = if agents.is_empty() { "no agent installed".to_string() } else { agents.join(", ") };
-    format!("Connected · version {} · {installed}", server.version)
+    format!("Connected · Version {} · {installed}", server.version)
 }
 
 /// Why its accounts can't be shown or changed, if they can't.

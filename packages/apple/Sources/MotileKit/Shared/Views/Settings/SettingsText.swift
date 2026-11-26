@@ -5,7 +5,7 @@ extension Server {
     var settingsDescription: String {
         guard !deleting else { return "Deleting" }
         guard state == .connected else { return stateLabel }
-        return "Connected · version \(version) · \(installedAgents)"
+        return "Connected · Version \(version) · \(installedAgents)"
     }
 
     var stateLabel: String {
