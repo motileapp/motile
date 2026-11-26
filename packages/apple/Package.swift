@@ -5,7 +5,8 @@ import PackageDescription
 // What the Mac app and the iOS app share: the bridge to the Rust core, the state, and the views.
 // The clients link the core's static library themselves; the tests link the one cargo builds for
 // their platform, or the one in MOTILE_CORE_LIB_DIR. The iOS app draws maps with MapLibre Native;
-// the Mac app with MapLibre GL JS, bundled in `Map`.
+// the Mac app with MapLibre GL JS, bundled in `Map`. MotileShared is what the iOS app's extensions
+// share with it, without the core.
 let environment = ProcessInfo.processInfo.environment
 let repository = "\(Context.packageDirectory)/../.."
 
@@ -17,7 +18,8 @@ let package = Package(
     name: "MotileKit",
     platforms: [.macOS(.v14), .iOS("18.0")],
     products: [
-        .library(name: "MotileKit", targets: ["MotileKit"])
+        .library(name: "MotileKit", targets: ["MotileKit"]),
+        .library(name: "MotileShared", targets: ["MotileShared"]),
     ],
     dependencies: [
         .package(url: "https://github.com/maplibre/maplibre-gl-native-distribution", exact: "6.31.0"),
@@ -25,10 +27,12 @@ let package = Package(
     ],
     targets: [
         .target(name: "CMotileCore", path: "Sources/CMotileCore"),
+        .target(name: "MotileShared", path: "Sources/MotileShared"),
         .target(
             name: "MotileKit",
             dependencies: [
                 "CMotileCore",
+                "MotileShared",
                 .product(name: "MapLibre", package: "maplibre-gl-native-distribution", condition: .when(platforms: [.iOS])),
             ],
             path: "Sources/MotileKit",
@@ -47,6 +51,7 @@ let package = Package(
                     .when(platforms: [.iOS])),
             ]
         ),
+        .testTarget(name: "MotileSharedTests", dependencies: ["MotileShared"], path: "Tests/MotileSharedTests", resources: [.copy("Fixtures")]),
     ],
     swiftLanguageVersions: [.v5]
 )

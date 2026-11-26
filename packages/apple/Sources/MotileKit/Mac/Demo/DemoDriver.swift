@@ -485,6 +485,9 @@ private final class Demo {
 
         NSApp.appearance = NSAppearance(named: .darkAqua)
         await shootSettings("11-dark-settings")
+        store.openSettings(.notifications)
+        await shoot("11-dark-notifications")
+        store.closeSettings()
         await shoot("11-dark-thread")
         await shootScreen("11-screen-dark")
         store.setArchived([first], archived: false)

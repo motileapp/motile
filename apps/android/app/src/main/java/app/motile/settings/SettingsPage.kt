@@ -75,6 +75,7 @@ fun SettingsPage(section: SettingsSection) {
     if (section == SettingsSection.AgentGateway) return AgentGatewayPage()
     if (section == SettingsSection.McpGateway) return McpGatewayPage()
     if (section == SettingsSection.Projects) return ProjectsPage()
+    if (section == SettingsSection.Notifications) return NotificationsPage()
     val store = LocalStore.current
     val navigator = LocalSettingsNavigator.current
     var edited by remember { mutableStateOf<EditedAccount?>(null) }
@@ -96,7 +97,7 @@ fun SettingsPage(section: SettingsSection) {
             SettingsSection.TextGeneration -> textGeneration(store, navigator)
             SettingsSection.PullRequests -> pullRequests(store)
             SettingsSection.Integrations -> integrations(store)
-            SettingsSection.AgentGateway, SettingsSection.McpGateway, SettingsSection.Projects, SettingsSection.Keyboard -> Unit
+            SettingsSection.Notifications, SettingsSection.AgentGateway, SettingsSection.McpGateway, SettingsSection.Projects, SettingsSection.Keyboard -> Unit
         }
     }
     ConfirmsRemoval(removal) { removal = null }

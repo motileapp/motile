@@ -31,6 +31,8 @@ pub struct Toast {
     pub project_id: Option<String>,
     /// The server that can't be reached.
     pub server_id: Option<String>,
+    /// The alert of a thread, which the toast opens.
+    pub alert: Option<super::AlertToast>,
     /// Tells two toasts with the same words apart, so that the older one's timer leaves the
     /// newer one up.
     pub serial: u64,
@@ -525,7 +527,11 @@ impl Store {
 
     /// What worked goes away by itself; what failed or is still under way stays until it is
     /// closed or replaced.
-    pub(super) fn show_toast(&mut self, mut toast: Toast, cx: &mut Context<Self>) {
+    pub(super) fn show_toast(&mut self, toast: Toast, cx: &mut Context<Self>) {
+        self.show_toast_for(toast, Duration::from_secs(10), cx);
+    }
+
+    pub(super) fn show_toast_for(&mut self, mut toast: Toast, lasting: Duration, cx: &mut Context<Self>) {
         toast.serial = self.toast.as_ref().map_or(0, |shown| shown.serial) + 1;
         let stays = toast.failed || toast.pending;
         self.toast = Some(toast.clone());
@@ -533,7 +539,7 @@ impl Store {
             return;
         }
         cx.spawn(async move |this, cx| {
-            cx.background_executor().timer(Duration::from_secs(10)).await;
+            cx.background_executor().timer(lasting).await;
             let _ = this.update(cx, |store, cx| {
                 if store.toast.as_ref() == Some(&toast) {
                     store.toast = None;

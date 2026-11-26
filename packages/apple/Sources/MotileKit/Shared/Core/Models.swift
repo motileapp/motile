@@ -1,4 +1,5 @@
 import Foundation
+import MotileShared
 import UniformTypeIdentifiers
 
 // What the core sends, read from its JSON. The shapes are defined in crates/core/src/api.rs and
@@ -674,6 +675,8 @@ struct Toast: Equatable {
     var projectID: String?
     /// The server that can't be reached.
     var serverID: String?
+    /// The alert whose thread it opens.
+    var alert: AlertToast?
 
     var nextLabel: String? {
         switch next {
@@ -682,6 +685,13 @@ struct Toast: Equatable {
         default: nil
         }
     }
+}
+
+/// The thread an alert's toast is about.
+struct AlertToast: Equatable {
+    let kind: AlertKind
+    let serverID: String
+    let threadID: String
 }
 
 /// An action that waits for the user to say where it should happen.

@@ -9,7 +9,8 @@ use serde::de::DeserializeOwned;
 
 use crate::auth_api::{
     ApiError, DevLoginRequest, DevLoginResponse, DeviceKind, EnrollRequest, EnrollResponse, EnrollToken,
-    ExchangeRequest, Me, RelayRequest, enroll_message, link_message,
+    ExchangeRequest, Me, PushRegistration, PushTarget, PushWork, RelayRequest, SealedAlert, enroll_message,
+    link_message,
 };
 use crate::identity::{DeviceKey, sha256_hex, sign_request};
 use crate::{APP_REDIRECT, now};
@@ -157,6 +158,38 @@ impl AuthClient {
     pub async fn remove_device(&self, key: &DeviceKey, public_key: &str) -> anyhow::Result<()> {
         let path = format!("/api/devices/{public_key}");
         let _: serde_json::Value = self.send(self.signed(key, Method::DELETE, &path, b"")).await?;
+        Ok(())
+    }
+
+    /// Has the auth server push to this phone, or changes how.
+    pub async fn set_push(&self, key: &DeviceKey, registration: &PushRegistration) -> anyhow::Result<()> {
+        let body = serde_json::to_vec(registration)?;
+        let _: serde_json::Value = self.send(self.signed(key, Method::PUT, "/api/push", &body)).await?;
+        Ok(())
+    }
+
+    /// Stops the pushes to this phone.
+    pub async fn remove_push(&self, key: &DeviceKey) -> anyhow::Result<()> {
+        let _: serde_json::Value = self.send(self.signed(key, Method::DELETE, "/api/push", b"")).await?;
+        Ok(())
+    }
+
+    /// The account's phones that take pushes, for a server.
+    pub async fn push_targets(&self, key: &DeviceKey) -> anyhow::Result<Vec<PushTarget>> {
+        self.send(self.signed(key, Method::GET, "/api/push/targets", b"")).await
+    }
+
+    /// Pushes alerts a server sealed for the account's phones.
+    pub async fn push_alerts(&self, key: &DeviceKey, alerts: &[SealedAlert]) -> anyhow::Result<()> {
+        let body = serde_json::to_vec(alerts)?;
+        let _: serde_json::Value = self.send(self.signed(key, Method::POST, "/api/push/alerts", &body)).await?;
+        Ok(())
+    }
+
+    /// Pushes what a server's agents are doing to the account's phones.
+    pub async fn push_work(&self, key: &DeviceKey, work: &PushWork) -> anyhow::Result<()> {
+        let body = serde_json::to_vec(work)?;
+        let _: serde_json::Value = self.send(self.signed(key, Method::POST, "/api/push/work", &body)).await?;
         Ok(())
     }
 }

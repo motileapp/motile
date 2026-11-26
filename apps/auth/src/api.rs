@@ -2,6 +2,7 @@
 //! key; the requests that link one prove the key with a signature over what they redeem. The web
 //! client sends the token of the session a person signed in to.
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 
 use axum::Json;
@@ -10,15 +11,17 @@ use axum::extract::{ConnectInfo, Path, State};
 use axum::http::{HeaderMap, Method, StatusCode, Uri};
 use motile_protocol::auth_api::{
     DevLoginRequest, DevLoginResponse, DeviceKind, EnrollRequest, EnrollResponse, EnrollToken, ExchangeRequest, Me,
-    RelayRequest, Session, SessionRequest, enroll_message, link_message,
+    PushRegistration, PushService, PushTarget, PushWork, RelayRequest, SealedAlert, Session, SessionRequest,
+    enroll_message, link_message,
 };
 use motile_protocol::identity::{is_public_key, random_install_code, random_token, sha256_hex, verify, verify_request};
 use motile_protocol::now;
 use motile_protocol::relay::checked_url;
+use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::db::{NewSignIn, UserRow};
+use crate::db::{NewSignIn, Phone, UserRow};
 use crate::error::{AppError, AppResult};
 use crate::google::Identity;
 use crate::{AppState, db, limits};
@@ -299,6 +302,190 @@ pub async fn delete_server_completely(
     };
     if !db::delete_server_completely(&state.db, user.id, &target).await? {
         return Err(AppError::not_found());
+    }
+    Ok(Json(json!({ "ok": true })))
+}
+
+const MAX_TOKEN_CHARS: usize = 512;
+const MAX_TOPIC_CHARS: usize = 200;
+const MAX_SEALED_CHARS: usize = 4096;
+const MAX_THREAD_ID_CHARS: usize = 200;
+
+/// The device that signed the request, if it is one of an account's devices of `kind`.
+async fn device_of_kind(
+    state: &AppState,
+    method: &Method,
+    uri: &Uri,
+    headers: &HeaderMap,
+    body: &[u8],
+    kind: DeviceKind,
+    refusal: &str,
+) -> AppResult<(String, UserRow)> {
+    let Caller::Device(public_key) = caller(state, method, uri, headers, body).await? else {
+        return Err(AppError::new(StatusCode::FORBIDDEN, refusal));
+    };
+    let user = linked_user(state, &public_key).await?;
+    if db::device_kind(&state.db, &public_key).await? != Some(kind) {
+        return Err(AppError::new(StatusCode::FORBIDDEN, refusal));
+    }
+    Ok((public_key, user))
+}
+
+async fn phone(state: &AppState, method: &Method, uri: &Uri, headers: &HeaderMap, body: &[u8]) -> AppResult<String> {
+    let (device, _) =
+        device_of_kind(state, method, uri, headers, body, DeviceKind::Client, "Only a client takes pushes.").await?;
+    Ok(device)
+}
+
+async fn pushing_server(
+    state: &AppState,
+    method: &Method,
+    uri: &Uri,
+    headers: &HeaderMap,
+    body: &[u8],
+) -> AppResult<(String, UserRow)> {
+    device_of_kind(state, method, uri, headers, body, DeviceKind::Server, "Only a server pushes.").await
+}
+
+fn parse<T: DeserializeOwned>(body: &[u8], what: &str) -> AppResult<T> {
+    serde_json::from_slice(body).map_err(|_| AppError::bad_request(format!("That isn't {what}.")))
+}
+
+/// A token APNs or FCM gave, which goes into a URL path and a JSON body.
+fn is_push_token(token: &str) -> bool {
+    !token.is_empty()
+        && token.len() <= MAX_TOKEN_CHARS
+        && token.chars().all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | ':'))
+}
+
+fn is_bundle_id(topic: &str) -> bool {
+    !topic.is_empty()
+        && topic.len() <= MAX_TOPIC_CHARS
+        && topic.chars().all(|character| character.is_ascii_alphanumeric() || matches!(character, '.' | '-'))
+}
+
+async fn phones_by_device(state: &AppState, user: &UserRow) -> AppResult<HashMap<String, Phone>> {
+    let phones = db::phones_of(&state.db, user.id).await?;
+    Ok(phones.into_iter().map(|phone| (phone.device.clone(), phone)).collect())
+}
+
+/// Has the auth server push to the client that asks, in place of where it pushed before.
+pub async fn set_push(
+    State(state): State<AppState>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> AppResult<Json<Value>> {
+    let device = phone(&state, &method, &uri, &headers, &body).await?;
+    let mut registration: PushRegistration = parse(&body, "a push registration")?;
+    registration.live_start_token = registration.live_start_token.filter(|token| !token.is_empty());
+    registration.live_token = registration.live_token.filter(|token| !token.is_empty());
+    let tokens = [Some(&registration.token), registration.live_start_token.as_ref(), registration.live_token.as_ref()];
+    if !tokens.into_iter().flatten().all(|token| is_push_token(token)) {
+        return Err(AppError::bad_request("That isn't a push token."));
+    }
+    if let PushService::Apns { topic, .. } = &registration.service
+        && !is_bundle_id(topic)
+    {
+        return Err(AppError::bad_request("That isn't an app's bundle identifier."));
+    }
+    db::set_push(&state.db, &device, &registration).await?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+pub async fn remove_push(
+    State(state): State<AppState>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+) -> AppResult<Json<Value>> {
+    let device = phone(&state, &method, &uri, &headers, b"").await?;
+    db::remove_push(&state.db, &device).await?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+/// The phones a server seals what it pushes for: those of its own account.
+pub async fn push_targets(
+    State(state): State<AppState>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+) -> AppResult<Json<Vec<PushTarget>>> {
+    let (_, user) = pushing_server(&state, &method, &uri, &headers, b"").await?;
+    let phones = db::phones_of(&state.db, user.id).await?;
+    let targets = phones.into_iter().map(|phone| PushTarget {
+        device: phone.device,
+        choices: phone.registration.choices,
+        live: phone.registration.live,
+    });
+    Ok(Json(targets.collect()))
+}
+
+/// Pushes each alert to its phone if the phone is the server's account's and wants that kind;
+/// skips the others.
+pub async fn push_alerts(
+    State(state): State<AppState>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> AppResult<Json<Value>> {
+    let (_, user) = pushing_server(&state, &method, &uri, &headers, &body).await?;
+    let alerts: Vec<SealedAlert> = parse(&body, "a list of alerts")?;
+    let phones = phones_by_device(&state, &user).await?;
+    let deliveries: Vec<(Phone, SealedAlert)> = alerts
+        .into_iter()
+        .filter(|alert| alert.sealed.len() <= MAX_SEALED_CHARS && alert.thread_id.len() <= MAX_THREAD_ID_CHARS)
+        .filter_map(|alert| {
+            let phone = phones.get(&alert.device)?;
+            phone.registration.choices.allows(alert.kind).then(|| (phone.clone(), alert))
+        })
+        .collect();
+    if !deliveries.is_empty() {
+        let state = state.clone();
+        tokio::spawn(async move {
+            for (phone, alert) in deliveries {
+                state.push.alert(&state.db, &phone, &alert).await;
+            }
+        });
+    }
+    Ok(Json(json!({ "ok": true })))
+}
+
+/// Keeps what the server's agents are doing for each of the account's phones it was sealed for,
+/// and pushes each phone that shows it what every server of the account last said.
+pub async fn push_work(
+    State(state): State<AppState>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> AppResult<Json<Value>> {
+    let (server, user) = pushing_server(&state, &method, &uri, &headers, &body).await?;
+    let work: PushWork = parse(&body, "what the agents are doing")?;
+    let phones = phones_by_device(&state, &user).await?;
+    let mut deliveries = Vec::new();
+    for part in work.sealed {
+        let Some(phone) = phones.get(&part.device) else { continue };
+        if part.sealed.len() > MAX_SEALED_CHARS {
+            continue;
+        }
+        let before = db::fresh_work(&state.db, &phone.device, user.id).await?;
+        db::store_work(&state.db, &phone.device, &server, work.working, work.waiting, &part.sealed).await?;
+        if !phone.registration.live {
+            continue;
+        }
+        let parts = db::fresh_work(&state.db, &phone.device, user.id).await?;
+        deliveries.push((phone.clone(), parts, before.iter().map(|part| part.active).sum::<i64>()));
+    }
+    if !deliveries.is_empty() {
+        let state = state.clone();
+        tokio::spawn(async move {
+            for (phone, parts, before) in deliveries {
+                state.push.work(&state.db, &phone, &parts, before).await;
+            }
+        });
     }
     Ok(Json(json!({ "ok": true })))
 }

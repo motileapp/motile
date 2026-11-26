@@ -2,6 +2,7 @@
 //! the auth server's JSON, and how a device proves who it is.
 
 pub mod activity;
+pub mod alerts;
 pub mod auth_api;
 #[cfg(feature = "auth-client")]
 pub mod auth_client;
@@ -23,7 +24,7 @@ pub const ALPN: &[u8] = b"motile/1";
 pub const GATEWAY_ALPN: &[u8] = b"motile-gateway/1";
 /// `GATEWAY_ALPN` where a server's HTTP requests come with their bodies compressed with zstd.
 pub const GATEWAY_ALPN_ZSTD: &[u8] = b"motile-gateway/2";
-pub const PROTOCOL_VERSION: u32 = 42;
+pub const PROTOCOL_VERSION: u32 = 43;
 pub const DEFAULT_AUTH_URL: &str = "https://auth.motile.app";
 /// Where the auth server sends the browser once a sign-in is done; the client owns this scheme.
 pub const APP_REDIRECT: &str = "motile://auth";

@@ -6,6 +6,7 @@ use std::rc::Rc;
 use gpui_kit::component::input::{InputEvent, InputState};
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+use motile_core::alerts::{Mode, Settings as NotificationSettings};
 use motile_core::all_servers::AllServersView;
 use motile_core::api::{SyncState, SyncView};
 use motile_core::link::State;
@@ -25,7 +26,7 @@ use crate::format;
 use crate::models::{self, AgentAccountExt, Project, Server, agent_name, new_account};
 use crate::sidebar::{AppUpdateRow, ServerUpdateStatus};
 use crate::store::integrations::Integration;
-use crate::store::settings::{PULL_DEFAULT_BRANCH_CAPTION, SettingsSection};
+use crate::store::settings::{ALERT_CHOICES, PULL_DEFAULT_BRANCH_CAPTION, SettingsSection};
 use crate::store::{PanelPage, Store};
 use crate::theme::{self, Appearance, ControlSize, IconSize, Layer, Radius, Surface, TextSize, colors};
 use crate::ui::menu::Menu;
@@ -45,6 +46,17 @@ const FADE: f32 = 20.;
 /// The side of an integration's logo tile, and the room between it and the integration's name.
 const LOGO_TILE: f32 = 32.;
 const LOGO_GAP: f32 = 12.;
+const NOTIFICATION_MODES: [Mode; 4] = [Mode::Off, Mode::Notifications, Mode::Sound, Mode::NotificationsAndSound];
+/// One of the switches of the notification settings: the setting it turns on and off.
+type NotificationSetting = fn(&mut NotificationSettings) -> &mut bool;
+/// The switches of the alerts the user wants, in order.
+const ALERT_CHOICE_ROWS: [(&str, NotificationSetting); 5] = [
+    ("Finishes", |settings| &mut settings.choices.finished),
+    ("Fails", |settings| &mut settings.choices.failed),
+    ("Needs approval", |settings| &mut settings.choices.approval),
+    ("Asks a question or presents a plan", |settings| &mut settings.choices.question),
+    ("Reaches its usage limit", |settings| &mut settings.choices.limit),
+];
 const SHOW_IN_FILES: &str = if cfg!(target_os = "macos") {
     "Show in Finder"
 } else if cfg!(windows) {
@@ -392,6 +404,75 @@ impl SettingsPage {
         let leading = label("Log", Some(description), None, Cut::Wraps, cx);
         let rows = vec![row(vec![leading], vec![show.into_any_element()]).into_any_element()];
         group("log", "Troubleshooting", None, true, rows, cx)
+    }
+
+    /// How alerts reach the user, and which ones.
+    fn notifications(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
+        let settings = self.store.read(cx).notifications;
+        let store = self.store.clone();
+        let menu = ActionMenu::new("notification-mode", mode_label(settings.mode), move |_, _| {
+            NOTIFICATION_MODES.iter().fold(Menu::new(), |menu, mode| {
+                let (store, mode) = (store.clone(), *mode);
+                menu.item(mode_label(mode), move |_, cx| {
+                    store.update(cx, |store, cx| {
+                        store.set_notification_settings(NotificationSettings { mode, ..store.notifications });
+                        cx.notify();
+                    })
+                })
+            })
+        })
+        .button(outline);
+        let caption = "Alerts when an agent finishes, fails, or needs your approval or an answer.";
+        let mode = label("Notifications", Some(caption.into()), None, Cut::Wraps, cx);
+        let toasts = label(
+            "Show alerts inside Motile",
+            Some("When you're looking at another thread.".into()),
+            None,
+            Cut::Wraps,
+            cx,
+        );
+        let rows = vec![
+            row(vec![mode], vec![menu.into_any_element()]).into_any_element(),
+            divider_on(Surface::Card, cx).into_any_element(),
+            div()
+                .relative()
+                .child(target("toasts"))
+                .child(switch_row(
+                    vec![toasts],
+                    self.notification_switch("toasts", |settings| &mut settings.toasts, cx),
+                ))
+                .into_any_element(),
+        ];
+        let mut choices = Vec::new();
+        for (index, (title, setting)) in ALERT_CHOICE_ROWS.into_iter().enumerate() {
+            let switch = self.notification_switch(("alert-choice", index), setting, cx);
+            choices.push(switch_row(vec![label(title, None, None, Cut::Wraps, cx)], switch).into_any_element());
+            if index + 1 < ALERT_CHOICE_ROWS.len() {
+                choices.push(divider_on(Surface::Card, cx).into_any_element());
+            }
+        }
+        vec![
+            group("notifications", "Alerts", None, true, rows, cx),
+            group("alert-choices", ALERT_CHOICES, None, true, choices, cx),
+        ]
+    }
+
+    fn notification_switch(
+        &self,
+        id: impl Into<ElementId>,
+        setting: NotificationSetting,
+        cx: &mut Context<Self>,
+    ) -> Switch {
+        let mut settings = self.store.read(cx).notifications;
+        let store = self.store.clone();
+        Switch::new(id, *setting(&mut settings)).on_change(move |on, _, cx| {
+            store.update(cx, |store, cx| {
+                let mut settings = store.notifications;
+                *setting(&mut settings) = on;
+                store.set_notification_settings(settings);
+                cx.notify();
+            })
+        })
     }
 
     fn servers(&self, cx: &mut Context<Self>) -> Vec<AnyElement> {
@@ -1134,6 +1215,7 @@ impl Render for SettingsPage {
         Targets::clear(cx);
         let groups = match section {
             SettingsSection::General => self.general(cx),
+            SettingsSection::Notifications => self.notifications(cx),
             SettingsSection::Keyboard => Vec::new(),
             SettingsSection::Servers => self.servers(cx),
             SettingsSection::Accounts => self.agents(cx),
@@ -1219,6 +1301,15 @@ fn integration_logo(integration: Integration, cx: &App) -> AnyElement {
 }
 
 /// A settings control: outline, large, on the card.
+fn mode_label(mode: Mode) -> &'static str {
+    match mode {
+        Mode::Off => "Off",
+        Mode::Notifications => "Notifications only",
+        Mode::Sound => "Sound only",
+        Mode::NotificationsAndSound => "Notifications with sound",
+    }
+}
+
 fn outline(button: ActionButton) -> ActionButton {
     button.variant(Variant::Outline).size(ControlSize::Large).surface(Surface::Card)
 }

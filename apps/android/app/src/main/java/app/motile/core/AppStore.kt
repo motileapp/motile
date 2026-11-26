@@ -9,6 +9,9 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.motile.BuildConfig
+import app.motile.notifications.AlertNotifications
+import app.motile.notifications.KeptWork
+import app.motile.notifications.Pushes
 import app.motile.panel.PanelTab
 import app.motile.panel.PanelTarget
 import app.motile.panel.RightPanel
@@ -291,6 +294,16 @@ class AppStore(private val context: Context) {
     var threadsShown by mutableIntStateOf(0)
         private set
 
+    // Notifications
+    /** This device's notification settings, as the core keeps them. */
+    var notificationSettings by mutableStateOf(Pushes.settings)
+        private set
+    /** The push token the core was given, this launch. */
+    private var pushSent: String? = null
+    /** The first launch signed in asks the system to let the client notify, unless a script signs it in. */
+    var asksForNotifications = false
+        private set
+
     // What the servers hold
     /** The account's servers, which threads start and go on on. */
     var servers by mutableStateOf(emptyList<Server>())
@@ -547,6 +560,10 @@ class AppStore(private val context: Context) {
         if (!core.start(context, jsonOf(config) as JSON)) {
             errorMessage = "Motile couldn't start. Its data folder may not be writable."
         }
+        Pushes.keepDataDir(dataDir)
+        asksForNotifications = environment["MOTILE_DEMO_SIGN_IN"] == null
+        AlertNotifications.createChannels(context)
+        registerForPushes()
         if (!showsTurnChanges) core.send("hide_changes", json("hidden" to true))
         environment["MOTILE_RELEASES_URL"]?.let { updater.releases = it }
         if (environment["MOTILE_DEMO"] != "1") updater.start()
@@ -557,6 +574,7 @@ class AppStore(private val context: Context) {
     /** The client is in front again. */
     fun becameActive() {
         markOpenThreadSeen()
+        syncPush()
         core.send("reload_keybindings")
         readGit(fetch = true)
         readWorktreeStart(fetch = true)
@@ -802,6 +820,15 @@ class AppStore(private val context: Context) {
                 val view = GatewayView.of(event.obj("gateway") ?: EmptyJSON)
                 return { gateway.apply(view) }
             }
+            "notifications" -> {
+                val settings = NotificationSettings.of(event.obj("settings") ?: EmptyJSON)
+                return { applyNotificationSettings(settings) }
+            }
+            "work" -> {
+                val servers = event.objects("servers").map(ServerWork::of)
+                Pushes.later { Pushes.work(context, servers) }
+                return null
+            }
             else -> return null
         }
     }
@@ -834,10 +861,13 @@ class AppStore(private val context: Context) {
     private fun apply(account: Account) {
         val wasSignedIn = this.account.signedIn
         this.account = account
+        if (!account.signedIn) pushSent = null
+        syncPush()
         if (wasSignedIn && !account.signedIn) {
             openEmptyDraft()
             enrollToken = null
             usage = UsageModel()
+            Pushes.later { KeptWork.clear(context) }
         }
     }
 
@@ -2436,6 +2466,7 @@ class AppStore(private val context: Context) {
 
     private fun open(thread: ThreadInfo) {
         openThreadID = thread.id
+        AlertNotifications.cancel(context, thread.id)
         activity = Activity.of(thread)
         transcript.begin(thread.id, keepingRows = true)
         showOutboxPending()
@@ -2499,8 +2530,70 @@ class AppStore(private val context: Context) {
         revealedThreadID = threadID
     }
 
+    /** Opens the thread a notification or the widget is about, over the settings or the usage, or once it is known. */
+    fun openThread(link: ThreadLink) {
+        closeRoute()
+        if (anyThread(link.threadID) == null) {
+            lastSelection = link.threadID
+            return
+        }
+        reveal(link.threadID)
+    }
+
+    /** Whether the client is in front with the thread on screen, where a notification of it would only repeat it. */
+    fun showsThread(id: String): Boolean =
+        Platform.isActive && selection == Selection.Thread(id) && settings == null && !showsUsage
+
     /** Where the client goes when what was open is gone. */
     private fun openEmptyDraft() = select(Selection.Draft(emptyDraft().id))
+
+    // Notifications
+
+    fun changeNotifications(settings: NotificationSettings) {
+        applyNotificationSettings(settings)
+        core.send("set_notifications", json("settings" to settings.json))
+    }
+
+    private fun applyNotificationSettings(settings: NotificationSettings) {
+        if (settings == notificationSettings) return
+        val liveChanged = settings.live != notificationSettings.live
+        notificationSettings = settings
+        Pushes.settings = settings
+        syncPush()
+        if (liveChanged) Pushes.later { Pushes.work(context, emptyList()) }
+    }
+
+    /** Asks Firebase for the push token, which it gives again through `PushService` when it changes. */
+    @Suppress("DEPRECATION")
+    private fun registerForPushes() {
+        runCatching {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+                Pushes.tokenChanged(token)
+                syncPush()
+            }
+        }
+    }
+
+    /**
+     * Has the auth server push to this phone while the system lets it notify and the user wants
+     * alerts or the ongoing activity, and stops it otherwise. The core sends the registration again
+     * whenever the settings change.
+     */
+    fun syncPush() {
+        val token = Pushes.token
+        val wanted = account.signedIn && AlertNotifications.allowed(context) && (notificationSettings.notifies || notificationSettings.live)
+        if (wanted && token != null) {
+            if (pushSent == token) return
+            pushSent = token
+            Preferences.set(PUSH_REGISTERED_KEY, true)
+            core.send("register_push", json("service" to json("kind" to "fcm"), "token" to token))
+            return
+        }
+        if (!account.signedIn || !Preferences.bool(PUSH_REGISTERED_KEY)) return
+        pushSent = null
+        Preferences.set(PUSH_REGISTERED_KEY, false)
+        core.send("unregister_push")
+    }
 
     fun setNewThreadProject(id: String?) {
         moveDraft(id)
@@ -3194,6 +3287,7 @@ class AppStore(private val context: Context) {
     companion object {
         /** Whether a message sent while the agent works steers the turn that runs instead of waiting for it. */
         const val STEERS_KEY = "send.steers"
+        private const val PUSH_REGISTERED_KEY = "push.registered"
         /** It steers until the setting says otherwise. */
         const val STEERS_BY_DEFAULT = true
 

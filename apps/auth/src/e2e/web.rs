@@ -33,7 +33,7 @@ async fn open_session(auth: &Auth, code: &str, verifier: &str) -> reqwest::Respo
 }
 
 /// The token of a new session of `account`.
-async fn session(auth: &Auth, account: &GoogleAccount) -> String {
+pub(super) async fn session(auth: &Auth, account: &GoogleAccount) -> String {
     let verifier = random_token();
     let code = web_code(auth, &verifier, account).await;
     let response = open_session(auth, &code, &verifier).await;
@@ -41,7 +41,7 @@ async fn session(auth: &Auth, account: &GoogleAccount) -> String {
     response.json::<Session>().await.unwrap().token
 }
 
-async fn call(auth: &Auth, method: Method, path: &str, token: &str) -> reqwest::Response {
+pub(super) async fn call(auth: &Auth, method: Method, path: &str, token: &str) -> reqwest::Response {
     auth.http.request(method, format!("{}{path}", auth.base)).bearer_auth(token).send().await.unwrap()
 }
 

@@ -126,6 +126,8 @@ The client and the servers use auth.motile.app by default. To run your own:
    | `DATABASE_URL` | A Postgres connection string |
    | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | From the Google OAuth client |
    | `WEB_URL` | Optional: the address of your web app, which may then start sign-ins |
+   | `APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID` | Optional: an APNs key's .p8 text, its ID and its team, to push to iPhones and iPads |
+   | `FCM_SERVICE_ACCOUNT` | Optional: a Firebase service account's JSON, to push to Android phones |
 
    It listens on `PORT` (3000) and answers `/healthz`.
 3. Build the client for it: `MOTILE_AUTH_URL=https://<your-address> apps/macos/scripts/build-app.sh`.

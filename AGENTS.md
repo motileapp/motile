@@ -46,6 +46,9 @@ What the programs agree on.
 - `identity.rs`: the device key and request signing.
 - `gateway_wire.rs`: what servers and clients say to the gateway.
 - `activity.rs`: the features the Activity tab counts.
+- `alerts.rs`: what a server tells the devices of its threads (an agent finished, failed, needs the
+  user), what its agents do, and sealing a push to a phone's own device key, converted to X25519, so
+  that the auth server that delivers it never reads it.
 - `search.rs`: how a search through the messages matches, alike on servers and clients.
 - `select.rs`: which account a new thread starts on.
 - `media.rs`, `skills.rs`: naming an agent's files by their contents; `$name` skills in a message.
@@ -68,6 +71,8 @@ the core alike.
 
 - `sign_in.rs`, `google.rs`: signing in. `/mcp/callback` is where an MCP server's sign-in comes back.
 - `api.rs`: what clients, servers and the web app call.
+- `push/`: the phones' push registrations and delivering the servers' sealed alerts and Live
+  Activities through APNs and FCM (`APNS_*`, `FCM_SERVICE_ACCOUNT`).
 - `config.rs`: the install command a token comes with. `pages.rs`: the page a failed sign-in ends on.
 - `migrations/`: the schema. `e2e/`: the real router on a fresh database per test.
 - `DEV_LOGIN=1` lets anyone sign in as anyone. It is for tests, the demo and local work, and must
@@ -113,6 +118,8 @@ colours from `packages/theme/theme.css`; an opacity is one of the tokens
 - `hub.rs`, `hub/`: the live state of every thread. `hub/children.rs` is the agents an agent
   starts, `hub/threads.rs` the motile tools that find and change threads.
 - `mcp.rs`: the `motile` MCP server the agents call.
+- `alerts.rs`: which changes of a thread alert the user, sent to the connected clients and pushed
+  to the phones, and what its agents do, for the Live Activities.
 - `agents/`: running Claude Code and Codex and parsing what they say.
 - `agent_accounts.rs`, `sign_in.rs`: the agents' accounts and signing them in.
 - `handoff.rs`: what an agent is told of a thread that went on without it.
@@ -144,6 +151,8 @@ for tests. `api.rs` is the JSON the client and the core exchange.
   servers, the backup.
 - `cache.rs`, `outbox.rs`, `follow.rs`, `media.rs`, `log.rs`: the local copy, messages on their
   way, media and the client's log.
+- `alerts.rs`: the notification settings, how each alert shows, the badge, the widgets' work and
+  the phone's push registration.
 - `engaged.rs`, `usage.rs`, `activity.rs`, `limits.rs`, `gateway.rs`, `mcp_servers.rs`: the usage
   view and the gateway pages.
 - `pull_request.rs`, `linear.rs`, `ricrac.rs`, `git.rs`, `browse.rs`, `skills.rs`, `snooze.rs`,

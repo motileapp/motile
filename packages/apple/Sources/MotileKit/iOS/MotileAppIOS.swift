@@ -1,6 +1,7 @@
 #if os(iOS)
 import SwiftUI
 import UIKit
+import UserNotifications
 
 /// What the iOS app's executable runs.
 public func runMotile() {
@@ -20,6 +21,7 @@ struct MotileApp: App {
             RootView()
                 .environment(store)
                 .environment(drawer)
+                .environment(delegate.push)
                 .foregroundStyle(Color.themeForeground)
                 .onAppear {
                     guard !delegate.started else { return }
@@ -32,6 +34,7 @@ struct MotileApp: App {
                 }
                 .onChange(of: appearance) { appearance.apply() }
                 .onChange(of: phase) { backgroundTime.sceneChanged(to: phase) }
+                .modifier(PushNotificationsSync(push: delegate.push, store: store))
         }
         .commands { MotileCommands(store: store, drawer: drawer) }
     }
@@ -39,14 +42,20 @@ struct MotileApp: App {
 
 final class AppDelegate: NSObject, UIApplicationDelegate {
     var started = false
+    let push = PushNotifications()
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        UNUserNotificationCenter.current().delegate = push
         RowTextView.warmUp()
         // The system's glass bar buttons ignore the tint, so the way back is drawn in the foreground.
         let back = PlatformImage.symbol(.chevronLeft, size: .lg).withTintColor(Theme.foreground, renderingMode: .alwaysOriginal)
         UINavigationBar.appearance().backIndicatorImage = back
         UINavigationBar.appearance().backIndicatorTransitionMaskImage = back
         return true
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        push.receivedDeviceToken(deviceToken)
     }
 }
 

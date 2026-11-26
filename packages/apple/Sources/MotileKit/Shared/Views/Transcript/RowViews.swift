@@ -224,7 +224,7 @@ struct BubbleFit {
     }
 }
 
-final class UserRowView: RowView {
+final class UserRowView: RowView, ThrowableRow {
     private let bubble = SurfaceView()
     private let clip = FlippedView()
     private let fade = EdgeFade()
@@ -388,6 +388,18 @@ final class UserRowView: RowView {
         more.frame = CGRect(x: 0, y: bottom - height, width: bubble.frame.width, height: height)
     }
 
+    var bubbleFrame: CGRect { bubble.frame }
+    var textFrame: CGRect { clip.frame.insetBy(dx: RowTextView.overhang, dy: 0) }
+    var attachedPieces: [(view: PlatformView, frame: CGRect)] { attachments.pieces(in: bubble) }
+    var reshapes: Bool { true }
+
+    func shapeBubble(_ size: CGSize, fill: CGFloat) {
+        let right = bounds.width
+        bubble.frame = CGRect(x: right - size.width, y: Self.margin, width: size.width, height: size.height)
+        bubble.fill = Theme.backgroundSecondary.withAlphaComponent(fill)
+        bubble.opacity = 1
+    }
+
     override func mark(_ marks: FoundMarks?) { found.mark(marks, in: text) }
 
     override func rect(of range: NSRange) -> CGRect? {
@@ -460,7 +472,7 @@ final class MessageAvatarView: FlippedView {
 /// A message that waits for the agent: what it says, how it waits, and the buttons that steer
 /// the turn with it or take it back into the composer. It stands where the user's messages do,
 /// dotted around instead of filled.
-final class QueuedRowView: RowView {
+final class QueuedRowView: RowView, ThrowableRow {
     /// The strip under the message, down to the bubble's edge, that holds the status and the buttons.
     static let footHeight: CGFloat = buttonGap + RowButton.metrics.height + buttonMargin
     private static let radius = Radius.xl
@@ -566,6 +578,12 @@ final class QueuedRowView: RowView {
         status.frame = CGRect(x: statusX, y: lineY, width: max(0, statusEnd - statusX), height: lineHeight)
         return bubbleSize.height + 14 + 14
     }
+
+    var bubbleFrame: CGRect { bubble.frame }
+    var textFrame: CGRect { text.frame }
+    var attachedPieces: [(view: PlatformView, frame: CGRect)] { attachments.pieces(in: bubble) }
+    var reshapes: Bool { false }
+    func shapeBubble(_ size: CGSize, fill: CGFloat) {}
 
     override func clearSelection() { text.clearSelection() }
 }

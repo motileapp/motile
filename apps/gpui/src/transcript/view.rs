@@ -5,6 +5,7 @@
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gpui_kit::base::{ScrollBounce, ScrollbarHandle};
@@ -17,6 +18,7 @@ use motile_core::render::rows::RowKind;
 
 use super::model::{FADE, Item, RowModel, Transcript};
 use super::rows::{self, META_FADE, RowContext};
+use super::throw::ThrownMessage;
 use crate::store::Store;
 use crate::theme::{self, ControlSize, colors};
 use crate::ui::icons;
@@ -72,6 +74,14 @@ pub struct TranscriptView {
     scrolled: (f32, Option<Instant>),
     /// The match of finding in the thread being scrolled to.
     revealing: Option<Reveal>,
+    /// The message just sent, on its way from the composer to its row, which the viewport goes
+    /// to the end with; the one to throw on the next frame; and the last one on its way seen.
+    thrown: Option<ThrownMessage>,
+    throwing: Option<Arc<RowModel>>,
+    seen_pending: Option<Arc<RowModel>>,
+    seen_resets: u64,
+    /// The thread pane shows the transcript, rather than the start of a new thread.
+    shown: bool,
     _ticks: Task<()>,
     _subscriptions: Vec<Subscription>,
 }
@@ -88,6 +98,7 @@ impl TranscriptView {
                 this.trimming = false;
                 this.set_glide(None, cx);
             }
+            this.follow_pending(cx);
             this.follow_stream(cx);
             this.measures_after_layout = true;
             cx.notify();
@@ -123,6 +134,11 @@ impl TranscriptView {
             glide: None,
             scrolled: (0., None),
             revealing: None,
+            thrown: None,
+            throwing: None,
+            seen_pending: None,
+            seen_resets: 0,
+            shown: false,
             _ticks: ticks,
             _subscriptions: subscriptions,
         };
@@ -145,6 +161,9 @@ impl TranscriptView {
                         cx.notify();
                     }
                     view.set_glide(None, cx);
+                    if let Some(thrown) = view.thrown.as_mut() {
+                        thrown.scrolled_from = None;
+                    }
                     let top = view.scroll_offsets(cx).0;
                     if top != view.scrolled.0 {
                         view.scrolled = (top, Some(Instant::now()));
@@ -183,9 +202,16 @@ impl TranscriptView {
         (end - top).max(0.)
     }
 
-    /// Whether the view rests on the end and follows it, or glides there.
+    /// Whether the view rests on the end and follows it, or glides there, or goes there with the
+    /// message just sent.
     fn pinned(&self, cx: &App) -> bool {
-        self.glide.is_some() || self.list(cx).is_following_tail()
+        self.glide.is_some()
+            || self.thrown.as_ref().is_some_and(|thrown| thrown.scrolled_from.is_some())
+            || self.list(cx).is_following_tail()
+    }
+
+    pub fn set_shown(&mut self, shown: bool) {
+        self.shown = shown;
     }
 
     /// Where the rows show in the window, out from under what floats over their end.
@@ -256,10 +282,97 @@ impl TranscriptView {
         if !self.agent && self.store.read(cx).find.shown { crate::thread::find_bar::COVER } else { 0. }
     }
 
+    /// A message that appears on its way is thrown in from the composer on the next frame, or the
+    /// view goes to the end with it. One taken back takes its throw with it, and the server's row
+    /// that takes its place takes the throw over.
+    fn follow_pending(&mut self, cx: &mut Context<Self>) {
+        let model = self.model.read(cx);
+        let (pending, replaced, resets) = (model.pending.clone(), model.replaced_pending.clone(), model.resets);
+        if std::mem::replace(&mut self.seen_resets, resets) != resets {
+            self.throwing = None;
+            self.end_throw(cx);
+        }
+        if let Some(thrown) = self.thrown.as_mut().filter(|thrown| thrown.row_id == RowModel::PENDING_ID)
+            && pending.is_none()
+        {
+            match replaced {
+                Some(row_id) => thrown.row_id = row_id,
+                None => self.end_throw(cx),
+            }
+        }
+        let before = std::mem::replace(&mut self.seen_pending, pending.clone());
+        let Some(pending) = pending.filter(|new| before.as_ref().is_none_or(|old| !Arc::ptr_eq(old, new))) else {
+            return;
+        };
+        let throws =
+            before.is_none() && self.shown && self.viewport_height(cx) > 0. && !crate::media::native::reduces_motion();
+        match throws {
+            true => self.throwing = Some(pending),
+            false => self.list(cx).scroll_to_end(),
+        }
+    }
+
+    /// Throws the message just sent in from the composer, if it still shows it.
+    fn throw_in(&mut self, row: Arc<RowModel>, window: &mut Window, cx: &mut Context<Self>) {
+        self.end_throw(cx);
+        let list = self.list(cx);
+        let Some(mut thrown) = ThrownMessage::new(row, window) else { return list.scroll_to_end() };
+        // The server's row may have taken the message's place already.
+        let model = self.model.read(cx);
+        if model.pending.is_none() {
+            let Some(row_id) = model.replaced_pending.clone() else { return list.scroll_to_end() };
+            thrown.row_id = row_id;
+        }
+        // The composer hides its placeholder, which comes back after the copy has left.
+        super::throw::fade_placeholder_in();
+        window.refresh();
+        self.set_glide(None, cx);
+        if self.distance_to_end(cx) < self.viewport_height(cx) {
+            list.pause_following_tail();
+            thrown.scrolled_from = Some(self.scroll_offsets(cx).0);
+        } else {
+            list.scroll_to_end();
+        }
+        self.thrown = Some(thrown);
+    }
+
+    /// Moves the thrown message a frame on, and the viewport with it to the end, while the user
+    /// doesn't scroll. Once it is there its row shows in its place.
+    fn advance_throw(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let (top, end) = self.scroll_offsets(cx);
+        let list = self.list(cx);
+        let Some(thrown) = self.thrown.as_mut() else { return };
+        thrown.tick();
+        if let Some(from) = thrown.scrolled_from {
+            let y = (from + (end - from) * thrown.scrolled()).min(end);
+            if (y - top).abs() > 0.1 {
+                list.scroll_by(px(y - top));
+            }
+        }
+        if !thrown.done() {
+            window.request_animation_frame();
+            return;
+        }
+        if thrown.scrolled_from.is_some() {
+            list.set_follow_mode(FollowMode::Tail);
+        }
+        self.end_throw(cx);
+    }
+
+    fn end_throw(&mut self, cx: &mut Context<Self>) {
+        if self.thrown.take().is_some() {
+            cx.notify();
+        }
+    }
+
     /// While a reply streams in, the viewport glides after the end instead of jumping to it.
     fn follow_stream(&mut self, cx: &mut Context<Self>) {
         let list = self.list(cx);
-        if !self.model.read(cx).animates() || !list.is_following_tail() || self.viewport_height(cx) <= 0. {
+        if !self.model.read(cx).animates()
+            || !list.is_following_tail()
+            || self.viewport_height(cx) <= 0.
+            || self.thrown.is_some()
+        {
             return;
         }
         list.pause_following_tail();
@@ -632,6 +745,10 @@ impl Render for TranscriptView {
                 this.trim_earlier_if_far(cx);
             });
         }
+        if let Some(row) = self.throwing.take() {
+            self.throw_in(row, window, cx);
+        }
+        self.advance_throw(window, cx);
         // The rows paint their text again, which finding starts from.
         crate::ui::rich_text::forget_painted_text();
         let viewport = self.viewport_height(cx);
@@ -675,7 +792,10 @@ impl Render for TranscriptView {
             removed,
             thread_id: model.thread_id.clone(),
             found: model.found.clone(),
+            throw: self.thrown.as_ref().map(|thrown| thrown.mark(false)),
         };
+        let flight = self.thrown.as_ref().map(|thrown| thrown.flight(&ctx));
+        let landing_row = self.thrown.as_ref().map(|thrown| thrown.row_id.clone());
         let needs_highlight = self.needs_highlight.clone();
         let requested = self.requested_highlight.clone();
         let entity = cx.entity().downgrade();
@@ -685,6 +805,7 @@ impl Render for TranscriptView {
         let list = list(list_state.clone(), move |index, window, cx| {
             let Some(item) = items.get(index).cloned() else { return div().into_any_element() };
             let mut fades_in = None;
+            let mut lands = false;
             // A press in a row keeps a selection to it, as the Mac's text view of a row does.
             let key = |model: &RowModel| Some(rows::row_key(&model.row.id));
             let (element, pressed) = match &item {
@@ -700,6 +821,7 @@ impl Render for TranscriptView {
                             });
                         }
                         fades_in = fresh.get(&model.row.id).map(|at| (model.row.id.clone(), *at));
+                        lands = landing_row.as_ref() == Some(&model.row.id);
                         (rows::render_row(model, &ctx, window, cx), key(model))
                     }
                     None => (div().into_any_element(), None),
@@ -713,29 +835,39 @@ impl Render for TranscriptView {
                     None => (div().into_any_element(), None),
                 },
                 Item::Pending => match &pending {
-                    Some(model) => (rows::render_row(model, &ctx, window, cx), key(model)),
+                    Some(model) => {
+                        lands = landing_row.as_ref() == Some(&model.row.id);
+                        (rows::render_row(model, &ctx, window, cx), key(model))
+                    }
                     None => (div().into_any_element(), None),
                 },
             };
             let entity = entity.clone();
-            let row = div().w_full().px(px(theme::CONTENT_PADDING)).flex().justify_center().child(
-                div()
-                    .id(("transcript-item", index))
-                    .w_full()
-                    .max_w(px(theme::CONTENT_WIDTH))
-                    .when_some(pressed, |row, pressed| {
-                        row.capture_any_mouse_down(move |event, _, cx| {
-                            if event.button == MouseButton::Left {
-                                crate::ui::rich_text::press_row(Some(pressed), cx);
-                            }
+            // The row a thrown message lands on shows once it is there.
+            let row = div()
+                .w_full()
+                .px(px(theme::CONTENT_PADDING))
+                .flex()
+                .justify_center()
+                .when(lands, |row| row.opacity(0.))
+                .child(
+                    div()
+                        .id(("transcript-item", index))
+                        .w_full()
+                        .max_w(px(theme::CONTENT_WIDTH))
+                        .when_some(pressed, |row, pressed| {
+                            row.capture_any_mouse_down(move |event, _, cx| {
+                                if event.button == MouseButton::Left {
+                                    crate::ui::rich_text::press_row(Some(pressed), cx);
+                                }
+                            })
                         })
-                    })
-                    .on_hover(move |hovered, _, cx| {
-                        let (item, hovered) = (item.clone(), *hovered);
-                        let _ = entity.update(cx, |view, cx| view.set_hovered(item, hovered, cx));
-                    })
-                    .child(element),
-            );
+                        .on_hover(move |hovered, _, cx| {
+                            let (item, hovered) = (item.clone(), *hovered);
+                            let _ = entity.update(cx, |view, cx| view.set_hovered(item, hovered, cx));
+                        })
+                        .child(element),
+                );
             match fades_in {
                 Some((id, at)) => {
                     fade_in(row, SharedString::from(format!("fresh-{id}-{:?}", at)), at).into_any_element()
@@ -771,6 +903,8 @@ impl Render for TranscriptView {
             .size_full()
             .relative()
             .child(list)
+            // Over the composer, which isn't glass.
+            .children(flight.map(deferred))
             .child(fade_top)
             .when(bottom > 0., |transcript| transcript.child(fade_bottom))
             .child(scroller)

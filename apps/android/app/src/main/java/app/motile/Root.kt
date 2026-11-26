@@ -52,6 +52,7 @@ import app.motile.media.MediaViewer
 import app.motile.onboarding.ConnectServerView
 import app.motile.onboarding.SignInView
 import app.motile.platform.Platform
+import app.motile.settings.AsksForNotificationsOnce
 import app.motile.settings.SettingsSheet
 import app.motile.settings.SignInAgainSheet
 import app.motile.theme.LocalDark
@@ -177,6 +178,7 @@ fun Root(store: AppStore) {
             }
             ConfettiLayer()
         }
+        if (store.account.signedIn) AsksForNotificationsOnce()
         store.escapes?.let { escape -> BackHandler { escape() } }
         Sheets(store)
         // The viewer stays while it flies its picture back into the thread.

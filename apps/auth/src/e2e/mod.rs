@@ -2,6 +2,7 @@
 //! server that answers the token request; everything else is the real thing.
 
 mod devices;
+mod push;
 mod sign_in;
 mod web;
 mod whole;
@@ -21,6 +22,7 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 
 use crate::config::Config;
+use crate::push::Pusher;
 use crate::{Inner, google, router};
 
 const GOOGLE_CLIENT_ID: &str = "google-client";
@@ -75,9 +77,11 @@ impl Auth {
             dev_login: true,
             install_url: INSTALL_URL.into(),
             web_url: Some(WEB_URL.into()),
+            push: Default::default(),
         };
         configure(&mut config);
         let state = Arc::new(Inner {
+            push: Pusher::new(&config.push),
             config,
             db: db.clone(),
             http: reqwest::Client::new(),

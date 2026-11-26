@@ -4,7 +4,7 @@ import SwiftUI
 /// The settings' sections in groups, each pushing its page, or selected beside it on a wide
 /// sheet. While a search is typed, the groups it finds take their place.
 struct SettingsSections: View {
-    private static let groups: [[SettingsSection]] = [[.general], [.accounts, .servers, .agentGateway, .mcpGateway, .projects], [.pullRequests, .textGeneration], [.integrations]]
+    private static let groups: [[SettingsSection]] = [[.general, .notifications], [.accounts, .servers, .agentGateway, .mcpGateway, .projects], [.pullRequests, .textGeneration], [.integrations]]
 
     @Environment(AppStore.self) private var store
     /// The section shown beside the list, on a wide sheet, lit in it. Without one, each pushes.
@@ -79,6 +79,7 @@ struct SettingsSections: View {
 /// picked.
 struct SettingsPage: View {
     @Environment(AppStore.self) private var store
+    @Environment(PushNotifications.self) private var push
     let section: SettingsSection
     @AppStorage("appearance") private var appearance = Appearance.system
     @AppStorage(AppStore.steersKey) private var steers = AppStore.steersByDefault
@@ -92,6 +93,7 @@ struct SettingsPage: View {
             searching(SettingsList {
                 switch section {
                 case .general: general
+                case .notifications: notifications
                 case .servers: servers
                 case .accounts: agentAccounts
                 case .projects: projects
@@ -214,6 +216,74 @@ struct SettingsPage: View {
             LabeledContent("Version", value: store.updater.current)
         }
         .id("updates")
+    }
+
+    /// Whether the phone shows the alerts its servers push, which ones, and the Live Activity.
+    @ViewBuilder private var notifications: some View {
+        let mode = store.notificationSettings.mode
+        let refused = push.permission == .denied
+        Section {
+            Toggle("Notifications", isOn: Binding { mode != .off && !refused } set: { turnNotifications(on: $0) })
+            if mode.notifies && !refused {
+                Toggle("Sound", isOn: Binding { mode == .notificationsAndSound } set: {
+                    setNotificationMode($0 ? .notificationsAndSound : .notifications)
+                })
+            }
+            if refused {
+                Button { UIApplication.shared.open(URL(string: UIApplication.openNotificationSettingsURLString)!) } label: {
+                    SettingsActionLabel("Open Settings", symbol: .settings)
+                }
+            }
+        } footer: {
+            Text(refused ? NotificationsText.refusedOnPhone : NotificationsText.mode)
+                .foregroundStyle(Color.themeMutedForeground)
+        }
+        .id("notifications")
+
+        Section(NotificationsText.choices) {
+            ForEach(AlertChoices.rows, id: \.title) { row in
+                Toggle(row.title, isOn: notificationSetting((\NotificationSettings.choices).appending(path: row.choice)))
+            }
+        }
+        .disabled(mode == .off || refused)
+        .id("alert-choices")
+
+        Section {
+            Toggle("Live Activities", isOn: notificationSetting(\.live))
+        } footer: {
+            Text(NotificationsText.live)
+                .foregroundStyle(Color.themeMutedForeground)
+        }
+        .id("live-activities")
+
+        Section {
+        } footer: {
+            Text(NotificationsText.widget)
+                .foregroundStyle(Color.themeMutedForeground)
+        }
+    }
+
+    /// Turning notifications on asks the system first; while it refuses, they stay off.
+    private func turnNotifications(on: Bool) {
+        guard on else { return setNotificationMode(.off) }
+        Task {
+            guard await push.requestPermission() else { return }
+            setNotificationMode(.notificationsAndSound)
+        }
+    }
+
+    private func setNotificationMode(_ mode: NotificationMode) {
+        var settings = store.notificationSettings
+        settings.mode = mode
+        store.setNotificationSettings(settings)
+    }
+
+    private func notificationSetting(_ setting: WritableKeyPath<NotificationSettings, Bool>) -> Binding<Bool> {
+        Binding { store.notificationSettings[keyPath: setting] } set: {
+            var settings = store.notificationSettings
+            settings[keyPath: setting] = $0
+            store.setNotificationSettings(settings)
+        }
     }
 
     @ViewBuilder private var servers: some View {

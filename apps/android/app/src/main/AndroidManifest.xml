@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Installs the new versions it downloads from the releases, which the user allows once. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- The servers' alerts, and what the agents do while they work, as a Live Update from Android 16. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
 
     <queries>
         <!-- The browser that signs in, as a Custom Tab. -->
@@ -44,8 +47,31 @@
                 <data android:host="linear" />
                 <data android:host="ricrac" />
                 <data android:host="mcp" />
+                <!-- A thread a notification or the widget opens. -->
+                <data android:host="thread" />
             </intent-filter>
         </activity>
+
+        <!-- The auth server's pushes, through Firebase. -->
+        <service
+            android:name=".notifications.PushService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".notifications.AgentsWidgetReceiver"
+            android:exported="true"
+            android:label="Agents">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/agents_widget_info" />
+        </receiver>
 
         <!-- Hears what Android's installer did with an update. -->
         <receiver

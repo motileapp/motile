@@ -30,6 +30,7 @@ type OnClick = dyn Fn(&ClickEvent, &mut Window, &mut App);
 pub fn attachments(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
     let attached = store.read(cx).attachments();
     let pictured: Vec<Attachment> = attached.iter().filter(|attachment| attachment.pictured).cloned().collect();
+    let pictured_at: Vec<usize> = (0..attached.len()).filter(|index| attached[*index].pictured).collect();
     let viewed: Vec<_> = pictured.iter().filter_map(Attachment::viewed).collect();
     let mut items: Vec<AnyElement> = Vec::new();
     let continues = store.read(cx).selected_draft().and_then(|draft| draft.from.clone());
@@ -47,16 +48,25 @@ pub fn attachments(store: &Entity<Store>, cx: &mut App) -> impl IntoElement {
             })
         });
         let tile = tile(attachment, store.clone(), open.clone(), cx)
-            .on_click(move |event, window, cx| open(event, window, cx));
+            .on_click(move |event, window, cx| open(event, window, cx))
+            .child(measure(pictured_at[index]));
         items.push(tile.into_any_element());
     }
-    for attachment in attached.iter().filter(|attachment| !attachment.pictured) {
-        items.push(file_tile(attachment, store.clone(), cx).into_any_element());
+    for (index, attachment) in attached.iter().enumerate().filter(|(_, attachment)| !attachment.pictured) {
+        items.push(file_tile(attachment, store.clone(), cx).child(measure(index)).into_any_element());
     }
     div()
         .id("attachments")
         .overflow_x_scroll()
         .child(div().px(px(14.)).pt(px(12.)).flex().items_end().gap(px(8.)).children(items))
+}
+
+/// Keeps where the tile of the attachment at `index` is, which it is thrown in from when sent.
+fn measure(index: usize) -> impl IntoElement {
+    // Inside the tile's border.
+    canvas(move |bounds, _, _| crate::transcript::throw::record_tile(index, bounds.dilate(px(1.))), |_, _, _, _| {})
+        .absolute()
+        .inset_0()
 }
 
 /// An image or a video: its picture, how far it is on its way to the server, and the button that

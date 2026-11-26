@@ -2,10 +2,25 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>AppIdentifierPrefix</key>
+    <string>$(AppIdentifierPrefix)</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>app.motile.motile.thread</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>motile</string>
+            </array>
+        </dict>
+    </array>
     <key>ITSAppUsesNonExemptEncryption</key>
     <false/>
     <key>MotileAuthURL</key>
     <string>$(MOTILE_AUTH_URL)</string>
+    <key>NSSupportsLiveActivities</key>
+    <true/>
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>

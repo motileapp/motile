@@ -92,6 +92,7 @@ struct ComposerTextView: NSViewRepresentable {
         view.string = text
         scroll.documentView = view
         context.coordinator.textView = view
+        if onSubmit != nil { ThrowSources.composers.add(view) }
         context.coordinator.picked = skills?.pick?.id
         context.coordinator.chipify(atEnd: true)
         DispatchQueue.main.async {
@@ -230,7 +231,7 @@ final class ComposerScrollView: NSScrollView {
     }
 }
 
-final class ComposerNSTextView: PointerTextView {
+final class ComposerNSTextView: PointerTextView, ThrowSource {
     var onSubmit: (() -> Void)?
     var onFiles: (([URL]) -> Void)?
     var onFileDrag: ((Bool) -> Void)?
@@ -241,6 +242,13 @@ final class ComposerNSTextView: PointerTextView {
 
     /// What is written, with each skill's chip as its `$name`.
     var text: String { textStorage?.withSkillNames ?? string }
+    var written: String { text }
+    var writtenRect: CGRect {
+        let padding = textContainer?.lineFragmentPadding ?? 0
+        let used = textContainer.flatMap { layoutManager?.usedRect(for: $0) } ?? .zero
+        let x = textContainerInset.width + padding
+        return CGRect(x: x, y: textContainerInset.height, width: bounds.width - x * 2, height: used.height)
+    }
 
     override func keyDown(with event: NSEvent) {
         if let skills, skills.takesKeys(), !hasMarkedText(), let key = SkillMenuKey(event, onReturn: onSubmit) {
@@ -258,12 +266,36 @@ final class ComposerNSTextView: PointerTextView {
         onSubmit()
     }
 
+    /// How much of the placeholder shows, which AppKit animates.
+    @objc dynamic var placeholderOpacity: CGFloat = 1 {
+        didSet { needsDisplay = true }
+    }
+
+    override static func defaultAnimation(forKey key: NSAnimatablePropertyKey) -> Any? {
+        key == "placeholderOpacity" ? CABasicAnimation() : super.defaultAnimation(forKey: key)
+    }
+
+    func fadeInPlaceholder() {
+        placeholderOpacity = 0
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.placeholderDelay) { [weak self] in
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = Self.placeholderFade
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                self?.animator().placeholderOpacity = 1
+            }
+        }
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        guard string.isEmpty, !placeholder.isEmpty else { return }
+        guard string.isEmpty, !placeholder.isEmpty, placeholderOpacity > 0 else { return }
         let attributes: [NSAttributedString.Key: Any] = [.font: font ?? ComposerTextView.font, .foregroundColor: Theme.mutedStrongerForeground]
         let origin = NSPoint(x: textContainerInset.width + (textContainer?.lineFragmentPadding ?? 0), y: textContainerInset.height)
+        let context = NSGraphicsContext.current?.cgContext
+        context?.saveGState()
+        context?.setAlpha(placeholderOpacity)
         (placeholder as NSString).draw(at: origin, withAttributes: attributes)
+        context?.restoreGState()
     }
 
     override func resignFirstResponder() -> Bool {

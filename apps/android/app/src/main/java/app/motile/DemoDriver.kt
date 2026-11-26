@@ -17,8 +17,10 @@ import app.motile.core.SkillMenuKey
 import app.motile.core.skillKey
 import app.motile.core.UsageModel
 import app.motile.core.addToMessage
+import app.motile.core.jsonOf
 import app.motile.core.showInChat
 import app.motile.layout.LocalDrawerHolder
+import app.motile.notifications.Pushes
 import app.motile.panel.PanelTab
 import app.motile.platform.Platform
 import app.motile.transcript.RowModel
@@ -67,6 +69,8 @@ import java.util.concurrent.Executors
  *     slide <label> <share>             drags the program's slider with that label to a share of its track
  *     press <label>                     presses the program's button, or a transcript row's, with that label
  *     page close                        puts a program's page open over the screen back in its row
+ *     push alert <thread> <kind> [sealed]   handles an alert pushed through Firebase, as PushService does
+ *     push work <sealed>…               handles what the agents do, pushed in sealed parts
  */
 object DemoDriver {
     private val main = Handler(Looper.getMainLooper())
@@ -303,6 +307,15 @@ object DemoDriver {
                 drag(button.center.x, button.center.x, button.center.y)
             }
             "page" -> if (rest == "close") store.closeExpandedPage()
+            "push" -> {
+                val words = rest.split(' ')
+                val data = when (words.first()) {
+                    "alert" -> mapOf("motile" to "alert", "thread" to words.getOrElse(1) { "" }, "kind" to words.getOrElse(2) { "" }, "sealed" to words.getOrElse(3) { "" })
+                    "work" -> mapOf("motile" to "work", "parts" to jsonOf(words.drop(1)).toString())
+                    else -> return
+                }
+                Pushes.later { Pushes.received(Platform.context, data) }
+            }
             "steers" -> Preferences.set(AppStore.STEERS_KEY, rest == "on")
             "drop" -> store.dropTargeted = rest == "on"
         }

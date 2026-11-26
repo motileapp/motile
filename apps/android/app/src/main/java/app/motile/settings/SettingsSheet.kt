@@ -215,7 +215,7 @@ fun SettingsBar(title: String, trailing: (@Composable () -> Unit)? = null, subti
 }
 
 private val sectionGroups = listOf(
-    listOf(SettingsSection.General),
+    listOf(SettingsSection.General, SettingsSection.Notifications),
     listOf(SettingsSection.Accounts, SettingsSection.Servers, SettingsSection.AgentGateway, SettingsSection.McpGateway, SettingsSection.Projects),
     listOf(SettingsSection.PullRequests, SettingsSection.TextGeneration),
     listOf(SettingsSection.Integrations),

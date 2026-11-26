@@ -2,6 +2,7 @@
 //! channel and are handled in turn, so the state needs no locks. Anything that waits on the
 //! network runs in a task of its own and reports back through the same channel.
 
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -26,6 +27,7 @@ use serde_json::{Value, json};
 use tokio::sync::mpsc;
 use tokio::task::AbortHandle;
 
+use crate::alerts;
 use crate::all_servers;
 use crate::api::{
     AccountView, Children, Command, Config, Event, FindFrom, ProjectView, ScrollAt, Section, ServerView, SyncState,
@@ -61,6 +63,7 @@ use crate::server_stats;
 use crate::skills;
 use crate::sync::{self as relay, Origin, SYNC_PROTOCOL};
 use crate::{activity, usage};
+use motile_protocol::alerts::{ENDED_WORK_STAYS_SECS, ServerWork, WorkState};
 
 /// The newest items are rendered and sent first, so a long thread opens at once.
 const FIRST_ITEMS: usize = 30;
@@ -477,6 +480,16 @@ struct Core {
     /// Held while they are asked for, so that what is typed meanwhile waits for the answer.
     skills: Skills,
     keybindings: Keybindings,
+    notifications: alerts::Settings,
+    heard: alerts::Heard,
+    badge: RefCell<alerts::Badge>,
+    /// What the agents do changed since it was last told; it is told on the next tick.
+    work_changed: std::cell::Cell<bool>,
+    work: Vec<motile_protocol::alerts::ServerWork>,
+    /// What the phone gave for its pushes, sent to the auth server again when the settings change.
+    push_device: Option<alerts::PushDevice>,
+    /// The client is in front, with a window of it the user can see.
+    focused: bool,
     search: Search,
     relay: Relay,
     gateway: Gateway,
@@ -597,6 +610,13 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         searched_images: SearchedImages::default(),
         skills: Skills::default(),
         keybindings: Keybindings::load(&config.data_dir, &config.platform),
+        notifications: alerts::Settings::load(&config.data_dir),
+        heard: alerts::Heard::default(),
+        badge: RefCell::default(),
+        work_changed: std::cell::Cell::new(true),
+        work: Vec::new(),
+        push_device: None,
+        focused: true,
         backup: Backup { saved: backup::Saved::load(&config.data_dir), giving: HashSet::new(), failed: HashMap::new() },
         config,
         sink,
@@ -674,7 +694,19 @@ impl Core {
         if transcript_of(&event).is_some_and(|thread_id| self.is_left(thread_id)) {
             return;
         }
+        let recounted = match &event {
+            Event::ThreadUpsert { thread } => self.badge.borrow_mut().upsert(thread),
+            Event::Threads { server_id, threads } => self.badge.borrow_mut().replace(server_id, threads),
+            Event::ThreadDeleted { thread_id } => self.badge.borrow_mut().remove(thread_id),
+            _ => false,
+        };
+        if matches!(event, Event::ThreadUpsert { .. } | Event::Threads { .. } | Event::ThreadDeleted { .. }) {
+            self.work_changed.set(true);
+        }
         (self.sink)(event);
+        if recounted {
+            (self.sink)(Event::Badge { count: self.badge.borrow().count() });
+        }
     }
 
     fn is_left(&self, thread_id: &str) -> bool {
@@ -732,6 +764,8 @@ impl Core {
     /// Shows what is known from last time, then goes to find out what is true now.
     fn begin(&mut self) {
         self.emit_keybindings();
+        self.emit(Event::Notifications { settings: self.notifications });
+        self.emit(Event::Badge { count: 0 });
         self.emit_account();
         self.sync_servers();
         self.emit_outbox();
@@ -909,6 +943,7 @@ impl Core {
             Input::Stop => {}
             Input::Tick => {
                 self.ticks += 1;
+                self.emit_work();
                 let ended = self.engagement.waiting().len();
                 self.engagement.tick(now());
                 if self.engagement.save_if_changed(&self.cache, ended) || self.ticks.is_multiple_of(ENGAGED_RETRY_TICKS)
@@ -971,6 +1006,71 @@ impl Core {
 
     fn signed_in_now(&self) -> bool {
         self.me.user.is_some()
+    }
+
+    // ---- alerts ----
+
+    fn alert(&mut self, server_id: &str, alert: motile_protocol::alerts::Alert) {
+        if !self.heard.first_time(&alert.id) {
+            return;
+        }
+        let at = alerts::Where {
+            focused: self.focused,
+            on_thread: self
+                .open
+                .get(&alert.thread_id)
+                .is_some_and(|open| open.server_id == server_id && open.left.is_none()),
+            pushed: matches!(self.config.platform.as_str(), "ios" | "ipados" | "android"),
+        };
+        let Some(shown) = alerts::shown(&self.notifications, alert.kind, &at) else { return };
+        let server = self.servers.iter().find(|server| server.device.public_key == server_id);
+        let server_name = server.map(|server| short_name(&server.device.name)).unwrap_or_default();
+        self.emit(Event::Alert { alert, server_name, shown });
+    }
+
+    /// Tells the work again when a thread changed, or when a turn that ended may have aged out.
+    fn emit_work(&mut self) {
+        let at = now();
+        let ages_out = self.work.iter().flat_map(|server| &server.items).any(|item| {
+            !matches!(item.state, WorkState::Working | WorkState::Waiting) && at - item.since >= ENDED_WORK_STAYS_SECS
+        });
+        if !self.work_changed.replace(false) && !ages_out {
+            return;
+        }
+        let work: Vec<ServerWork> = self
+            .servers
+            .iter()
+            .filter(|server| !server.removed)
+            .map(|server| {
+                let server_id = &server.device.public_key;
+                let projects: HashMap<String, String> =
+                    self.cache.projects(server_id).into_iter().map(|project| (project.id, project.name)).collect();
+                let name = short_name(&server.device.name);
+                let project = |id: &str| projects.get(id).cloned().unwrap_or_default();
+                alerts::work_of(server_id, &name, server.threads.values(), project, at)
+            })
+            .collect();
+        let same = work.len() == self.work.len()
+            && work.iter().zip(&self.work).all(|(new, old)| new.server_id == old.server_id && new.items == old.items);
+        if same {
+            return;
+        }
+        self.work = work.clone();
+        self.emit(Event::Work { servers: work });
+    }
+
+    fn send_push_registration(&self) {
+        let Some(device) = &self.push_device else { return };
+        if !self.signed_in_now() {
+            return;
+        }
+        let registration = alerts::registration(device, &self.notifications);
+        let (auth, key) = (self.auth.clone(), self.key.clone());
+        tokio::spawn(async move {
+            if let Err(error) = auth.set_push(&key, &registration).await {
+                tracing::warn!("couldn't register for pushes: {error:#}");
+            }
+        });
     }
 
     fn emit_keybindings(&self) {
@@ -2464,6 +2564,7 @@ impl Core {
                 }
             }
             LinkEvent::List(message) => self.list_message(server_id, message),
+            LinkEvent::Alert(alert) => self.alert(server_id, alert),
             LinkEvent::Thread { thread_id, message } if self.open.contains_key(&thread_id) => {
                 self.thread_message(&thread_id, message)
             }
@@ -3421,6 +3522,7 @@ impl Core {
                 self.reply(id, Ok(json!({})));
             }
             Command::Focus { focused, server_id, project_id } => {
+                self.focused = focused;
                 let shown = server_id.zip(project_id).filter(|(server_id, _)| {
                     self.servers.iter().any(|server| server.device.public_key == *server_id && !server.removed)
                 });
@@ -3440,6 +3542,38 @@ impl Core {
                     self.send_engaged();
                 }
                 self.reply(id, Ok(json!({})));
+            }
+            Command::SetNotifications { settings } => {
+                self.notifications = settings;
+                settings.save(&self.config.data_dir);
+                self.emit(Event::Notifications { settings });
+                self.send_push_registration();
+                self.reply(id, Ok(json!({})));
+            }
+            Command::RegisterPush { service, token, live_start_token, live_token } => {
+                self.push_device = Some(alerts::PushDevice { service, token, live_start_token, live_token });
+                self.send_push_registration();
+                self.reply(id, Ok(json!({})));
+            }
+            Command::UnregisterPush => {
+                self.push_device = None;
+                let (auth, key) = (self.auth.clone(), self.key.clone());
+                let sink = self.sink.clone();
+                tokio::spawn(async move {
+                    let result = auth.remove_push(&key).await.map(|()| json!({})).map_err(error_text);
+                    reply(&sink, id, result);
+                });
+            }
+            Command::PushSecret => {
+                let secret = alerts::push_secret(&self.key);
+                self.reply(id, Ok(json!({ "secret": secret })));
+            }
+            Command::OpenPush { sealed } => {
+                let opened = motile_protocol::alerts::PushKey::of_device(&self.key).open_pushed(&sealed);
+                let result = opened
+                    .and_then(|pushed| serde_json::to_value(pushed).ok())
+                    .ok_or_else(|| "This push couldn't be opened.".to_string());
+                self.reply(id, result);
             }
             Command::NetworkChanged => {
                 tracing::info!("the network changed");

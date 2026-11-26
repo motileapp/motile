@@ -13,6 +13,7 @@ use motile_core::connection::{Connection, Follow, ServerAddr, bind};
 use motile_core::link::{Link, LinkEvent, State};
 use motile_core::outbox::{Outbox, Outgoing};
 use motile_core::sync::{self as relay, Origin};
+use motile_protocol::alerts::AlertKind;
 use motile_protocol::frame::{read_frame, write_frame};
 use motile_protocol::gateway_wire::{AccountStatus, GatewayAccount, GatewayReply, GatewayRequest, WsMessage};
 use motile_protocol::identity::DeviceKey;
@@ -27,6 +28,7 @@ use motile_protocol::wire::{
 };
 use motile_server::access::Access;
 use motile_server::agents::environment::Environment;
+use motile_server::alerts::Alerts;
 use motile_server::backup::Backup;
 use motile_server::gateway;
 use motile_server::hub::Hub;
@@ -263,8 +265,9 @@ async fn serve(
 
     let access = Access::new(vec![app_key.public()], None);
     let backup = Backup::new(hub.clone(), access.clone(), server_key.public(), dir.path().join("media"));
-    let server =
-        Server { hub: hub.clone(), access: access.clone(), attachments: dir.path().join("attachments"), backup };
+    let alerts = Alerts::start(hub.clone(), access.clone(), server_key.public()).await;
+    let attachments = dir.path().join("attachments");
+    let server = Server { hub: hub.clone(), access: access.clone(), alerts, attachments, backup };
     tokio::spawn(server.run(endpoint.clone()));
     (endpoint, address, hub, access)
 }
@@ -1096,6 +1099,47 @@ async fn first_approval(transcript: &mut Transcript, follow: &mut Follow) -> App
         transcript.apply(next(follow).await);
     }
     transcript.approvals[0].clone()
+}
+
+#[tokio::test]
+async fn a_client_watching_alerts_hears_each_approval_and_the_end_of_the_turn() {
+    let harness = Harness::start(fixture(Agent::Claude), "0").await;
+    let connection = harness.connect().await;
+    let new_thread = harness.new_thread(&connection, Agent::Claude).await;
+    let mut alerts = connection.follow(&Request::WatchAlerts).await.unwrap();
+    let thread_id = send(&connection, None, new_thread, "Use an f-string and run greet.py").await;
+    let answer = |approval_id: String, allow| {
+        let request = Request::Answer { thread_id: thread_id.clone(), approval_id, allow, answers: HashMap::new() };
+        let connection = &connection;
+        async move { connection.request(&request).await }
+    };
+    let mut next_alert = async || match next(&mut alerts).await {
+        Message::Alert { alert } => alert,
+        other => panic!("expected an alert, got {other:?}"),
+    };
+
+    let edit = next_alert().await;
+    assert_eq!((edit.thread_id.as_str(), edit.kind), (thread_id.as_str(), AlertKind::Approval));
+    assert_eq!(edit.server_id, harness.server_key.public());
+    assert_eq!(edit.project, "project");
+    assert_eq!(edit.body, "Needs your approval · Editing /srv/api/greet.py");
+    let mut transcript = Transcript::default();
+    let mut follow = open(&connection, &thread_id, 0).await;
+    let approval = first_approval(&mut transcript, &mut follow).await;
+    assert_eq!(answer(approval.id.clone(), true).await.unwrap(), Message::Ok);
+
+    let bash = next_alert().await;
+    assert_eq!(bash.kind, AlertKind::Approval);
+    assert!(bash.body.starts_with("Needs your approval · Running"), "{}", bash.body);
+    while transcript.approvals.first().is_none_or(|waiting| waiting.id == approval.id) {
+        transcript.apply(next(&mut follow).await);
+    }
+    assert_eq!(answer(transcript.approvals[0].id.clone(), false).await.unwrap(), Message::Ok);
+
+    let finished = next_alert().await;
+    assert_eq!((finished.thread_id.as_str(), finished.kind), (thread_id.as_str(), AlertKind::Finished));
+    assert_eq!(finished.body, "Finished");
+    assert_ne!(finished.id, edit.id);
 }
 
 #[tokio::test]

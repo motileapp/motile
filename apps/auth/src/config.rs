@@ -19,6 +19,22 @@ pub struct Config {
     /// The web app's address. Sign-ins it starts end at its `/auth/callback`; without it there
     /// are none.
     pub web_url: Option<String>,
+    pub push: PushConfig,
+}
+
+/// Where pushes to phones go through. Without APNs' or FCM's keys, nothing is pushed to those
+/// phones; the URLs stand in for Apple's and Google's in the tests.
+#[derive(Default, Clone)]
+pub struct PushConfig {
+    /// The text of the APNs key's .p8 file.
+    pub apns_key: Option<String>,
+    pub apns_key_id: Option<String>,
+    pub apns_team_id: Option<String>,
+    pub apns_url: Option<String>,
+    /// The Firebase service account's JSON.
+    pub fcm_service_account: Option<String>,
+    pub fcm_url: Option<String>,
+    pub fcm_token_url: Option<String>,
 }
 
 fn required(name: &str) -> Result<String, String> {
@@ -49,6 +65,15 @@ impl Config {
             dev_login: optional("DEV_LOGIN").is_some_and(|value| value == "1"),
             install_url: optional("INSTALL_URL").unwrap_or_else(|| DEFAULT_INSTALL_URL.to_string()),
             web_url: optional("WEB_URL").map(|url| url.trim_end_matches('/').to_string()),
+            push: PushConfig {
+                apns_key: optional("APNS_KEY"),
+                apns_key_id: optional("APNS_KEY_ID"),
+                apns_team_id: optional("APNS_TEAM_ID"),
+                apns_url: optional("APNS_URL").map(|url| url.trim_end_matches('/').to_string()),
+                fcm_service_account: optional("FCM_SERVICE_ACCOUNT"),
+                fcm_url: optional("FCM_URL").map(|url| url.trim_end_matches('/').to_string()),
+                fcm_token_url: optional("FCM_TOKEN_URL"),
+            },
         })
     }
 
@@ -82,6 +107,7 @@ mod tests {
             dev_login: false,
             install_url: DEFAULT_INSTALL_URL.into(),
             web_url: None,
+            push: PushConfig::default(),
         }
     }
 

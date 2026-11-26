@@ -1,5 +1,6 @@
 import AuthenticationServices
 import Foundation
+import MotileShared
 import Observation
 import UniformTypeIdentifiers
 
@@ -336,6 +337,16 @@ final class AppStore {
     /// Counts up when a thread or a draft is brought to the front, which puts away a sidebar
     /// that lies over it.
     private(set) var threadsShown = 0
+
+    // Notifications
+    /// This device's notification settings, as the core keeps them.
+    private(set) var notificationSettings = NotificationSettings()
+    /// How many threads wait for the user or have a reply the user hasn't seen, for the app's badge.
+    private(set) var badgeCount = 0
+    /// What every server's agents are doing, for the widgets.
+    private(set) var work: [ServerWork] = []
+    /// What shows the alerts the system shows, where the client does that itself.
+    @ObservationIgnored var alertPresenter: AlertPresenting?
 
     // What the servers hold
     /// The account's servers, which threads start and go on on.
@@ -834,6 +845,27 @@ final class AppStore {
             return { [weak self] in
                 guard let self, self.gateway != gateway else { return }
                 self.gateway = gateway
+            }
+        case "notifications":
+            let settings = NotificationSettings(json: event.object("settings") ?? [:])
+            return { [weak self] in
+                guard let self, self.notificationSettings != settings else { return }
+                self.notificationSettings = settings
+            }
+        case "alert":
+            guard let alert = AlertEvent(json: event) else { return nil }
+            return { [weak self] in self?.present(alert) }
+        case "badge":
+            let count = event.int("count")
+            return { [weak self] in
+                guard let self, self.badgeCount != count else { return }
+                self.badgeCount = count
+            }
+        case "work":
+            let work = ServerWork.list(event.objects("servers"))
+            return { [weak self] in
+                guard let self, self.work != work else { return }
+                self.work = work
             }
         case "thread_error":
             let message = event.string("message")
@@ -2316,10 +2348,10 @@ final class AppStore {
 
     /// What worked goes away by itself; what failed or is still under way stays until it is
     /// closed or replaced.
-    private func show(_ toast: Toast) {
+    private func show(_ toast: Toast, lasting seconds: Double = 10) {
         self.toast = toast
         guard !toast.failed, !toast.pending else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
             if self?.toast == toast { self?.toast = nil }
         }
     }
@@ -2539,6 +2571,8 @@ final class AppStore {
 
     private func open(_ thread: ThreadInfo) {
         openThreadID = thread.id
+        if toast?.alert?.threadID == thread.id { toast = nil }
+        alertPresenter?.threadOpened(serverId: thread.serverID, threadId: thread.id)
         activity = Activity(thread: thread)
         transcript.begin(threadID: thread.id, keepingRows: true)
         core.send("open_thread", ["server_id": thread.serverID, "thread_id": thread.id]) { [weak self] result in
@@ -2605,6 +2639,34 @@ final class AppStore {
     func reveal(_ threadID: String) {
         show(.thread(threadID))
         revealedThreadID = threadID
+    }
+
+    /// Opens the thread an alert is about, over the settings or the usage, or once it is known.
+    func openThread(serverId: String, threadId: String) {
+        closeSettings()
+        guard anyThread(threadId)?.serverID == serverId else {
+            lastSelection = threadId
+            return
+        }
+        reveal(threadId)
+    }
+
+    // MARK: Notifications
+
+    func setNotificationSettings(_ settings: NotificationSettings) {
+        notificationSettings = settings
+        core.send("set_notifications", ["settings": settings.json])
+    }
+
+    /// Shows an alert inside the client, where the core said to, and has the platform show the rest.
+    /// What failed or is still under way keeps its toast.
+    private func present(_ event: AlertEvent) {
+        alertPresenter?.present(event)
+        guard event.shown.toast, toast.map({ !$0.failed && !$0.pending }) ?? true else { return }
+        let alert = event.alert
+        show(
+            Toast(title: alert.threadTitle, description: alert.body, alert: AlertToast(kind: alert.kind, serverID: alert.serverId, threadID: alert.threadId)),
+            lasting: 6)
     }
 
     /// Where the client goes when what was open is gone.

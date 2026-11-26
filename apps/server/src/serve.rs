@@ -20,6 +20,7 @@ use tokio::sync::{Notify, watch};
 
 use crate::access::Access;
 use crate::activity::{self as kept, Sender};
+use crate::alerts::Alerts;
 use crate::backup::Backup;
 use crate::hub::{GitRun, Hub, ListSubscription, NewMessage, ThreadSubscription};
 use crate::media::MediaStore;
@@ -79,6 +80,7 @@ impl Caller {
 pub struct Server {
     pub hub: Arc<Hub>,
     pub access: Arc<Access>,
+    pub alerts: Arc<Alerts>,
     pub attachments: PathBuf,
     pub backup: Arc<Backup>,
 }
@@ -164,6 +166,7 @@ impl Server {
         let reply = match request {
             Request::Ping => Ok(Message::Pong),
             Request::WatchStats => return follow_stats(send).await,
+            Request::WatchAlerts => return follow_alerts(send, self.alerts.watch()).await,
             Request::Subscribe => {
                 hub.refresh_models_soon();
                 let asked = Instant::now();
@@ -676,6 +679,25 @@ async fn follow_stats(mut send: SendStream) -> anyhow::Result<()> {
                 latest.samples = latest.samples.split_off(latest.samples.len().saturating_sub(1));
                 write_frame(&mut send, &Message::Stats { stats: latest }).await?;
             }
+            _ = send.stopped() => break,
+        }
+    }
+    send.finish()?;
+    Ok(())
+}
+
+/// Sends each alert as it happens, until the client stops listening.
+async fn follow_alerts(
+    mut send: SendStream,
+    mut alerts: tokio::sync::broadcast::Receiver<motile_protocol::alerts::Alert>,
+) -> anyhow::Result<()> {
+    loop {
+        tokio::select! {
+            alert = alerts.recv() => match alert {
+                Ok(alert) => write_frame(&mut send, &Message::Alert { alert }).await?,
+                Err(RecvError::Lagged(_)) => continue,
+                Err(RecvError::Closed) => break,
+            },
             _ = send.stopped() => break,
         }
     }

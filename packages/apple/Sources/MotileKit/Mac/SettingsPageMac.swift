@@ -19,6 +19,7 @@ struct SettingsPage: View {
                 VStack(alignment: .leading, spacing: SettingsGroupTitle.groupGap) {
                     switch section {
                     case .general: general
+                    case .notifications: notifications
                     case .servers: servers
                     case .agentGateway: AgentGatewaySettings()
                     case .mcpGateway: McpGatewaySettings()
@@ -155,6 +156,55 @@ struct SettingsPage: View {
                 ActionButton("Show in Finder", variant: .outline, size: .large, action: revealLog)
                     .takesFirstClick(revealLog)
             }
+        }
+    }
+
+    /// How alerts reach the user, and which ones.
+    @ViewBuilder private var notifications: some View {
+        let settings = store.notificationSettings
+        let alerts = MacAlerts.shared
+        let refused = alerts.refused
+        SettingsGroup("notifications", "Alerts") {
+            SettingsRow {
+                SettingsLabel("Notifications", description: refused ? NotificationsText.refusedOnMac : NotificationsText.mode)
+            } trailing: {
+                if refused {
+                    ActionButton("Open System Settings", variant: .outline, size: .large) { alerts.openSystemSettings() }
+                } else {
+                    ActionMenu(settings.mode.label, variant: .outline, size: .large) {
+                        ForEach(NotificationMode.allCases) { mode in
+                            Button(mode.label) { alerts.choose(mode) }
+                        }
+                    }
+                }
+            }
+            ThemeDivider()
+            SettingsRow(control: Switch.height) {
+                SettingsLabel("Show alerts inside Motile", description: NotificationsText.toasts)
+            } trailing: {
+                Switch(isOn: notificationSetting(\.toasts))
+            }
+            .id("toasts")
+        }
+
+        SettingsGroup("alert-choices", NotificationsText.choices) {
+            let rows = AlertChoices.rows
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                SettingsRow(control: Switch.height) {
+                    SettingsLabel(row.title)
+                } trailing: {
+                    Switch(isOn: notificationSetting((\NotificationSettings.choices).appending(path: row.choice)))
+                }
+                if index < rows.count - 1 { ThemeDivider() }
+            }
+        }
+    }
+
+    private func notificationSetting(_ setting: WritableKeyPath<NotificationSettings, Bool>) -> Binding<Bool> {
+        Binding { store.notificationSettings[keyPath: setting] } set: {
+            var settings = store.notificationSettings
+            settings[keyPath: setting] = $0
+            store.setNotificationSettings(settings)
         }
     }
 
@@ -771,6 +821,7 @@ struct SettingsRow<Leading: View, Trailing: View>: View {
                 .padding(.vertical, scaled(10))
             Spacer(minLength: 12)
             HStack(spacing: edge) { controls(edge / 2) }
+                .fixedSize()
                 .padding(.trailing, edge - settingsInset)
         }
         .padding(.horizontal, settingsInset)

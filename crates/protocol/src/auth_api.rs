@@ -2,6 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::alerts::{AlertChoices, AlertKind};
+
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum DeviceKind {
@@ -148,4 +150,76 @@ pub struct DevLoginResponse {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ApiError {
     pub error: String,
+}
+
+/// Where the auth server pushes to a phone.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PushService {
+    /// Apple's push service, for the app whose bundle identifier is `topic`. `sandbox` for an app
+    /// run from Xcode, whose tokens only the sandbox takes.
+    Apns { topic: String, sandbox: bool },
+    /// Firebase Cloud Messaging.
+    Fcm,
+}
+
+/// A phone's push registration, which it sends again whenever any of it changes.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct PushRegistration {
+    pub service: PushService,
+    pub token: String,
+    pub choices: AlertChoices,
+    /// Shows what the agents do while they work: a Live Activity, or an ongoing notification.
+    pub live: bool,
+    /// The token that starts a Live Activity on the phone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub live_start_token: Option<String>,
+    /// The token of the Live Activity that runs on the phone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub live_token: Option<String>,
+}
+
+/// A phone of the account that takes pushes.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct PushTarget {
+    /// The phone's device key, which what is pushed to it is sealed to (`alerts::seal`).
+    pub device: String,
+    pub choices: AlertChoices,
+    pub live: bool,
+}
+
+/// An alert a server sealed for one phone.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct SealedAlert {
+    pub device: String,
+    pub thread_id: String,
+    pub kind: AlertKind,
+    pub sealed: String,
+}
+
+/// What a server's agents are doing, sealed for each phone. The counts are open, so that the auth
+/// server knows when to start and end a Live Activity.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct PushWork {
+    pub working: u32,
+    pub waiting: u32,
+    pub sealed: Vec<SealedFor>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct SealedFor {
+    pub device: String,
+    pub sealed: String,
+}
+
+/// What a push to a phone carries besides the alert's placeholder text: in the APNs payload beside
+/// `aps`, and as the FCM message's data.
+pub mod push_payload {
+    /// `alert` or `work`.
+    pub const TYPE: &str = "motile";
+    /// The sealed `alerts::Pushed`.
+    pub const SEALED: &str = "sealed";
+    pub const THREAD: &str = "thread";
+    /// For `work` on Android: every server's sealed `ServerWork`, as a JSON array of strings.
+    pub const PARTS: &str = "parts";
 }

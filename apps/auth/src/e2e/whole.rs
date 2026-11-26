@@ -16,6 +16,7 @@ use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::{Access as AgentAccess, Agent, NewThread, Request, Speaker, ToolStatus};
 use motile_server::access::{Access, AccountSource};
 use motile_server::agents::environment::Environment;
+use motile_server::alerts::Alerts;
 use motile_server::backup::Backup;
 use motile_server::config::DataDir;
 use motile_server::hub::Hub;
@@ -153,7 +154,11 @@ impl Client {
             | Event::Gateway { .. }
             | Event::AllServers { .. }
             | Event::ServerStats { .. }
-            | Event::StatsPlaceholders { .. } => {}
+            | Event::StatsPlaceholders { .. }
+            | Event::Notifications { .. }
+            | Event::Alert { .. }
+            | Event::Work { .. }
+            | Event::Badge { .. } => {}
         }
     }
 
@@ -221,8 +226,9 @@ async fn run_server(data: &DataDir, endpoint: iroh::Endpoint, key: DeviceKey) {
     let access =
         Access::new(Vec::new(), Some(AccountSource { auth_url: account.auth_url, key, cache: data.account_keys() }));
     access.keep_fresh();
+    let alerts = Alerts::start(hub.clone(), access.clone(), me.clone()).await;
     let backup = Backup::new(hub.clone(), access.clone(), me, data.media());
-    let server = Server { hub, access, attachments: data.attachments(), backup };
+    let server = Server { hub, access, alerts, attachments: data.attachments(), backup };
     tokio::spawn(server.run(endpoint));
 }
 

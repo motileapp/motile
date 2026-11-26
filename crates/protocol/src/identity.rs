@@ -32,6 +32,11 @@ impl DeviceKey {
         hex::encode(self.0.verifying_key().to_bytes())
     }
 
+    /// The key as an X25519 secret, which what is pushed to a phone is sealed to.
+    pub fn x25519_secret(&self) -> [u8; 32] {
+        self.0.to_scalar_bytes()
+    }
+
     pub fn sign(&self, message: &[u8]) -> String {
         hex::encode(self.0.sign(message).to_bytes())
     }
@@ -77,6 +82,12 @@ pub fn is_public_key(public_key: &str) -> bool {
 fn verifying_key(public_key: &str) -> Option<VerifyingKey> {
     let bytes = <[u8; 32]>::try_from(hex::decode(public_key).ok()?).ok()?;
     VerifyingKey::from_bytes(&bytes).ok()
+}
+
+/// The X25519 public key of the device whose key is `public_key`, which `x25519_secret` matches.
+pub fn x25519_public(public_key: &str) -> Option<[u8; 32]> {
+    let bytes = <[u8; 32]>::try_from(hex::decode(public_key).ok()?).ok()?;
+    Some(VerifyingKey::from_bytes(&bytes).ok()?.to_montgomery().to_bytes())
 }
 
 pub fn verify(public_key: &str, message: &[u8], signature: &str) -> bool {

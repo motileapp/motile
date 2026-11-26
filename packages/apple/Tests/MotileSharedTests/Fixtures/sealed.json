@@ -1,0 +1,50 @@
+{
+  "alert": "RJEUCuocyjsJeJ0BmBsl5L6igAaKCalXcFpMfLNihH7kMqsEESPkYR9nH0Q6jI0jv9eaVoMg1kPzStvRjgUjqV65bgVDyQnqH5kAi4sG/hrR/csqCKoX9Vw2WRzXRP6UdPZAQrzL9sc7N6EVzjoS5K3mRDiZU70gXft1rnZaJDzm031i93VDD9tQ69BCgb9Lu+lFaM6jcyrBpTAW90alw9WMVrrufMqBFsruGkOw/uF8KETXQBCBxvVizmL7mL5vfjY3wXMTLWSAuQhwx7PlTN+bB/GgVRYhccrSt6HT7gwQTNGNg2Q2Z7qgL2WsodQIK16b4xzkCC+anPGKhCf8zmhlTcb/ZcDUIc+pXDS8QaJGKTx/NVuMDA==",
+  "alert_json": {
+    "at": 1790000000.5,
+    "body": "Needs your approval · Run greet.py",
+    "detail": "Run greet.py",
+    "id": "alert-1",
+    "kind": "approval",
+    "project": "motile",
+    "server_id": "server-1",
+    "thread_id": "thread-1",
+    "thread_title": "Fix the login",
+    "type": "alert"
+  },
+  "device": "ea4a6c63e29c520abef5507b132ec5f9954776aebebe7b92421eea691446d22c",
+  "other_device_alert": "/jxuOgf72wcblTh7pjUXOYALOlCgx8F7GMwhhdbtBxJ+CBnwSfSvs8zdCdVcPwrj+z1qsMY9ckhnw9B3V6gzKjc8Eo6ez2vqQfblacdAdFqc7ra/WNr1CVG04y9PL9NyPLEcr3zxQTuQ5mBh4NLuTRM7PXO0WuTZNGr1vj3AgIVo4n1JNED6dyeEYjSDM5gLQUZ7mjwfKvvrTNV7KTjKSmx6T8nH56SpNU4wZE9RqoXxFMIniynOwBzYWtlWnlwhfE1nNxjhbSnW+PEr57HWwMYc4cdYuDi1kGo8CCFb7WR5KfM2eNzRr/OqpoLip8pwUl2VzALP0nlNF5sEd1vsM6Tz3VKlcL12hsPwEj7nQIdi/vb6gEvTjQ==",
+  "secret": "L605/v1/o+IAqcYm7vWZ5hotBVxIqCiKTn5MS8o5KPg=",
+  "work": "1pbkAc19N1LhgSgP6nqnDVqDaqNQChrMoxjkCL2RjS641r2iGXGhuKvD0IFpPVfk8AcesQdUjEk0VCV3NPSoSvoDSNlg5zdvXhvE9Pz5Nd8zuZCGGH8PXqqWVHR176XmQ32GbrJg3NqJhdicUb2T1I83SGEd7i/xpsdLt6eCYiWqSQS8qH1SHwT2slfR7DeUuXViSMJkgfWYP/ECiWeO8nkyLByyGg2vJPr9ZPMb1TFQiV1ImI7t1ZpA9OSVLKjTSBkmaJ3yHDCnKc6jb7yQ/6Rf4vZxf06+vgN0aM+tnkEVJw+1EE8JZEOPf3gWQhXqvndjAPdQgydLtR/GW6v6MXyq7RYKYmivcm0kcUJ5iXObfbWY8X71JIUfNdtzlcQvXM60pXLEu+Q1D6v7uoYAkuUphfzbxPUlF+CdgbstF2IAPCjOuDubettCrf7UuYhTkbTEpbSgWVAir3BZz1kmXAEmnpHAqgwcvBEGwglg1uue7ZN6TcwGREbVCMQqMsBbjn5nDde0LXAlpdv5pvnwO9kYIygej0Lnx2DsW6Yx38DX9cKQCqsyA9Wt26cdu3/PRd10G8r90hSnVWo7m+30iSSU",
+  "work_json": {
+    "at": 1790000200.0,
+    "items": [
+      {
+        "project": "motile",
+        "since": 1790000100.0,
+        "state": "waiting",
+        "thread_id": "t-wait",
+        "title": "Waits"
+      },
+      {
+        "project": "motile",
+        "since": 1790000050.0,
+        "state": "working",
+        "thread_id": "t-work",
+        "title": "Works"
+      },
+      {
+        "project": "web",
+        "since": 1789999900.0,
+        "state": "finished",
+        "thread_id": "t-done",
+        "title": "Ended"
+      }
+    ],
+    "server_id": "server-1",
+    "server_name": "studio",
+    "type": "work",
+    "waiting": 1,
+    "working": 1
+  }
+}

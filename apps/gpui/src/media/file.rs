@@ -374,7 +374,7 @@ pub fn attached_card(
     removed: bool,
     window: &mut Window,
     cx: &mut App,
-) -> AnyElement {
+) -> Stateful<Div> {
     let kept = attached.file && attached.media.is_some();
     let file = SentFile {
         id: attached.media.clone().unwrap_or_default(),
@@ -382,7 +382,7 @@ pub fn attached_card(
         alt: String::new(),
         name: attached.name.clone(),
     };
-    file_card(key.into(), store, &file, kept, removed, window, cx).w(px(width)).max_w_full().into_any_element()
+    file_card(key.into(), store, &file, kept, removed, window, cx).w(px(width)).max_w_full()
 }
 
 /// A file as a card with its name, its kind and size. Its icon says where the download is, as a

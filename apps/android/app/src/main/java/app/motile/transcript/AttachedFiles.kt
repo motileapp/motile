@@ -36,32 +36,32 @@ import java.io.File
  * The files attached to a message, in its bubble: the images and videos as tiles that open in the
  * viewer, and the others under them as the cards an agent's files are, side by side where they fit.
  * The tiles and the cards are all one size, so the row knows its height before any picture is on
- * this device.
+ * this device. `piece` is given each file's index among `files`, for its tile or card.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun AttachedFiles(files: List<AttachedFile>, modifier: Modifier = Modifier) {
+fun AttachedFiles(files: List<AttachedFile>, modifier: Modifier = Modifier, piece: (Int) -> Modifier = { Modifier }) {
     val store = LocalStore.current
-    val pictured = files.filter { it.pictured }
+    val pictured = files.withIndex().filter { it.value.pictured }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(AttachedFiles.gap)) {
         if (pictured.isNotEmpty()) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(AttachedFiles.gap), verticalArrangement = Arrangement.spacedBy(AttachedFiles.gap)) {
-                pictured.forEachIndexed { index, file ->
-                    Tile(file) {
-                        val viewed = pictured.mapNotNull { shown -> shown.media?.let { ViewedMedia(shown.name, shown.video, ViewedMedia.Source.Media(it)) } }
+                pictured.forEachIndexed { index, (at, file) ->
+                    Tile(file, piece(at)) {
+                        val viewed = pictured.mapNotNull { (_, shown) -> shown.media?.let { ViewedMedia(shown.name, shown.video, ViewedMedia.Source.Media(it)) } }
                         store.view(viewed, index)
                     }
                 }
             }
         }
-        val named = files.filter { !it.pictured }
-        if (named.isNotEmpty()) AttachedCards(named)
+        val named = files.withIndex().filter { !it.value.pictured }
+        if (named.isNotEmpty()) AttachedCards(named, piece)
     }
 }
 
 /** As many cards to a line as fit at their narrowest, each as wide as its share up to the widest. */
 @Composable
-private fun AttachedCards(files: List<AttachedFile>) {
+private fun AttachedCards(files: List<IndexedValue<AttachedFile>>, piece: (Int) -> Modifier) {
     BoxWithConstraints {
         val gap = AttachedFiles.gap
         val fit = ((maxWidth + gap) / (FileRow.narrowest + gap)).toInt()
@@ -71,9 +71,9 @@ private fun AttachedCards(files: List<AttachedFile>) {
         Column(verticalArrangement = Arrangement.spacedBy(gap)) {
             for (line in files.chunked(columns)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(gap)) {
-                    for (file in line) {
+                    for ((at, file) in line) {
                         val download = file.download
-                        FileCard(download ?: SentFile("", file.size, "", file.name), Modifier.width(width), kept = download != null)
+                        FileCard(download ?: SentFile("", file.size, "", file.name), piece(at).width(width), kept = download != null)
                     }
                 }
             }
@@ -96,7 +96,7 @@ object AttachedFiles {
 
 /** One image or video: all of its picture, fitted in the tile, with a play sign on a video. */
 @Composable
-private fun Tile(file: AttachedFile, open: () -> Unit) {
+private fun Tile(file: AttachedFile, modifier: Modifier, open: () -> Unit) {
     val store = LocalStore.current
     val scope = rememberCoroutineScope()
     val key = file.picture?.let { "tile:$it" }
@@ -109,7 +109,7 @@ private fun Tile(file: AttachedFile, open: () -> Unit) {
     }
     ContextMenuArea(
         items = { mediaActions(file.video, file.name) { done -> file.media?.let { fetchThen(store, scope, it, done) } } },
-        modifier = Modifier.size(AttachedFiles.tile).semantics { contentDescription = file.name },
+        modifier = modifier.size(AttachedFiles.tile).semantics { contentDescription = file.name },
         onClick = open,
     ) {
         val viewed = file.media?.let { ViewedMedia(file.name, file.video, ViewedMedia.Source.Media(it)) }

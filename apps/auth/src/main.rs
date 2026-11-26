@@ -7,6 +7,7 @@ mod error;
 mod google;
 mod limits;
 mod pages;
+mod push;
 mod sign_in;
 
 use std::net::SocketAddr;
@@ -28,6 +29,7 @@ pub struct Inner {
     pub db: sqlx::PgPool,
     pub http: reqwest::Client,
     pub enroll_failures: limits::EnrollFailures,
+    pub push: push::Pusher,
 }
 
 pub type AppState = Arc<Inner>;
@@ -50,6 +52,10 @@ fn router(state: AppState) -> Router {
         .route("/api/devices/{public_key}", delete(api::remove_device))
         .route("/api/servers/{public_key}", delete(api::delete_server_completely))
         .route("/api/relay", put(api::set_relay))
+        .route("/api/push", put(api::set_push).delete(api::remove_push))
+        .route("/api/push/targets", get(api::push_targets))
+        .route("/api/push/alerts", post(api::push_alerts))
+        .route("/api/push/work", post(api::push_work))
         .fallback(pages::not_found)
         .layer(header(X_CONTENT_TYPE_OPTIONS, "nosniff"))
         .layer(header(X_FRAME_OPTIONS, "DENY"))
@@ -84,7 +90,8 @@ async fn main() {
     let db = PgPoolOptions::new().max_connections(10).connect(&config.database_url).await.expect("connect to Postgres");
     sqlx::migrate!().run(&db).await.expect("run migrations");
     let http = reqwest::Client::builder().timeout(Duration::from_secs(15)).build().expect("HTTP client");
-    let state = Arc::new(Inner { config, db, http, enroll_failures: Default::default() });
+    let push = push::Pusher::new(&config.push);
+    let state = Arc::new(Inner { config, db, http, enroll_failures: Default::default(), push });
 
     let cleanup_state = state.clone();
     tokio::spawn(async move {
