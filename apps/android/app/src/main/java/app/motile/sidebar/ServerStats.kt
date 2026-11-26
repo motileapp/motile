@@ -53,8 +53,7 @@ fun ServerStatsHeader(server: Server, modifier: Modifier = Modifier) {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // The line keeps its room while the stats come, so that nothing under it moves.
-            val uptime = store.serverStats[server.id]?.uptime?.let { uptime(it, Theme.colors.mutedForeground, Theme.colors.foreground) }
+            val uptime = store.stats(server.id)?.uptime?.let { uptime(it, Theme.colors.mutedForeground, Theme.colors.foreground) }
             Text(uptime ?: AnnotatedString(" "), Modifier.weight(1f), style = Theme.uiDigits(rowText), maxLines = 1)
             UpdateButton(server, step)
         }

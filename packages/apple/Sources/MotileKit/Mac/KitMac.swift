@@ -478,13 +478,25 @@ final class IconButton: NSButton {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         guard tracking == nil else { return }
-        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        let options: NSTrackingArea.Options = [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow, .inVisibleRect]
+        let area = NSTrackingArea(rect: .zero, options: options, owner: self)
         addTrackingArea(area)
         tracking = area
     }
 
     override func mouseEntered(with event: NSEvent) {
-        hovering = !DropdownBackdrop.covers(self, at: event)
+        hover(event)
+    }
+
+    /// A dropdown may open or close over the button while the pointer stays on it.
+    override func mouseMoved(with event: NSEvent) {
+        hover(event)
+    }
+
+    private func hover(_ event: NSEvent) {
+        let hovering = !DropdownBackdrop.covers(self, at: event)
+        guard hovering != self.hovering else { return }
+        self.hovering = hovering
     }
 
     override func mouseExited(with event: NSEvent) {

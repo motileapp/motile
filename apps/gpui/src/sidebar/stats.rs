@@ -138,8 +138,7 @@ fn stats_card(store: &Entity<Store>, server: &Server, room: Pixels, cx: &App) ->
 fn header(store: &Entity<Store>, server: &Server, cx: &App) -> Div {
     let c = colors(cx);
     let state = store.read(cx);
-    // The line keeps its room while the stats come, so that nothing under it moves.
-    let uptime = state.server_stats.of(&server.id).uptime().map(str::to_string);
+    let uptime = state.server_stats.of(&server.id).view().uptime.clone();
     let note = state.server_update(server).map(update_note).map(|(text, spins)| {
         div()
             .flex()
@@ -173,10 +172,8 @@ fn header(store: &Entity<Store>, server: &Server, cx: &App) -> Div {
                 .text_size(TextSize::Sm)
                 .text_color(c.muted_foreground)
                 .font_features(tabular_numbers())
-                .child(if uptime.is_some() { "Uptime:" } else { " " })
-                .children(uptime.map(|uptime| {
-                    div().truncate().font_weight(FontWeight::MEDIUM).text_color(c.foreground).child(uptime)
-                })),
+                .child("Uptime:")
+                .child(div().truncate().font_weight(FontWeight::MEDIUM).text_color(c.foreground).child(uptime)),
         );
     let button =
         ServerUpdateStatus::new(store, server).button_only().size(ControlSize::Regular).surface(Surface::Popover);
@@ -190,29 +187,9 @@ fn header(store: &Entity<Store>, server: &Server, cx: &App) -> Div {
         .children(note)
 }
 
-/// The machine's parts, each a row of its name, how much it is now and its chart, or why they
-/// can't be shown.
-fn stats_rows(shown: &ShownStats, cx: &App) -> AnyElement {
-    let c = colors(cx);
-    match shown {
-        ShownStats::Loading => div()
-            .w_full()
-            .py(px(24.))
-            .flex()
-            .justify_center()
-            .text_color(c.muted_foreground)
-            .child(Spinner::new(IconSize::Md).render(cx))
-            .into_any_element(),
-        ShownStats::Failed(error) => {
-            div().text_size(TextSize::Xs).text_color(c.muted_foreground).child(error.clone()).into_any_element()
-        }
-        ShownStats::Shown(stats) => div()
-            .flex()
-            .flex_col()
-            .gap(px(ROW_GAP))
-            .children(stats.rows.iter().map(|row| stats_row(row, cx)))
-            .into_any_element(),
-    }
+/// The machine's parts, each a row of its name, how much it is now and its chart.
+fn stats_rows(shown: &ShownStats, cx: &App) -> Div {
+    div().flex().flex_col().gap(px(ROW_GAP)).children(shown.view().rows.iter().map(|row| stats_row(row, cx)))
 }
 
 /// A part of the machine: its symbol, its name and amounts, how much it is now, and under them the

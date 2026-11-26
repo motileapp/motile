@@ -1987,12 +1987,15 @@ struct ServerStats: Equatable {
     enum Shown: Equatable {
         case loading
         case shown(ServerStats)
-        case failed(String)
+        /// The server can't say.
+        case unknown
+    }
 
-        var uptime: String? {
-            guard case .shown(let stats) = self else { return nil }
-            return stats.uptime
-        }
+    /// What a dropdown shows before its machine answers, and once it can't: the rows with
+    /// nothing in them, so that nothing moves when the stats come.
+    struct Placeholders: Equatable {
+        let loading: ServerStats
+        let unknown: ServerStats
     }
 
     struct Row: Equatable, Identifiable {

@@ -735,6 +735,10 @@ impl Core {
         self.emit_account();
         self.sync_servers();
         self.emit_outbox();
+        self.emit(Event::StatsPlaceholders {
+            loading: server_stats::placeholder("Loading"),
+            unknown: server_stats::placeholder("Unknown"),
+        });
         self.emit(Event::Restored);
         self.bind_endpoint();
         self.check_account();
@@ -1808,9 +1812,8 @@ impl Core {
 
     fn watch_stats(&mut self, server_id: String) {
         let sink = self.sink.clone();
-        let link = match self.link(&server_id) {
-            Ok(link) => link,
-            Err(error) => return sink(Event::ServerStats { server_id, stats: None, error: Some(error) }),
+        let Ok(link) = self.link(&server_id) else {
+            return sink(Event::ServerStats { server_id, stats: None });
         };
         let key = server_id.clone();
         let task = tokio::spawn(async move {
@@ -1821,11 +1824,12 @@ impl Core {
                 .watch_stats(|stats| {
                     server_stats::merge(&mut kept, stats);
                     let stats = Some(server_stats::view(&kept));
-                    events(Event::ServerStats { server_id: id.clone(), stats, error: None });
+                    events(Event::ServerStats { server_id: id.clone(), stats });
                 })
                 .await;
             if let Err(error) = watched {
-                sink(Event::ServerStats { server_id, stats: None, error: Some(error_text(error)) });
+                tracing::warn!("couldn't follow the stats of {server_id}: {error:#}");
+                sink(Event::ServerStats { server_id, stats: None });
             }
         });
         self.watched_stats.insert(key, task.abort_handle());
@@ -2449,6 +2453,10 @@ impl Core {
                 if connected {
                     self.send_outbox();
                     self.send_engaged();
+                    // An open dropdown whose server went away follows it again.
+                    if self.watched_stats.get(server_id).is_some_and(AbortHandle::is_finished) {
+                        self.watch_stats(server_id.to_string());
+                    }
                 }
                 // The server may have been removed from the account, or this device.
                 if refused {

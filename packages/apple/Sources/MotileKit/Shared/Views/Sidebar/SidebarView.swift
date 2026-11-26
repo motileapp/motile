@@ -845,24 +845,32 @@ struct UndoRow: View {
 /// makes taller or shorter.
 private struct Shelf<Item: Identifiable, Header: View, Row: View>: View {
     private static var rowHeight: Double { doneRowHeight }
-    /// The room over the list's first row, under the shelf's line.
-    private static var listTop: Double { 2 }
-    private static var minHeight: Double { 4 * (rowHeight + rowGap) + 4 + listTop }
+    /// The header's line, and a row of a list of `lines`.
+    private static var lineHeight: Double { rowHeight + 6 }
 
     let items: [Item]
     let maxHeight: Double
     @Binding var expanded: Bool
     @Binding var height: Double
+    /// Rows that are lines as the header is: as tall, with nothing between them or around them.
+    var lines = false
     var scrollTarget: Item.ID?
     var pointed: (Item?, CGRect, NSView) -> Void = { _, _, _ in }
     @ViewBuilder let header: () -> Header
     @ViewBuilder let row: (Item) -> Row
     @State private var pulledUp = 0.0
 
+    private var itemHeight: Double { lines ? Self.lineHeight : Self.rowHeight + rowGap }
+    /// The room over the list's first row, under the header.
+    private var listTop: Double { lines ? 0 : 2 }
+    private var listBottom: Double { lines ? 0 : 4 - rowGap / 2 }
+
     var body: some View {
-        let contentHeight = Double(items.count) * (Self.rowHeight + rowGap) + 4 + Self.listTop
+        let itemHeight = CGFloat(itemHeight)
+        let around = listTop + listBottom + (lines ? 0 : rowGap / 2)
+        let contentHeight = Double(items.count) * itemHeight + around
         let tallest = min(maxHeight, contentHeight)
-        let heights = min(Self.minHeight, tallest)...tallest
+        let heights = min(4 * itemHeight + around, tallest)...tallest
         VStack(spacing: 0) {
             if expanded && heights.lowerBound < heights.upperBound {
                 resizeHandle(heights)
@@ -876,17 +884,17 @@ private struct Shelf<Item: Identifiable, Header: View, Row: View>: View {
                 .padding(.horizontal, sidebarEdge)
                 .frame(height: Self.rowHeight)
                 .padding(.top, 3)
-                .padding(.bottom, expanded ? 3 - rowGap / 2 : 3)
+                .padding(.bottom, expanded && !lines ? 3 - rowGap / 2 : 3)
             }
             .buttonStyle(.highlight(radius: 0))
 
             if expanded {
                 RecycledList(
-                    items: items, height: { _ in Self.rowHeight + rowGap }, topInset: Self.listTop, bottomInset: 4 - rowGap / 2,
+                    items: items, height: { _ in itemHeight }, topInset: listTop, bottomInset: listBottom,
                     scrollTarget: scrollTarget,
                     scrollsTargetToTop: true, pointed: pointed, row: row
                 )
-                .frame(height: listHeight(in: heights, pulledUp: pulledUp) + rowGap / 2)
+                .frame(height: listHeight(in: heights, pulledUp: pulledUp) + (lines ? 0 : rowGap / 2))
             }
         }
     }
@@ -937,7 +945,7 @@ private struct ServersShelf: View {
             }
         } else {
             VStack(spacing: 0) {
-                Shelf(items: servers, maxHeight: maxHeight, expanded: $expanded, height: $height) {
+                Shelf(items: servers, maxHeight: maxHeight, expanded: $expanded, height: $height, lines: true) {
                     HStack(spacing: 7) {
                         AllServersLine(servers: servers, expanded: expanded)
                         SidebarChevron(expanded: expanded)
@@ -945,10 +953,9 @@ private struct ServersShelf: View {
                 } row: { server in
                     ServerStatsButton(server: server) {
                         ServerLine(server: server)
-                            .padding(.leading, sidebarRowPadding)
-                            .padding(.trailing, sidebarRowPadding - serverButtonOutset)
+                            .padding(.leading, sidebarEdge)
+                            .padding(.trailing, sidebarEdge - serverButtonOutset)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .padding(rowMargin)
                     }
                 }
                 ServerErrors(servers: servers)

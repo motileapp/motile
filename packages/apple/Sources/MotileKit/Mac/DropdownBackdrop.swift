@@ -166,16 +166,34 @@ struct PressCatcherView: NSViewRepresentable {
 }
 
 /// SwiftUI that AppKit hosts on its own, as a list's row: under an open dropdown the pointer
-/// leaves it, so that nothing in it is lit.
+/// leaves it, so that nothing in it is lit, and comes back with its first move once the dropdown
+/// is gone. AppKit says nothing then, as to it the pointer never left.
 final class UncoveredHostingView<Content: View>: NSHostingView<Content> {
+    /// Whether SwiftUI thinks the pointer is outside while it is over the view, under a dropdown.
+    private var covered = false
+
     override func mouseEntered(with event: NSEvent) {
-        guard !DropdownBackdrop.covers(self, at: event) else { return }
+        covered = DropdownBackdrop.covers(self, at: event)
+        guard !covered else { return }
         super.mouseEntered(with: event)
     }
 
     override func mouseMoved(with event: NSEvent) {
-        guard !DropdownBackdrop.covers(self, at: event) else { return super.mouseExited(with: event) }
+        guard !DropdownBackdrop.covers(self, at: event) else {
+            guard !covered else { return }
+            covered = true
+            return super.mouseExited(with: event)
+        }
+        if covered {
+            covered = false
+            super.mouseEntered(with: event)
+        }
         super.mouseMoved(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        covered = false
+        super.mouseExited(with: event)
     }
 }
 

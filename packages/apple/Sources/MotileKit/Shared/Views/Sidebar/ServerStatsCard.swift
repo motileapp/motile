@@ -62,7 +62,6 @@ struct ServerStatsHeader: View {
                             .font(.ui(.sm, weight: .medium))
                             .foregroundStyle(Color.themeForeground)
                     }
-                    // The line keeps its room while the stats come, so that nothing under it moves.
                     uptime
                         .font(ServerStatsRow.font)
                         .monospacedDigit()
@@ -78,7 +77,7 @@ struct ServerStatsHeader: View {
 
     /// Named as a part's row is, and as much as its value.
     private var uptime: Text {
-        guard let uptime = store.serverStats[server.id]?.uptime else { return Text(verbatim: " ") }
+        guard let uptime = store.stats(of: server.id)?.uptime else { return Text(verbatim: " ") }
         let value = Text(uptime).foregroundStyle(Color.themeForeground).fontWeight(.medium)
         return Text("\(muted("Uptime:")) \(value)")
     }
@@ -153,8 +152,7 @@ extension AppStore {
     }
 }
 
-/// The machine's parts, each a row of its name, how much it is now and its chart, or why they
-/// can't be shown.
+/// The machine's parts, each a row of its name, how much it is now and its chart.
 struct ServerStatsRows: View {
     /// Between the line over the rows and the first.
     static let top: CGFloat = 12
@@ -165,22 +163,8 @@ struct ServerStatsRows: View {
     let server: Server
 
     var body: some View {
-        switch store.serverStats[server.id] ?? .loading {
-        case .loading:
-            Spinner(size: .md)
-                .foregroundStyle(Color.themeMutedForeground)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 24)
-        case .failed(let error):
-            Text(error)
-                .font(.ui(.xs))
-                .foregroundStyle(Color.themeMutedForeground)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        case .shown(let stats):
-            VStack(spacing: Self.gap) {
-                ForEach(stats.rows) { ServerStatsRow(row: $0) }
-            }
+        VStack(spacing: Self.gap) {
+            ForEach(store.stats(of: server.id)?.rows ?? []) { ServerStatsRow(row: $0) }
         }
     }
 }

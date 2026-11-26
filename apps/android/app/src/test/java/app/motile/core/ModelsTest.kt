@@ -267,19 +267,19 @@ class ModelsTest {
     }
 
     @Test
-    fun aServerStatsEventIsShownAsItsRowsOrItsError() {
+    fun aServerStatsEventIsShownAsItsRowsOrUnknown() {
         val bars = listOf(mapOf("height" to 0.0, "tone" to "success"), mapOf("height" to 0.9, "tone" to "warning"))
         val cpu = mapOf("kind" to "cpu", "label" to "CPU", "detail" to "12 cores", "value" to "76%", "bars" to bars)
         val disk = mapOf("kind" to "disk", "label" to "Disk", "used" to "120 GB", "value" to "24%", "bars" to emptyList<Any>(), "fill" to mapOf("height" to 0.24, "tone" to "pending"))
         val shown = ServerStats.shown(json("server_id" to "s", "stats" to mapOf("uptime" to "11d 5h", "rows" to listOf(cpu, disk))))
         val stats = (shown as ServerStats.Shown.Showing).stats
-        assertEquals("11d 5h", shown.uptime)
+        assertEquals("11d 5h", stats.uptime)
         assertEquals(listOf(ServerStats.Row.Kind.Cpu, ServerStats.Row.Kind.Disk), stats.rows.map { it.kind })
         assertEquals("12 cores", stats.rows[0].detail)
         assertNull(stats.rows[0].used)
         assertEquals(listOf(LimitsReport.Window.Tone.Success, LimitsReport.Window.Tone.Warning), stats.rows[0].bars.map { it.tone })
         assertNull(stats.rows[0].fill)
         assertEquals(ServerStats.Bar(0.24, LimitsReport.Window.Tone.Pending), stats.rows[1].fill)
-        assertEquals(ServerStats.Shown.Failed("The server is too old"), ServerStats.shown(json("server_id" to "s", "error" to "The server is too old")))
+        assertEquals(ServerStats.Shown.Unknown, ServerStats.shown(json("server_id" to "s")))
     }
 }

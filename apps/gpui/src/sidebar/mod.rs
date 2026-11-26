@@ -48,8 +48,6 @@ pub const ROW_PADDING: f32 = 8.;
 const SIDEBAR_EDGE: f32 = ROW_INSET + ROW_PADDING;
 /// How far a line's button reaches past the rows' edge, to look in line with it.
 const BUTTON_OUTSET: f32 = 4.;
-/// The room over the servers' list, under their line.
-const SHELF_LIST_TOP: f32 = 2.;
 /// The height of a row of one line.
 pub const DONE_ROW_HEIGHT: f32 = ControlSize::Regular.height();
 /// The least the gap over the sections takes, when the list is fuller than its room: the divider
