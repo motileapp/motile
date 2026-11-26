@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
+use motile_core::limits::Tone;
 
 use crate::theme::{Colors, ControlSize, IconSize, Layer, Opacity, Radius, ShadowSize, Surface, TextSize, colors};
 use crate::ui::control::{ActionButton, Variant, dotted};
@@ -587,6 +588,7 @@ pub struct FadingScroll {
     starts_at_end: bool,
     end_on: Option<u64>,
     fill: Option<Hsla>,
+    shrinks: bool,
     children: Vec<AnyElement>,
 }
 
@@ -599,8 +601,16 @@ impl FadingScroll {
             starts_at_end: false,
             end_on: None,
             fill: None,
+            shrinks: false,
             children: Vec::new(),
         }
+    }
+
+    /// In a column with less room than `max_height`, it takes only what is left and scrolls, as
+    /// a dropdown cut to its side of the button does.
+    pub fn shrinks(mut self) -> Self {
+        self.shrinks = true;
+        self
     }
 
     pub fn padding(mut self, padding: f32) -> Self {
@@ -652,6 +662,7 @@ impl RenderOnce for FadingScroll {
             .relative()
             .w_full()
             .max_h(px(self.max_height))
+            .when(self.shrinks, |scroll| scroll.min_h_0())
             .flex()
             .flex_col()
             .on_scroll_wheel(move |event, window, cx| {
@@ -674,6 +685,24 @@ impl RenderOnce for FadingScroll {
             );
         with_edge_fades(scroll, (above, below), fill)
     }
+}
+
+/// The colour of a tone of the limits, which a meter or a chart's bar is drawn in.
+pub fn tone_color(tone: Tone, c: &Colors) -> Hsla {
+    match tone {
+        Tone::Success => c.success,
+        Tone::Pending => c.pending,
+        Tone::Warning => c.warning,
+    }
+}
+
+/// A thin pill on a popover, filled as far as something was used, in its tone: the Mac's
+/// `LimitPill`.
+pub fn limit_pill(used_percent: f64, tone: Tone, cx: &App) -> Div {
+    let c = colors(cx);
+    div().h(px(3.)).rounded_full().overflow_hidden().bg(Surface::Popover.layer(Layer::Control, c)).child(
+        div().h_full().w(relative((used_percent / 100.).clamp(0., 1.) as f32)).rounded_full().bg(tone_color(tone, c)),
+    )
 }
 
 /// The look of what drops from a button or lies over the window: the popover's colour, a line

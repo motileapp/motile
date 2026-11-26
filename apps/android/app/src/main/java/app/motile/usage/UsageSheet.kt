@@ -2,19 +2,15 @@ package app.motile.usage
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import app.motile.LocalCloseSheet
 import app.motile.LocalStore
 import app.motile.core.UsageModel
 import app.motile.platform.Symbol
@@ -25,10 +21,8 @@ import app.motile.ui.Check
 import app.motile.ui.GlassButton
 import app.motile.ui.GlassCheckMenu
 import app.motile.ui.GlassPickMenu
-import app.motile.ui.glassButton
 import app.motile.ui.Icon
 import app.motile.ui.SheetBar
-import app.motile.ui.SheetCloseButton
 import app.motile.ui.Text
 
 private val margin = 16.dp
@@ -42,7 +36,6 @@ private val margin = 16.dp
 fun UsageSheet() {
     val store = LocalStore.current
     val model = store.usage
-    val close = LocalCloseSheet.current
     val servers = store.usageServers
     val picksServers = servers.size > 1
     val picksPeriod = model.tab != UsageModel.Tab.Limits
@@ -50,13 +43,10 @@ fun UsageSheet() {
         SheetBar(
             "Usage",
             subtitle = if (picksServers) model.serversLabel(servers) else null,
-            leading = { SheetCloseButton(onClose = close) },
             trailing = {
-                Row(Modifier.glassButton(CircleShape), verticalAlignment = Alignment.CenterVertically) {
-                    if (picksPeriod) PeriodMenu(model)
-                    if (picksServers) GlassCheckMenu(Symbol.Server, "Servers counted", model.serverChecks(servers), bare = true)
-                    GlassButton(Symbol.RefreshCw, "Refresh", onClick = { model.refresh() }, bare = true, pending = model.refreshing)
-                }
+                if (picksPeriod) PeriodMenu(model)
+                if (picksServers) GlassCheckMenu(Symbol.Server, "Servers counted", model.serverChecks(servers), bare = true)
+                GlassButton(Symbol.RefreshCw, "Refresh", onClick = { model.refresh() }, bare = true, pending = model.refreshing)
             },
         )
         Box(Modifier.weight(1f)) {

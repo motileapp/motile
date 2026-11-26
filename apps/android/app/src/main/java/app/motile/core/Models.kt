@@ -1933,3 +1933,58 @@ data class MessageMatch(
         itemID = json.optionalString("item_id"),
     )
 }
+
+/** A server's machine as its sheet shows it, ready to draw. */
+data class ServerStats(
+    /** "Uptime: 2d 10h". */
+    val uptime: String,
+    val rows: List<Row>,
+) {
+    sealed interface Shown {
+        data object Loading : Shown
+        data class Showing(val stats: ServerStats) : Shown
+        data class Failed(val error: String) : Shown
+
+        val uptime: String? get() = (this as? Showing)?.stats?.uptime
+    }
+
+    data class Row(
+        val kind: Kind,
+        val label: String,
+        /** "2 cores", or the total. */
+        val detail: String?,
+        /** What is used of the total. */
+        val used: String?,
+        val value: String,
+        /** The newest last. */
+        val bars: List<Bar>,
+        val fill: Bar?,
+    ) {
+        enum class Kind(val raw: String) { Cpu("cpu"), Memory("memory"), Download("download"), Upload("upload"), Disk("disk") }
+
+        constructor(json: JSON) : this(
+            kind = Kind.entries.firstOrNull { it.raw == json.string("kind") } ?: Kind.Cpu,
+            label = json.string("label"),
+            detail = json.optionalString("detail"),
+            used = json.optionalString("used"),
+            value = json.string("value"),
+            bars = json.objects("bars").map(::Bar),
+            fill = json.obj("fill")?.let(::Bar),
+        )
+    }
+
+    /** How tall a bar is, or how full a meter, from 0 to 1, and its colour. */
+    data class Bar(val height: Double, val tone: LimitsReport.Window.Tone) {
+        constructor(json: JSON) : this(
+            height = json.double("height"),
+            tone = LimitsReport.Window.Tone.entries.firstOrNull { it.raw == json.string("tone") } ?: LimitsReport.Window.Tone.Success,
+        )
+    }
+
+    constructor(json: JSON) : this(uptime = json.string("uptime"), rows = json.objects("rows").map(::Row))
+
+    companion object {
+        /** What a `server_stats` event says: the stats, or why they can't be shown. */
+        fun shown(event: JSON): Shown = event.obj("stats")?.let { Shown.Showing(ServerStats(it)) } ?: Shown.Failed(event.string("error"))
+    }
+}

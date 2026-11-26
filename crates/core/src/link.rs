@@ -10,7 +10,7 @@ use std::time::{Duration, SystemTime};
 use futures_lite::StreamExt;
 use iroh::endpoint::PathEvent;
 use iroh::{Endpoint, TransportAddr};
-use motile_protocol::wire::{ClientInfo, FileKind, GitStage, Item, Message, Request, RestartWhen};
+use motile_protocol::wire::{ClientInfo, FileKind, GitStage, Item, MachineStats, Message, Request, RestartWhen};
 use serde::Serialize;
 use tokio::sync::{Notify, mpsc};
 use tokio::task::AbortHandle;
@@ -558,6 +558,22 @@ impl Link {
                     anyhow::bail!("Your server gave an unexpected answer. Update it and try again. It said: {other:?}")
                 }
             }
+        }
+    }
+
+    /// Tells `each` what the server's machine does, as the server sends it, until the server stops.
+    pub async fn watch_stats(&self, mut each: impl FnMut(MachineStats)) -> anyhow::Result<()> {
+        let mut follow = self.connection().await?.follow(&Request::WatchStats).await?;
+        let mut heard = false;
+        loop {
+            match follow.next().await? {
+                Some(Message::Stats { stats }) => each(stats),
+                Some(Message::Error { message }) => anyhow::bail!(message),
+                Some(other) => anyhow::bail!("Your server gave an unexpected answer: {other:?}"),
+                None if heard => anyhow::bail!("The server stopped sending its stats."),
+                None => anyhow::bail!("Update this server to see what its machine is doing."),
+            }
+            heard = true;
         }
     }
 

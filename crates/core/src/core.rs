@@ -19,8 +19,8 @@ use motile_protocol::identity::{DeviceKey, random_token};
 use motile_protocol::now;
 use motile_protocol::wire::{
     Access, AccountSkills, Activity, Actor, Agent, AgentLimits, AllServers, Bucket, ComputerUse, ComputerUseState,
-    ContinueSettings, FileKind, Item, ItemKind, Media, Message, Project, PullRequestSettings, Request, ServerInfo,
-    Skill, Thread, ThreadMatch, ToolStatus, Worktree,
+    ContinueSettings, FileKind, Item, ItemKind, MachineStats, Media, Message, Project, PullRequestSettings, Request,
+    ServerInfo, Skill, Thread, ThreadMatch, ToolStatus, Worktree,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -57,6 +57,7 @@ use crate::render::openui::host::{Out, Programs, TimerKey};
 use crate::render::rows::{Row, RowKind, Splice, Transcript, Uncoloured, collapses, short_model_name};
 use crate::ricrac;
 use crate::search;
+use crate::server_stats;
 use crate::skills;
 use crate::sync::{self as relay, Origin, SYNC_PROTOCOL};
 use crate::{activity, usage};
@@ -482,6 +483,8 @@ struct Core {
     backup: Backup,
     /// Transcripts leave out what each turn changed.
     changes_hidden: bool,
+    /// The servers whose machine a dropdown shows, and what follows it.
+    watched_stats: HashMap<String, AbortHandle>,
 }
 
 /// The account's gateway, as far as the client knows it.
@@ -625,6 +628,7 @@ pub fn start(config: Config, sink: EventSink) -> anyhow::Result<Handle> {
         relay: Relay::default(),
         gateway: Gateway::default(),
         changes_hidden: false,
+        watched_stats: HashMap::new(),
     };
     // Loading the syntax definitions takes a moment; better now than at the first code block.
     tokio::task::spawn_blocking(|| highlight::highlight("rust", "fn main() {}"));
@@ -1800,6 +1804,31 @@ impl Core {
 
     fn server_mut(&mut self, server_id: &str) -> Option<&mut Server> {
         self.servers.iter_mut().find(|server| server.device.public_key == server_id)
+    }
+
+    fn watch_stats(&mut self, server_id: String) {
+        let sink = self.sink.clone();
+        let link = match self.link(&server_id) {
+            Ok(link) => link,
+            Err(error) => return sink(Event::ServerStats { server_id, stats: None, error: Some(error) }),
+        };
+        let key = server_id.clone();
+        let task = tokio::spawn(async move {
+            let mut kept = MachineStats::default();
+            let events = sink.clone();
+            let id = server_id.clone();
+            let watched = link
+                .watch_stats(|stats| {
+                    server_stats::merge(&mut kept, stats);
+                    let stats = Some(server_stats::view(&kept));
+                    events(Event::ServerStats { server_id: id.clone(), stats, error: None });
+                })
+                .await;
+            if let Err(error) = watched {
+                sink(Event::ServerStats { server_id, stats: None, error: Some(error_text(error)) });
+            }
+        });
+        self.watched_stats.insert(key, task.abort_handle());
     }
 
     fn link(&self, server_id: &str) -> Result<Arc<Link>, String> {
@@ -3465,6 +3494,15 @@ impl Core {
                     let _ = inputs.send(Input::AccountChecked { key: key.public(), result });
                     reply(&sink, id, set.map(|_| json!({})));
                 });
+            }
+            Command::WatchServerStats { server_id, on } => {
+                if let Some(watch) = self.watched_stats.remove(&server_id) {
+                    watch.abort();
+                }
+                if on {
+                    self.watch_stats(server_id);
+                }
+                self.reply(id, Ok(json!({})));
             }
             Command::WatchGateway { on } => {
                 let opened = on && !self.gateway.watching;

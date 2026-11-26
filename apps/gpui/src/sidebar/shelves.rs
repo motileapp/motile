@@ -11,6 +11,7 @@ use motile_core::link::State;
 
 use super::list::{Layout, place};
 use super::rows::row_light;
+use super::stats;
 use super::updates::ServerUpdateStatus;
 use super::{
     BUTTON_OUTSET, DONE_ROW_HEIGHT, ROW_GAP, ROW_PADDING, SHELF_LIST_TOP, SIDEBAR_EDGE, Shelf, Sidebar, row_margin,
@@ -18,7 +19,7 @@ use super::{
 use crate::models::{Server, ThreadInfo, section_label};
 use crate::prefs::Prefs;
 use crate::store::{Store, UndoNotice};
-use crate::theme::{self, IconSize, Opacity, TextSize, colors};
+use crate::theme::{self, IconSize, Opacity, Radius, TextSize, colors};
 use crate::ui::{Highlight, divider, ease_out, icons, tabular_numbers, tooltip};
 
 /// How tall a shelf's list can get at least, when there is room, and before it is resized.
@@ -526,16 +527,21 @@ impl Sidebar {
             - 7.;
         let height = |server: &Server| DONE_ROW_HEIGHT + error_lines(server, room, cx) as f32 * ERROR_LINE_HEIGHT;
         if let [server] = servers.as_slice() {
-            return div().flex().flex_col().flex_shrink_0().child(divider(cx)).child(
-                div()
-                    .h(px(height(server)))
-                    .my(px(3.))
-                    .pl(px(SIDEBAR_EDGE))
-                    .pr(px(SIDEBAR_EDGE - BUTTON_OUTSET))
-                    .flex()
-                    .items_center()
-                    .child(self.server_line(server, cx)),
-            );
+            let line = div()
+                .relative()
+                .h(px(height(server)))
+                .pl(px(SIDEBAR_EDGE))
+                .pr(px(SIDEBAR_EDGE - BUTTON_OUTSET))
+                .flex()
+                .items_center()
+                .child(self.server_line(server, cx));
+            let light = Highlight::new().radius(0.).opaque(true);
+            return div()
+                .flex()
+                .flex_col()
+                .flex_shrink_0()
+                .child(divider(cx))
+                .child(self.stats_button(server, light, cx).py(px(3.)).child(line));
         }
         let expanded = Shelf::Servers.expanded(&self.store.read(cx).prefs);
         let group = Shelf::Servers.group();
@@ -565,7 +571,10 @@ impl Sidebar {
             let margin = row_margin();
             let visible = self.list_mut(Shelf::Servers).visible(&layout, window);
             for index in visible {
+                let server = &servers[index];
+                let light = Highlight::new().radius(Radius::MD).inset(margin).opaque(true);
                 let line = div()
+                    .relative()
                     .size_full()
                     .pt(px(margin.top))
                     .pb(px(margin.bottom))
@@ -573,11 +582,34 @@ impl Sidebar {
                     .pr(px(margin.right + ROW_PADDING - BUTTON_OUTSET))
                     .flex()
                     .items_center()
-                    .child(self.server_line(&servers[index], cx));
-                rows.push(place(&layout, index, 0., line));
+                    .child(self.server_line(server, cx));
+                rows.push(place(&layout, index, 0., self.stats_button(server, light, cx).size_full().child(line)));
             }
         }
         self.shelf(Shelf::Servers, &layout, max, expanded, header, rows, cx)
+    }
+
+    /// A server's line as the button that opens what its machine does, lit while it is open. The
+    /// dropdown hangs from its light.
+    fn stats_button(&self, server: &Server, light: Highlight, cx: &App) -> Stateful<Div> {
+        let group = SharedString::from(format!("server-button-{}", server.id));
+        let open = self.store.read(cx).server_stats.open_server() == Some(server.id.as_str());
+        let (store, id) = (self.store.clone(), server.id.clone());
+        div()
+            .id(group.clone())
+            .group(group.clone())
+            .relative()
+            .child(light.lit(open).render(group, cx).child(self.track_bounds(&stats::line_key(&server.id))))
+            .on_click(move |_, _, cx| {
+                store.update(cx, |store, cx| {
+                    if open {
+                        store.close_stats();
+                    } else {
+                        store.open_stats(&id);
+                    }
+                    cx.notify();
+                })
+            })
     }
 
     /// A server and how the client reaches it, or the update it needs.

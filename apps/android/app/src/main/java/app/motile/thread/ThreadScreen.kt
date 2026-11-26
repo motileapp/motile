@@ -239,7 +239,7 @@ private fun TopBar(overSidebar: Boolean, rename: (ThreadInfo) -> Unit, delete: (
             .windowInsetsPadding(WindowInsets.statusBars)
             .height(barHeight)
             .padding(horizontal = barPadding),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         val agentShown = store.shownAgent != null

@@ -12,12 +12,10 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.focusable
 import androidx.compose.runtime.Composable
@@ -37,9 +35,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import app.motile.LocalCloseSheet
 import app.motile.LocalStore
 import app.motile.composer.BranchPicker
 import app.motile.core.Access
@@ -56,19 +52,16 @@ import app.motile.theme.IconSize
 import app.motile.theme.TextSize
 import app.motile.theme.iconSize
 import app.motile.theme.LocalForeground
-import app.motile.theme.Radius
-import app.motile.theme.SurfaceBox
 import app.motile.theme.Theme
 import app.motile.ui.AgentIcon
 import app.motile.ui.DimButton
-import app.motile.ui.GlassButton
+import app.motile.ui.SheetBar
+import app.motile.settings.SettingsTiles
 import app.motile.ui.HighlightButton
 import app.motile.ui.Icon
 import app.motile.ui.Menu
 import app.motile.ui.GatewayMark
-import app.motile.ui.SheetCloseButton
 import app.motile.ui.Text
-import app.motile.ui.ThemeDivider
 import app.motile.ui.pressable
 import app.motile.ui.proxied
 import app.motile.usage.LimitBar
@@ -93,7 +86,6 @@ private enum class SettingsPage { Reasoning, Access }
 @Composable
 fun ThreadSettingsSheet() {
     val store = LocalStore.current
-    val close = LocalCloseSheet.current
     var page by remember { mutableStateOf<SettingsPage?>(null) }
     val keys = remember { FocusRequester() }
     LaunchedEffect(Unit) { keys.requestFocus() }
@@ -132,7 +124,7 @@ fun ThreadSettingsSheet() {
                 }
             }
             else -> {
-                PageBar("Thread Settings", close = close)
+                PageBar("Thread Settings")
                 Column(
                     Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = rowPadding).padding(bottom = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -147,17 +139,10 @@ fun ThreadSettingsSheet() {
     }
 }
 
-/** The bar over a page: its title, with the way back or the button that closes the sheet. */
+/** The bar over a page: its title, with the way back from a page the sheet pushed. */
 @Composable
-private fun PageBar(title: String, back: (() -> Unit)? = null, close: (() -> Unit)? = null) {
-    Box(Modifier.fillMaxWidth().height(GlassButton.side + 20.dp).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-        if (back != null) {
-            GlassButton(Symbol.ChevronLeft, "Back", onClick = back, modifier = Modifier.align(Alignment.CenterStart))
-        } else if (close != null) {
-            SheetCloseButton(Modifier.align(Alignment.CenterStart), onClose = close)
-        }
-        Text(title, style = system(TextSize.Xl, FontWeight.SemiBold), maxLines = 1)
-    }
+private fun PageBar(title: String, back: (() -> Unit)? = null) {
+    SheetBar(title, back = back)
 }
 
 /** Each account's models, under its name, which shows or hides them. Only the composer's account's are shown at first. */
@@ -410,18 +395,11 @@ private fun Section(header: String, footer: String? = null, content: @Composable
     }
 }
 
-/** Rows in one box, with lines between them. */
+/** Rows as the settings' tiles. */
 @Composable
 private fun Group(rows: List<@Composable () -> Unit>) {
     if (rows.isEmpty()) return
-    SurfaceBox(RoundedCornerShape(Radius.lg), Modifier.fillMaxWidth()) {
-        Column {
-            rows.forEachIndexed { index, row ->
-                if (index > 0) ThemeDivider(Modifier.padding(start = rowPadding))
-                row()
-            }
-        }
-    }
+    SettingsTiles(rows)
 }
 
 /** A row of a group, which does something when tapped if it has `onClick`. */

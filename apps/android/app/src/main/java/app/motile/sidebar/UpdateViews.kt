@@ -91,7 +91,7 @@ fun ServerUpdateStatus(
     }
 }
 
-private fun progress(update: ServerUpdate): String {
+internal fun progress(update: ServerUpdate): String {
     if (update.restarting) return "Restarting"
     val fraction = update.fraction ?: return "Updating"
     return "Updating ${(fraction * 100).toInt()}%"

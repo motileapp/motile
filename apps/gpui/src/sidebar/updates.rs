@@ -228,6 +228,7 @@ pub struct ServerUpdateStatus {
     surface: Surface,
     otherwise: Option<AnyElement>,
     margin: Edges<f32>,
+    button_only: bool,
 }
 
 impl ServerUpdateStatus {
@@ -240,7 +241,15 @@ impl ServerUpdateStatus {
             surface: Surface::Background,
             otherwise: None,
             margin: Edges::default(),
+            button_only: false,
         }
+    }
+
+    /// Only the offer to update and to restart, without how the update goes, which the server's
+    /// dropdown says under its uptime.
+    pub fn button_only(mut self) -> Self {
+        self.button_only = true;
+        self
     }
 
     /// Room beside what it shows, which its button takes as its own.
@@ -280,6 +289,14 @@ impl ServerUpdateStatus {
     }
 }
 
+/// How a server's update goes, under its uptime in its dropdown, and whether a spinner goes with it.
+pub fn update_note(update: &ServerUpdate) -> (String, bool) {
+    if update.waiting && !update.restarting {
+        return ("Installed, restarts once its agents finish".into(), false);
+    }
+    (progress(update), true)
+}
+
 fn progress(update: &ServerUpdate) -> String {
     if update.restarting {
         return "Restarting".into();
@@ -306,7 +323,9 @@ impl RenderOnce for ServerUpdateStatus {
                 .items_center()
                 .gap(px(6.))
                 .pl(px(margin.left))
-                .child(div().text_size(TextSize::Xs).text_color(c.muted_foreground).child("Waiting"))
+                .when(!self.button_only, |row| {
+                    row.child(div().text_size(TextSize::Xs).text_color(c.muted_foreground).child("Waiting"))
+                })
                 .child(
                     ActionButton::new(id("restart-now"), "Restart Now")
                         .help(format!(
@@ -321,6 +340,9 @@ impl RenderOnce for ServerUpdateStatus {
                 )
                 .tooltip(tooltip(format!("{} restarts once its agents have finished", server.short_name)))
                 .into_any_element();
+        }
+        if self.button_only && update.is_some() {
+            return div().into_any_element();
         }
         if let Some(update) = update {
             return div()

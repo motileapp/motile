@@ -11,6 +11,7 @@ mod list;
 mod rows;
 mod search;
 mod shelves;
+mod stats;
 mod updates;
 
 use std::cell::{Cell, RefCell};
@@ -27,6 +28,7 @@ pub use self::footer::SidebarFooter;
 use self::list::{Layout, RecycledList, place};
 use self::rows::{EMPTY_LINE_HEIGHT, LIST_DIVIDER, THREAD_ROW_HEIGHT, list_divider};
 use self::search::RESULT_ROW_HEIGHT;
+pub use self::stats::show_stats;
 pub use self::updates::{AppUpdateRow, ServerUpdateStatus};
 use crate::models::ThreadInfo;
 use crate::store::{ListedDraft, SearchResult, Store, UndoNotice, snooze_presets};
@@ -242,6 +244,10 @@ pub struct Sidebar {
     revealed_seen: Option<String>,
     /// The store's last ask for the search field to take the keys that was done.
     search_focused_for: u64,
+    /// The server whose dropdown has the keys, and what had them before it opened.
+    stats_shown: Option<String>,
+    stats_focus: FocusHandle,
+    stats_returns: Option<FocusHandle>,
     _ticks: Task<()>,
     _subscriptions: Vec<Subscription>,
 }
@@ -278,6 +284,7 @@ impl Sidebar {
             cx.observe_in(&store, window, |this, store, window, cx| {
                 this.stale = true;
                 this.follow_store(store, window, cx);
+                this.follow_stats(window, cx);
                 cx.notify();
             }),
             cx.subscribe_in(&search, window, |this, search, event: &InputEvent, window, cx| match event {
@@ -334,13 +341,16 @@ impl Sidebar {
             undo_serial: 0,
             revealed_seen: None,
             search_focused_for: 0,
+            stats_shown: None,
+            stats_focus: cx.focus_handle(),
+            stats_returns: None,
             _ticks: ticks,
             _subscriptions: subscriptions,
         }
     }
 
     /// What follows the store: the search the store ended, a shelf opening on the thread it
-    /// reveals, and the card going when the window does.
+    /// reveals, the card going when the window does, and a server's dropdown when its line does.
     fn follow_store(&mut self, store: Entity<Store>, window: &mut Window, cx: &mut Context<Self>) {
         let (search, revealed, active, hidden, focus) = {
             let store = store.read(cx);
@@ -374,6 +384,19 @@ impl Sidebar {
         }
         if !active || hidden {
             self.peek.hide();
+        }
+        let stats_line_gone = {
+            let store = store.read(cx);
+            store
+                .server_stats
+                .open_server()
+                .is_some_and(|id| hidden || !store.live_servers().any(|server| server.id == id))
+        };
+        if stats_line_gone {
+            store.update(cx, |store, cx| {
+                store.close_stats();
+                cx.notify();
+            });
         }
     }
 
@@ -807,6 +830,7 @@ impl Render for Sidebar {
             .children(self.follow_pulling(cx))
             .children(self.reorder.follow_pointer(cx.entity().downgrade(), drag::THREAD_ORDER))
             .children(self.card_layer(cx))
+            .children(self.stats_dropdown(window, cx))
             .children(self.lift_layer(window, cx))
     }
 }

@@ -347,6 +347,12 @@ final class AppStore {
     /// The settings every server has on, those linked later too.
     private(set) var allServers = AllServers()
     private var serverUpdates: [String: ServerUpdate] = [:]
+    /// What each server's machine does, as its dropdown last showed it.
+    private(set) var serverStats: [String: ServerStats.Shown] = [:]
+    /// The server whose sheet of what its machine does is open, on iOS.
+    var statsServerID: String?
+    /// The servers whose dropdown is open.
+    @ObservationIgnored private var watchedStats: Set<String> = []
     /// Every server's projects as the core sent them, the removed servers' too.
     @ObservationIgnored private var everyProject: [Project] = []
     /// The folders the user added on the account's servers. "No project" of each server is in
@@ -682,6 +688,13 @@ final class AppStore {
             let serverID = event.string("server_id")
             let projects = event.objects("projects").map { Project(json: $0, serverID: serverID) }
             return { [weak self] in self?.apply(projects: projects, serverID: serverID) }
+        case "server_stats":
+            let serverID = event.string("server_id")
+            let shown: ServerStats.Shown = event.object("stats").map { .shown(ServerStats(json: $0)) } ?? .failed(event.string("error"))
+            return { [weak self] in
+                guard let self, self.watchedStats.contains(serverID), self.serverStats[serverID] != shown else { return }
+                self.serverStats[serverID] = shown
+            }
         case "server_update":
             let serverID = event.string("server_id")
             let (received, total) = (event.double("received"), event.optionalDouble("total"))
@@ -1719,6 +1732,18 @@ final class AppStore {
     /// them after.
     func canChooseRestart(_ server: Server) -> Bool {
         server.protocolVersion >= 14
+    }
+
+    /// Follows what the server's machine does while its dropdown is open. One opened again shows
+    /// what it last showed until the server answers.
+    func watchStats(of serverID: String, _ on: Bool) {
+        if on {
+            watchedStats.insert(serverID)
+            if case .shown = serverStats[serverID] {} else { serverStats[serverID] = .loading }
+        } else {
+            watchedStats.remove(serverID)
+        }
+        core.send("watch_server_stats", ["server_id": serverID, "on": on])
     }
 
     /// Has the server install the newest release and start it: `when` its agents work, once they

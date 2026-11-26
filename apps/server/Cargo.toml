@@ -31,6 +31,7 @@ rmcp = { version = "3.5", features = ["server", "macros", "transport-streamable-
 rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sysinfo = { version = "0.40", default-features = false, features = ["system", "disk", "network"] }
 sha2.workspace = true
 tokio.workspace = true
 unicode-normalization = "0.1"

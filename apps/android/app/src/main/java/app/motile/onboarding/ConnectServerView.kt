@@ -42,7 +42,6 @@ import app.motile.ui.ButtonVariant
 import app.motile.ui.CommandBox
 import app.motile.ui.Icon
 import app.motile.ui.SheetBar
-import app.motile.ui.SheetCloseButton
 import app.motile.ui.Spinner
 import app.motile.ui.Text
 import kotlinx.coroutines.delay
@@ -62,7 +61,7 @@ fun ConnectServerView(isFirst: Boolean, titled: Boolean = !isFirst) {
     }
     val root = if (isFirst) Modifier.background(palette.background).safeDrawingPadding() else Modifier
     Column(Modifier.fillMaxSize().then(root)) {
-        if (titled) SheetBar("Add a Server", leading = { SheetCloseButton(onClose = close) })
+        if (titled) SheetBar("Add a Server")
         // Raises the centred content a little above the middle.
         BoxWithConstraints(Modifier.fillMaxWidth().weight(1f)) {
             val lift = maxHeight * 0.08f

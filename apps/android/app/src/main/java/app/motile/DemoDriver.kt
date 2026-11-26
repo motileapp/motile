@@ -42,6 +42,7 @@ import java.util.concurrent.Executors
  *     parent                            goes back from an agent to the thread that started it
  *     group                             opens or closes the first row of agents started together
  *     file <path>                       opens a file in the panel
+ *     stats <server>                    opens the sheet of what the server with that short name does
  *     change <path>                     opens what the latest turn changed in a file
  *     sheet commands|projects|settings|usage|server|thread|close
  *     settings <section>|search <text>|pick <group>|close
@@ -171,6 +172,7 @@ object DemoDriver {
                 else -> store.rightPanel.isOpen = false
             }
             "file" -> store.rightPanel.open(PanelTab.File(rest))
+            "stats" -> store.statsServerID = store.servers.firstOrNull { it.shortName == rest }?.id
             "issue" -> {
                 // "issue motile issue-1 ENG-1": the workspace, the issue's id and its identifier.
                 val named = rest.split(' ')
@@ -211,6 +213,7 @@ object DemoDriver {
                     store.showsAddServer = false
                     store.showsThreadSettings = false
                     store.committingProject = null
+                    store.statsServerID = null
                 }
             }
             "settings" -> {

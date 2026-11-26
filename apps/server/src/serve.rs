@@ -23,7 +23,7 @@ use crate::activity::{self as kept, Sender};
 use crate::backup::Backup;
 use crate::hub::{GitRun, Hub, ListSubscription, NewMessage, ThreadSubscription};
 use crate::media::MediaStore;
-use crate::{files, linear, ricrac, ui_tools, update};
+use crate::{files, linear, ricrac, stats, ui_tools, update};
 
 const NOT_LINKED: u32 = 403;
 const RECHECK_ACCESS_EVERY: Duration = Duration::from_secs(30);
@@ -86,6 +86,7 @@ pub struct Server {
 impl Server {
     pub async fn run(self, endpoint: Endpoint) {
         tokio::spawn(self.clone().keep_deleted_dropped());
+        stats::start();
         while let Some(incoming) = endpoint.accept().await {
             let server = self.clone();
             tokio::spawn(async move {
@@ -162,6 +163,7 @@ impl Server {
         }
         let reply = match request {
             Request::Ping => Ok(Message::Pong),
+            Request::WatchStats => return follow_stats(send).await,
             Request::Subscribe => {
                 hub.refresh_models_soon();
                 let asked = Instant::now();
@@ -657,6 +659,28 @@ async fn follow_thread(mut send: SendStream, subscription: ThreadSubscription) -
     }
     write_frame(&mut send, &Message::Synced { rev: subscription.rev }).await?;
     follow(send, subscription.updates).await
+}
+
+/// Sends the samples kept, then each new one alone, until the client stops listening.
+async fn follow_stats(mut send: SendStream) -> anyhow::Result<()> {
+    let mut stats = stats::watch();
+    let first = stats.borrow_and_update().clone();
+    write_frame(&mut send, &Message::Stats { stats: first }).await?;
+    loop {
+        tokio::select! {
+            changed = stats.changed() => {
+                if changed.is_err() {
+                    break;
+                }
+                let mut latest = stats.borrow_and_update().clone();
+                latest.samples = latest.samples.split_off(latest.samples.len().saturating_sub(1));
+                write_frame(&mut send, &Message::Stats { stats: latest }).await?;
+            }
+            _ = send.stopped() => break,
+        }
+    }
+    send.finish()?;
+    Ok(())
 }
 
 /// Sends every update until the client stops listening.

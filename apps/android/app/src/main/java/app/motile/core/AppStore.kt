@@ -304,6 +304,12 @@ class AppStore(private val context: Context) {
     var allServers by mutableStateOf(AllServers())
         private set
     private val serverUpdates = mutableStateMapOf<String, ServerUpdate>()
+    /** What each server's machine does, as its sheet last showed it. */
+    val serverStats = mutableStateMapOf<String, ServerStats.Shown>()
+    /** The server whose sheet of what its machine does is open. */
+    var statsServerID by mutableStateOf<String?>(null)
+    /** The servers whose sheet is open. */
+    private val watchedStats = mutableSetOf<String>()
     /** Every server's projects as the core sent them, the removed servers' too. */
     private var everyProject = emptyList<Project>()
     /** The folders the user added on the account's servers. "No project" of each server is in `noProjects`. */
@@ -625,6 +631,13 @@ class AppStore(private val context: Context) {
                 val serverID = event.string("server_id")
                 val projects = event.objects("projects").map { Project(it, serverID) }
                 return { applyProjects(projects, serverID) }
+            }
+            "server_stats" -> {
+                val serverID = event.string("server_id")
+                val shown = ServerStats.shown(event)
+                return {
+                    if (serverID in watchedStats && serverStats[serverID] != shown) serverStats[serverID] = shown
+                }
             }
             "server_update" -> {
                 val serverID = event.string("server_id")
@@ -1669,6 +1682,17 @@ class AppStore(private val context: Context) {
 
     /** Whether the server can wait for its agents before it restarts, or stop them and go on with them after. */
     fun canChooseRestart(server: Server): Boolean = server.protocolVersion >= 14
+
+    /** Follows what the server's machine does while its sheet is open. One opened again shows what it last showed until the server answers. */
+    fun watchStats(serverID: String, on: Boolean) {
+        if (on) {
+            watchedStats += serverID
+            if (serverStats[serverID] !is ServerStats.Shown.Showing) serverStats[serverID] = ServerStats.Shown.Loading
+        } else {
+            watchedStats -= serverID
+        }
+        core.send("watch_server_stats", json("server_id" to serverID, "on" to on))
+    }
 
     /** Has the server install the newest release and start it: `when` its agents work, once they have finished or at once. A server that can't choose refuses while they work. */
     fun update(server: Server, whenBusy: RestartWhen = RestartWhen.Idle) {

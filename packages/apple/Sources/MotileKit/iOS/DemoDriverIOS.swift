@@ -132,6 +132,7 @@ enum DemoDriver {
             default: store.rightPanel.isOpen = false
             }
         case "file": store.rightPanel.open(.file(rest))
+        case "stats": store.statsServerID = store.servers.first { $0.shortName == rest }?.id
         case "issue":
             // "issue motile issue-1 ENG-1": the workspace, the issue's id and its identifier.
             let named = rest.split(separator: " ").map(String.init)

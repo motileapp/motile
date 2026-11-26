@@ -17,6 +17,7 @@ mod projects;
 pub mod pull_requests;
 mod questions;
 pub mod ricrac;
+pub mod server_stats;
 pub mod settings;
 pub mod shortcuts;
 mod sidebar;
@@ -335,6 +336,7 @@ pub struct Store {
     // What the servers hold
     pub servers: Vec<Server>,
     server_updates: HashMap<String, ServerUpdate>,
+    pub server_stats: server_stats::ServerStats,
     /// The folders the user added. "No project" of each server is in `no_projects`.
     pub projects: Vec<Project>,
     /// The project of each server that threads start in without one, in the servers' order.
@@ -510,6 +512,7 @@ impl Store {
             blur_composer: 0,
             servers: Vec::new(),
             server_updates: HashMap::new(),
+            server_stats: server_stats::ServerStats::default(),
             projects: Vec::new(),
             no_projects: Vec::new(),
             threads: HashMap::new(),
@@ -798,6 +801,7 @@ impl Store {
                 let projects = projects.into_iter().map(|view| Project::new(view, &server_id)).collect();
                 self.apply_projects(projects, &server_id, cx);
             }
+            Event::ServerStats { server_id, stats, error } => self.apply_server_stats(server_id, stats, error),
             Event::ServerUpdate { server_id, received, total, waiting } => {
                 let Some(update) = self.server_updates.get_mut(&server_id) else { return };
                 if waiting {

@@ -29,6 +29,7 @@ pub mod serve;
 pub mod service;
 pub mod setup;
 pub mod sign_in;
+pub mod stats;
 pub mod store;
 pub mod sync;
 pub mod title;

@@ -17,13 +17,15 @@ import {
   ShieldIcon,
   type LucideIcon,
 } from "lucide-react"
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { AgentIcon, ProjectIcon } from "./icons"
+import { ServerStatsCard } from "./server-stats"
 import {
   archivedThreads,
   servers,
   shortName,
   snoozedThreads,
+  type Server,
   type ShelvedThread,
   type Thread,
 } from "./threads"
@@ -264,16 +266,7 @@ export function Sidebar({
         {serversOpen && (
           <div className="pb-1">
             {servers.map((server) => (
-              <div
-                key={server.name}
-                className="mx-2 flex h-8 items-center gap-[7px] px-2"
-              >
-                <StateRing />
-                <span className="text-(length:--type-xs) font-medium">{shortName(server)}</span>
-                <span className="ml-auto text-(length:--type-xs) text-muted-stronger-foreground tabular-nums">
-                  {server.path} · {server.ms} ms
-                </span>
-              </div>
+              <ServerRow key={server.name} server={server} />
             ))}
           </div>
         )}
@@ -583,6 +576,53 @@ function SlimRow({
         {children}
       </span>
     </button>
+  )
+}
+
+/** A server's line, which opens what its machine does above it, until a click elsewhere or Esc. */
+function ServerRow({ server }: { server: Server }) {
+  const [open, setOpen] = useState(false)
+  const row = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (event: PointerEvent) => {
+      if (row.current?.contains(event.target as Node)) return
+      setOpen(false)
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false)
+    }
+    document.addEventListener("pointerdown", close)
+    document.addEventListener("keydown", escape)
+    return () => {
+      document.removeEventListener("pointerdown", close)
+      document.removeEventListener("keydown", escape)
+    }
+  }, [open])
+
+  return (
+    <div ref={row} className="relative mx-2">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={cn(
+          "flex h-8 w-full items-center gap-[7px] rounded-md px-2 text-left hover:bg-background-accent-larger",
+          open && "bg-background-accent-larger"
+        )}
+      >
+        <StateRing />
+        <span className="text-(length:--type-xs) font-medium">{shortName(server)}</span>
+        <span className="ml-auto text-(length:--type-xs) text-muted-stronger-foreground tabular-nums">
+          {server.path} · {server.ms} ms
+        </span>
+      </button>
+      {open && (
+        <div className="absolute bottom-full left-0 z-40 mb-1.5">
+          <ServerStatsCard server={server} />
+        </div>
+      )}
+    </div>
   )
 }
 

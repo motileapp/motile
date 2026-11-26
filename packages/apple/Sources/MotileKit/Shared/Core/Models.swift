@@ -1981,3 +1981,66 @@ struct MessageMatch: Equatable {
         itemID = json["item_id"] as? String
     }
 }
+
+/// A server's machine as its dropdown shows it, ready to draw.
+struct ServerStats: Equatable {
+    enum Shown: Equatable {
+        case loading
+        case shown(ServerStats)
+        case failed(String)
+
+        var uptime: String? {
+            guard case .shown(let stats) = self else { return nil }
+            return stats.uptime
+        }
+    }
+
+    struct Row: Equatable, Identifiable {
+        enum Kind: String {
+            case cpu, memory, download, upload, disk
+        }
+
+        let kind: Kind
+        let label: String
+        /// "2 cores", or the total.
+        let detail: String?
+        /// What is used of the total.
+        let used: String?
+        let value: String
+        /// The newest last.
+        let bars: [Bar]
+        let fill: Bar?
+
+        var id: String { kind.rawValue }
+
+        init(json: JSON) {
+            kind = Kind(rawValue: json.string("kind")) ?? .cpu
+            label = json.string("label")
+            detail = json.optionalString("detail")
+            used = json.optionalString("used")
+            value = json.string("value")
+            bars = json.objects("bars").map(Bar.init(json:))
+            fill = json.object("fill").map(Bar.init(json:))
+        }
+    }
+
+    /// How tall a bar is, or how full a meter, from 0 to 1, and its colour.
+    struct Bar: Equatable {
+        let height: Double
+        let tone: LimitsReport.Window.Tone
+
+        init(json: JSON) {
+            height = json.double("height")
+            tone = LimitsReport.Window.Tone(rawValue: json.string("tone")) ?? .success
+        }
+    }
+
+    /// "Uptime: 2d 10h".
+    let uptime: String
+    let rows: [Row]
+
+    init(json: JSON) {
+        uptime = json.string("uptime")
+        rows = json.objects("rows").map(Row.init(json:))
+    }
+}

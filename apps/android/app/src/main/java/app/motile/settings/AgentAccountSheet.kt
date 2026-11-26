@@ -140,7 +140,7 @@ fun AgentAccountSheet(server: Server, initial: AgentAccount) {
         }
     }
     Column(Modifier.fillMaxSize()) {
-        CompositionLocalProvider(LocalBarLeading provides BarLeading.Close { close() }) { SettingsBar(title, trailing) }
+        CompositionLocalProvider(LocalBarBack provides null) { SettingsBar(title, trailing) }
         SettingsList(Modifier.weight(1f)) {
             if (isNew && installed.size > 1) {
                 group {
