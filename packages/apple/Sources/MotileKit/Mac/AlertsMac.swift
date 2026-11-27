@@ -33,6 +33,7 @@ final class MacAlerts: NSObject, AlertPresenting, UNUserNotificationCenterDelega
         readPermission()
         NotificationCenter.default.addObserver(forName: Platform.becameActive, object: nil, queue: .main) { [weak self] _ in
             self?.readPermission()
+            self?.center?.removeAllDeliveredNotifications()
         }
         if let clicked { open(clicked) }
     }

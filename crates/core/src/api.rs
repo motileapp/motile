@@ -816,8 +816,8 @@ pub enum Event {
     Work {
         servers: Vec<motile_protocol::alerts::ServerWork>,
     },
-    /// How many threads wait for the user or have a reply the user hasn't seen, for the app's
-    /// badge, at start and whenever it changes.
+    /// How many threads alerted while the user was away from the client, for the app's badge, at
+    /// start and whenever it changes. It is back to none once the client is in front.
     Badge {
         count: usize,
     },

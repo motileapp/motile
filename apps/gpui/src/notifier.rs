@@ -6,6 +6,8 @@
 #[cfg(target_os = "linux")]
 mod linux;
 
+use std::collections::HashSet;
+
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_protocol::alerts::Alert;
@@ -19,6 +21,8 @@ pub const APP_ID: &str = "app.motile.motile";
 pub struct Notifier {
     #[cfg(target_os = "linux")]
     desktop: Option<linux::Desktop>,
+    /// The threads whose notifications may still be on screen.
+    shown: HashSet<String>,
 }
 
 impl Notifier {
@@ -35,7 +39,7 @@ impl Notifier {
                 }
             })
             .detach();
-            Self { desktop: Some(linux::Desktop::start(clicked)) }
+            Self { desktop: Some(linux::Desktop::start(clicked)), shown: HashSet::new() }
         }
         #[cfg(not(target_os = "linux"))]
         {
@@ -46,6 +50,7 @@ impl Notifier {
 
     /// The alert's notification, in place of the one its thread had.
     pub fn show(&mut self, alert: &Alert, sound: bool, cx: &App) {
+        self.shown.insert(alert.thread_id.clone());
         let (title, body) = text(alert);
         #[cfg(target_os = "linux")]
         {
@@ -69,6 +74,7 @@ impl Notifier {
     }
 
     pub fn dismiss(&mut self, thread_id: &str, cx: &App) {
+        self.shown.remove(thread_id);
         #[cfg(target_os = "linux")]
         {
             let _ = cx;
@@ -77,6 +83,13 @@ impl Notifier {
         }
         #[cfg(not(target_os = "linux"))]
         cx.dismiss_system_notification(thread_id);
+    }
+
+    /// In front, what came while the app was away has been seen.
+    pub fn dismiss_all(&mut self, cx: &App) {
+        for thread_id in std::mem::take(&mut self.shown) {
+            self.dismiss(&thread_id, cx);
+        }
     }
 
     /// The system's alert sound, once.

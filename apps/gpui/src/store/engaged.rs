@@ -61,6 +61,7 @@ impl Store {
         if !gained {
             return;
         }
+        self.notifier.dismiss_all(cx);
         self.engaged.told = LAST_INPUT.get();
         self.engaged.ticks = Some(cx.spawn(async move |this, cx| {
             loop {

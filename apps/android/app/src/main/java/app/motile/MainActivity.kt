@@ -7,6 +7,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import app.motile.core.SignInSession
 import app.motile.core.ThreadLink
+import app.motile.notifications.AlertNotifications
 import app.motile.platform.Platform
 
 /**
@@ -43,6 +44,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         SignInSession.resumed()
         engagement.resumed(true)
+        AlertNotifications.cancelAll(this)
     }
 
     override fun onPause() {

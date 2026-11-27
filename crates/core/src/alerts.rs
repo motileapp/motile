@@ -1,7 +1,7 @@
 //! The alerts the servers send, as this device shows them: its notification settings, how each
 //! alert shows given where the user is, the badge, and the phone's push registration.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use motile_protocol::alerts::{
@@ -11,8 +11,6 @@ use motile_protocol::auth_api::{PushRegistration, PushService};
 use motile_protocol::identity::DeviceKey;
 use motile_protocol::wire::Thread;
 use serde::{Deserialize, Serialize};
-
-use crate::api::{Section, ThreadView};
 
 const FILE: &str = "notifications.json";
 const REMEMBERED_ALERTS: usize = 200;
@@ -123,51 +121,29 @@ impl Heard {
     }
 }
 
-/// The threads the badge counts: the top-level ones, neither archived nor snoozed, that wait for
-/// the user or have a reply the user hasn't seen.
+/// The threads alerted while the user was away from the client, which its icon counts until the
+/// client is in front again.
 #[derive(Default)]
 pub struct Badge {
-    counted: HashMap<String, (String, bool)>,
-    count: usize,
+    alerted: HashSet<String>,
 }
 
 impl Badge {
     pub fn count(&self) -> usize {
-        self.count
+        self.alerted.len()
     }
 
     /// Whether the count changed.
-    pub fn upsert(&mut self, view: &ThreadView) -> bool {
-        self.counted.insert(view.thread.id.clone(), (view.server_id.clone(), counts(view)));
-        self.recount()
+    pub fn alerted(&mut self, thread_id: &str) -> bool {
+        self.alerted.insert(thread_id.to_string())
     }
 
-    pub fn replace(&mut self, server_id: &str, views: &[ThreadView]) -> bool {
-        self.counted.retain(|_, (server, _)| server != server_id);
-        for view in views {
-            self.counted.insert(view.thread.id.clone(), (server_id.to_string(), counts(view)));
-        }
-        self.recount()
+    /// Whether the count changed.
+    pub fn clear(&mut self) -> bool {
+        let counted = !self.alerted.is_empty();
+        self.alerted.clear();
+        counted
     }
-
-    pub fn remove(&mut self, thread_id: &str) -> bool {
-        self.counted.remove(thread_id);
-        self.recount()
-    }
-
-    fn recount(&mut self) -> bool {
-        let count = self.counted.values().filter(|(_, counted)| *counted).count();
-        std::mem::replace(&mut self.count, count) != count
-    }
-}
-
-fn counts(view: &ThreadView) -> bool {
-    let thread = &view.thread;
-    if thread.parent.is_some() || matches!(view.section, Section::Archived | Section::Snoozed) {
-        return false;
-    }
-    let children_wait = view.children.as_ref().is_some_and(|children| !children.waiting.is_empty());
-    view.unread || thread.needs_approval || children_wait
 }
 
 const WORK_TITLE_CHARS: usize = 60;
@@ -305,6 +281,18 @@ mod tests {
         let no_finished =
             Settings { choices: AlertChoices { finished: false, ..AlertChoices::default() }, ..Settings::default() };
         assert_eq!(shown(&no_finished, AlertKind::Finished, &at(false, false)), None);
+    }
+
+    #[test]
+    fn the_badge_counts_the_threads_alerted_while_away_until_the_client_is_in_front() {
+        let mut badge = Badge::default();
+        assert!(badge.alerted("a"));
+        assert!(!badge.alerted("a"), "a thread counts once");
+        assert!(badge.alerted("b"));
+        assert_eq!(badge.count(), 2);
+        assert!(badge.clear());
+        assert_eq!(badge.count(), 0);
+        assert!(!badge.clear());
     }
 
     #[test]

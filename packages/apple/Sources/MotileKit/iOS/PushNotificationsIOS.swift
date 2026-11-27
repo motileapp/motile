@@ -90,6 +90,12 @@ final class PushNotifications: NSObject {
         SharedState.badgeThreads = []
     }
 
+    /// In front, what came while the app was away has been seen: its badge and notifications go.
+    func cameToFront() {
+        badgeChanged(0)
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+    }
+
     func open(_ link: ThreadLink) {
         guard let store, store.ready else { return pendingLink = link }
         pendingLink = nil
@@ -263,10 +269,12 @@ struct PushNotificationsSync: ViewModifier {
             .onChange(of: store.notificationSettings) { push.update() }
             .onChange(of: store.badgeCount, initial: true) { push.badgeChanged(store.badgeCount) }
             .onChange(of: store.work, initial: true) { push.workChanged(store.work) }
-            .onChange(of: phase) {
+            .onChange(of: phase, initial: true) {
                 switch phase {
                 case .background: push.wentToBackground()
-                case .active: Task { await push.refreshPermission() }
+                case .active:
+                    push.cameToFront()
+                    Task { await push.refreshPermission() }
                 default: break
                 }
             }

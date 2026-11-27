@@ -694,19 +694,14 @@ impl Core {
         if transcript_of(&event).is_some_and(|thread_id| self.is_left(thread_id)) {
             return;
         }
-        let recounted = match &event {
-            Event::ThreadUpsert { thread } => self.badge.borrow_mut().upsert(thread),
-            Event::Threads { server_id, threads } => self.badge.borrow_mut().replace(server_id, threads),
-            Event::ThreadDeleted { thread_id } => self.badge.borrow_mut().remove(thread_id),
-            _ => false,
-        };
         if matches!(event, Event::ThreadUpsert { .. } | Event::Threads { .. } | Event::ThreadDeleted { .. }) {
             self.work_changed.set(true);
         }
         (self.sink)(event);
-        if recounted {
-            (self.sink)(Event::Badge { count: self.badge.borrow().count() });
-        }
+    }
+
+    fn emit_badge(&self) {
+        (self.sink)(Event::Badge { count: self.badge.borrow().count() });
     }
 
     fn is_left(&self, thread_id: &str) -> bool {
@@ -1022,6 +1017,10 @@ impl Core {
                 .is_some_and(|open| open.server_id == server_id && open.left.is_none()),
             pushed: matches!(self.config.platform.as_str(), "ios" | "ipados" | "android"),
         };
+        let counts = !at.focused && !at.pushed && self.notifications.choices.allows(alert.kind);
+        if counts && self.badge.borrow_mut().alerted(&alert.thread_id) {
+            self.emit_badge();
+        }
         let Some(shown) = alerts::shown(&self.notifications, alert.kind, &at) else { return };
         let server = self.servers.iter().find(|server| server.device.public_key == server_id);
         let server_name = server.map(|server| short_name(&server.device.name)).unwrap_or_default();
@@ -3523,6 +3522,9 @@ impl Core {
             }
             Command::Focus { focused, server_id, project_id } => {
                 self.focused = focused;
+                if focused && self.badge.borrow_mut().clear() {
+                    self.emit_badge();
+                }
                 let shown = server_id.zip(project_id).filter(|(server_id, _)| {
                     self.servers.iter().any(|server| server.device.public_key == *server_id && !server.removed)
                 });

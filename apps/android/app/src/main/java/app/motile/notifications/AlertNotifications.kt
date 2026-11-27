@@ -82,6 +82,14 @@ object AlertNotifications {
         NotificationManagerCompat.from(context).cancel(threadID, ALERT_ID)
     }
 
+    /** Takes away every alert's notification: in front, what came while the client was away has been seen. */
+    fun cancelAll(context: Context) {
+        val manager = NotificationManagerCompat.from(context)
+        for (shown in manager.activeNotifications) {
+            if (shown.id == ALERT_ID) manager.cancel(shown.tag, ALERT_ID)
+        }
+    }
+
     /** Opens the thread in the client. */
     fun opening(context: Context, link: ThreadLink): PendingIntent {
         val intent = Intent(Intent.ACTION_VIEW, link.url.toUri(), context, MainActivity::class.java)
