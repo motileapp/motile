@@ -8,12 +8,12 @@ import kotlinx.serialization.json.JsonPrimitive
 // The core's notification settings and what the servers push, as crates/core/src/alerts.rs and
 // crates/protocol/src/alerts.rs write them.
 
-/** How alerts reach the user on this device. A phone has them on, with sound, or off. */
+/** How alerts reach the user on this device. A phone has them on, with or without sound, or off. */
 enum class NotificationMode(val raw: String) {
     Off("off"), Notifications("notifications"), Sound("sound"), NotificationsAndSound("notifications_and_sound");
 
     companion object {
-        fun of(raw: String?): NotificationMode = entries.firstOrNull { it.raw == raw } ?: NotificationsAndSound
+        fun of(raw: String?): NotificationMode = entries.firstOrNull { it.raw == raw } ?: Notifications
     }
 }
 
@@ -53,7 +53,7 @@ class AlertChoice(val isOn: (AlertChoices) -> Boolean, val with: (AlertChoices, 
 
 /** This device's notification settings, which the core keeps. */
 data class NotificationSettings(
-    val mode: NotificationMode = NotificationMode.NotificationsAndSound,
+    val mode: NotificationMode = NotificationMode.Notifications,
     /** While the client is in front on another thread, an alert shows inside it. Desktop clients only. */
     val toasts: Boolean = false,
     val choices: AlertChoices = AlertChoices(),
@@ -79,7 +79,7 @@ object NotificationsText {
     const val title = "Notifications"
     const val mode = "Alerts when an agent finishes, fails, or needs your approval or an answer."
     const val refused = "Allow notifications for Motile in Settings."
-    const val toastsTitle = "Show alerts inside Motile"
+    const val toastsTitle = "In-app notifications"
     const val toasts = "When you're looking at another thread."
     const val choices = "Alert me when an agent"
     const val live = "Ongoing activity"

@@ -425,7 +425,7 @@ impl SettingsPage {
         let caption = "Alerts when an agent finishes, fails, or needs your approval or an answer.";
         let mode = label("Notifications", Some(caption.into()), None, Cut::Wraps, cx);
         let toasts = label(
-            "Show alerts inside Motile",
+            "In-app notifications",
             Some("When you're looking at another thread.".into()),
             None,
             Cut::Wraps,

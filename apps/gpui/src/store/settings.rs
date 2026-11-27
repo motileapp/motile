@@ -117,7 +117,7 @@ const ENTRIES: [(&str, &str, SettingsSection, &str); 33] = [
     ("storage", "Images and videos", SettingsSection::General, "storage cache clear media disk"),
     ("log", "Log", SettingsSection::General, "troubleshooting debug problem connecting logs file"),
     ("notifications", "Notifications", SettingsSection::Notifications, "alerts sound banner permission system off"),
-    ("toasts", "Show alerts inside Motile", SettingsSection::Notifications, "in-app toast alerts banner"),
+    ("toasts", "In-app notifications", SettingsSection::Notifications, "toast alerts banner inside"),
     (
         "alert-choices",
         ALERT_CHOICES,

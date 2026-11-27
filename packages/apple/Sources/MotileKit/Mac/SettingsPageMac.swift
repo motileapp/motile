@@ -180,7 +180,7 @@ struct SettingsPage: View {
             }
             ThemeDivider()
             SettingsRow(control: Switch.height) {
-                SettingsLabel("Show alerts inside Motile", description: NotificationsText.toasts)
+                SettingsLabel("In-app notifications", description: NotificationsText.toasts)
             } trailing: {
                 Switch(isOn: notificationSetting(\.toasts))
             }

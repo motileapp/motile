@@ -42,7 +42,7 @@ struct AlertChoices: Codable, Equatable {
 
 /// This device's notification settings, which the core keeps.
 struct NotificationSettings: Codable, Equatable {
-    var mode = NotificationMode.notificationsAndSound
+    var mode = NotificationMode.notifications
     /// While Motile is in front on another thread, an alert shows inside it.
     var toasts = false
     var choices = AlertChoices()
