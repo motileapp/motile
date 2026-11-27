@@ -201,6 +201,14 @@ impl Push {
             .unwrap()
     }
 
+    async fn until_no_live_token(&self, phone: &DeviceKey) {
+        let deadline = tokio::time::Instant::now() + WAIT;
+        while self.live_token(phone).await.is_some() {
+            assert!(tokio::time::Instant::now() < deadline, "the Live Activity's token was never forgotten");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+
     async fn until_registrations(&self, count: i64) {
         let deadline = tokio::time::Instant::now() + WAIT;
         while self.count("push_registrations").await != count {
@@ -573,7 +581,7 @@ async fn a_token_the_push_service_no_longer_takes_is_dropped(db: PgPool) {
     push.fake.gone.lock().unwrap().insert("dead0000".into());
     push.auth.client.push_work(&server, &work_for(&[&iphone_key], &work(&server, 1, 0))).await.unwrap();
     push.fake.pushes(3).await;
-    assert_eq!(push.live_token(&iphone_key).await, None);
+    push.until_no_live_token(&iphone_key).await;
     assert_eq!(push.count("push_registrations").await, 1);
 }
 
@@ -648,7 +656,7 @@ async fn work_starts_updates_and_ends_a_live_activity(db: PgPool) {
     assert_eq!(end.body["aps"]["event"], "end");
     let dismissal = end.body["aps"]["dismissal-date"].as_f64().unwrap();
     assert!((dismissal - (now() + 15.0 * 60.0)).abs() < 60.0);
-    assert_eq!(push.live_token(&phone).await, None);
+    push.until_no_live_token(&phone).await;
 }
 
 #[sqlx::test]
