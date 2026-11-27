@@ -3,6 +3,8 @@
 //! server show it; the phones are pushed it through the auth server, sealed to each phone's own key
 //! so that the auth server never reads it.
 
+use std::collections::{HashMap, HashSet};
+
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use hpke::aead::ChaCha20Poly1305;
@@ -12,6 +14,7 @@ use hpke::{Deserializable, Kem, OpModeR, OpModeS, Serializable};
 use serde::{Deserialize, Serialize};
 
 use crate::identity::{DeviceKey, x25519_public};
+use crate::wire::Thread;
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -187,6 +190,42 @@ pub struct ServerWork {
 /// How many threads a server's work lists.
 pub const WORK_ITEMS: usize = 6;
 
+/// The threads each thread's agent started, by the starting thread's id.
+pub struct Started<'a>(HashMap<&'a str, Vec<&'a Thread>>);
+
+impl<'a> Started<'a> {
+    pub fn of(threads: impl Iterator<Item = &'a Thread>) -> Self {
+        let mut started: HashMap<&str, Vec<&Thread>> = HashMap::new();
+        for thread in threads {
+            let Some(parent) = &thread.parent else { continue };
+            started.entry(parent.thread_id.as_str()).or_default().push(thread);
+        }
+        Self(started)
+    }
+
+    /// Whether agents the thread started still work, as the clients count them: its session's
+    /// own, or a thread it started, however deep, that runs or watches.
+    pub fn agents_work(&self, thread: &Thread) -> bool {
+        if thread.agents > 0 {
+            return true;
+        }
+        let mut seen = HashSet::from([thread.id.as_str()]);
+        let mut parents = vec![thread.id.as_str()];
+        while let Some(parent) = parents.pop() {
+            for child in self.0.get(parent).into_iter().flatten() {
+                if !seen.insert(child.id.as_str()) {
+                    continue;
+                }
+                if child.running || child.monitoring {
+                    return true;
+                }
+                parents.push(&child.id);
+            }
+        }
+        false
+    }
+}
+
 impl ServerWork {
     pub fn new(server_id: String, server_name: String, mut items: Vec<WorkItem>, at: f64) -> Self {
         let count = |state| items.iter().filter(|item| item.state == state).count() as u32;
@@ -281,6 +320,35 @@ pub fn seal_pushed(device: &str, pushed: &Pushed) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wire::ThreadParent;
+
+    fn thread(id: &str, parent: Option<&str>, running: bool) -> Thread {
+        let mut thread: Thread = serde_json::from_value(serde_json::json!({
+            "id": id, "title": id, "project_id": "p", "cwd": "/tmp", "agent": "claude", "model": null,
+            "effort": null, "access": "full", "created_at": 0.0, "updated_at": 0.0, "done_at": null,
+            "running": running, "needs_approval": false, "turn_ended_at": 10.0, "rev": 0
+        }))
+        .unwrap();
+        thread.parent = parent.map(|parent| ThreadParent { thread_id: parent.into(), tool_id: None });
+        thread
+    }
+
+    #[test]
+    fn agents_work_while_the_session_has_some_or_a_thread_it_started_works() {
+        let top = thread("top", None, false);
+        let resting = thread("resting", Some("top"), false);
+        let working = thread("working", Some("resting"), true);
+        let other = thread("other", Some("elsewhere"), true);
+        let threads = [top.clone(), resting.clone(), working, other];
+        let started = Started::of(threads.iter());
+        assert!(started.agents_work(&top), "a grandchild works");
+        assert!(started.agents_work(&resting));
+
+        let without = [top.clone(), resting, thread("other", Some("elsewhere"), true)];
+        assert!(!Started::of(without.iter()).agents_work(&top));
+        let in_session = Thread { agents: 2, ..top };
+        assert!(Started::of(without.iter()).agents_work(&in_session));
+    }
 
     fn alert(kind: AlertKind, detail: Option<&str>) -> Alert {
         let new = NewAlert {

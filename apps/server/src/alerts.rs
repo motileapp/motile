@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use motile_protocol::alerts::{
-    Alert, AlertKind, ENDED_WORK_STAYS_SECS, NewAlert, Pushed, ServerWork, WorkItem, WorkState, seal_pushed,
+    Alert, AlertKind, ENDED_WORK_STAYS_SECS, NewAlert, Pushed, ServerWork, Started, WorkItem, WorkState, seal_pushed,
 };
 use motile_protocol::auth_api::{PushTarget, PushWork, SealedAlert, SealedFor};
 use motile_protocol::now;
@@ -148,14 +148,31 @@ impl Watcher {
     }
 
     async fn observe(&mut self, thread: Thread) {
+        let agents_work = self.agents_work(&thread);
         let watched = self.threads.get(&thread.id);
         let prior = watched.map(|watched| &watched.thread);
-        let observed = observe(prior, &thread, watched.and_then(|watched| watched.handled), now());
-        note_state(&mut self.states, &thread, now());
+        let observed = observe(prior, &thread, watched.and_then(|watched| watched.handled), agents_work, now());
+        note_state(&mut self.states, &thread, agents_work, now());
         self.threads.insert(thread.id.clone(), Watched { thread: thread.clone(), handled: observed.handled });
+        self.note_top_state(&thread);
         for call in observed.calls {
             self.answer(&thread, call).await;
         }
+    }
+
+    fn agents_work(&self, thread: &Thread) -> bool {
+        Started::of(self.threads.values().map(|watched| &watched.thread)).agents_work(thread)
+    }
+
+    /// A thread an agent started works for its top parent too.
+    fn note_top_state(&mut self, thread: &Thread) {
+        let top = top_of(thread, |id| self.threads.get(id).map(|watched| &watched.thread));
+        if top.id == thread.id {
+            return;
+        }
+        let top = top.clone();
+        let agents_work = self.agents_work(&top);
+        note_state(&mut self.states, &top, agents_work, now());
     }
 
     async fn answer(&mut self, thread: &Thread, call: Call) {
@@ -202,7 +219,7 @@ impl Watcher {
     fn release(&mut self, release: Release) {
         let Some(watched) = self.threads.get(&release.thread_id) else { return };
         let thread = &watched.thread;
-        let still = settled(thread) && thread.turn_ended_at == Some(release.at);
+        let still = settled(thread) && !self.agents_work(thread) && thread.turn_ended_at == Some(release.at);
         if !still || thread.archived_at.is_some() || snoozed(thread, release.at, now()) {
             return;
         }
@@ -288,8 +305,9 @@ struct Observed {
 
 /// What the change from `prior` to `next` calls for, given the latest end of a turn `handled`. The
 /// first sight of a thread calls for nothing, and nor does an archived thread. A thread another
-/// thread's agent started only calls for what it waits for, which its top parent alerts for.
-fn observe(prior: Option<&Thread>, next: &Thread, handled: Option<f64>, now: f64) -> Observed {
+/// thread's agent started only calls for what it waits for, which its top parent alerts for. An end
+/// while agents the thread started still work is let pass: the turn their report wakes ends it.
+fn observe(prior: Option<&Thread>, next: &Thread, handled: Option<f64>, agents_work: bool, now: f64) -> Observed {
     let fresh_end = next.turn_ended_at.filter(|at| settled(next) && handled.is_none_or(|handled| *at > handled));
     let mut observed = Observed { calls: Vec::new(), handled: fresh_end.or(handled) };
     let Some(prior) = prior else { return observed };
@@ -306,6 +324,7 @@ fn observe(prior: Option<&Thread>, next: &Thread, handled: Option<f64>, now: f64
         observed.calls.push(Call::Limit);
     }
     if let Some(at) = fresh_end
+        && !agents_work
         && !snoozed(next, at, now)
     {
         observed.calls.push(Call::Ended { at, after: handled });
@@ -347,10 +366,10 @@ fn work_items<'a>(
 }
 
 /// Keeps what the thread is doing now and since when; an ended turn is noted once it alerts.
-fn note_state(states: &mut HashMap<String, (WorkState, f64)>, thread: &Thread, now: f64) {
+fn note_state(states: &mut HashMap<String, (WorkState, f64)>, thread: &Thread, agents_work: bool, now: f64) {
     let state = match () {
         _ if thread.needs_approval => WorkState::Waiting,
-        _ if thread.running || thread.monitoring => WorkState::Working,
+        _ if thread.running || thread.monitoring || agents_work => WorkState::Working,
         _ => {
             if states.get(&thread.id).is_some_and(|(state, _)| !ended(*state)) {
                 states.remove(&thread.id);
@@ -524,18 +543,18 @@ mod tests {
     }
 
     fn calls(prior: &Thread, next: &Thread) -> Vec<Call> {
-        observe(Some(prior), next, prior.turn_ended_at, 100.0).calls
+        observe(Some(prior), next, prior.turn_ended_at, false, 100.0).calls
     }
 
     #[test]
     fn a_thread_seen_first_or_archived_never_alerts() {
-        let first = observe(None, &asking("t", Ask::Approval), None, 100.0);
+        let first = observe(None, &asking("t", Ask::Approval), None, false, 100.0);
         assert_eq!(first, Observed { calls: vec![], handled: None });
-        let first_ended = observe(None, &ended_at("t", 50.0), Some(10.0), 100.0);
+        let first_ended = observe(None, &ended_at("t", 50.0), Some(10.0), false, 100.0);
         assert_eq!(first_ended, Observed { calls: vec![], handled: Some(50.0) }, "its end is let pass");
 
         let archived = Thread { archived_at: Some(1.0), ..ended_at("t", 50.0) };
-        let observed = observe(Some(&running("t")), &archived, Some(10.0), 100.0);
+        let observed = observe(Some(&running("t")), &archived, Some(10.0), false, 100.0);
         assert_eq!(observed, Observed { calls: vec![], handled: Some(50.0) });
         assert_eq!(calls(&running("t"), &Thread { archived_at: Some(1.0), ..asking("t", Ask::Approval) }), vec![]);
     }
@@ -567,25 +586,33 @@ mod tests {
         assert_eq!(calls(&running("t"), &ended_at("t", 50.0)), vec![Call::Ended { at: 50.0, after: Some(10.0) }]);
 
         let monitoring = Thread { monitoring: true, ..ended_at("t", 50.0) };
-        let observed = observe(Some(&running("t")), &monitoring, Some(10.0), 100.0);
+        let observed = observe(Some(&running("t")), &monitoring, Some(10.0), false, 100.0);
         assert_eq!(observed, Observed { calls: vec![], handled: Some(10.0) }, "it still watches");
-        let observed = observe(Some(&monitoring), &ended_at("t", 50.0), Some(10.0), 100.0);
+        let observed = observe(Some(&monitoring), &ended_at("t", 50.0), Some(10.0), false, 100.0);
         assert_eq!(observed.calls, vec![Call::Ended { at: 50.0, after: Some(10.0) }]);
 
-        let observed = observe(Some(&ended_at("t", 50.0)), &ended_at("t", 50.0), Some(50.0), 100.0);
+        let observed = observe(Some(&ended_at("t", 50.0)), &ended_at("t", 50.0), Some(50.0), false, 100.0);
         assert_eq!(observed, Observed { calls: vec![], handled: Some(50.0) }, "that end was alerted for");
+    }
+
+    #[test]
+    fn a_turn_that_ends_while_its_agents_work_lets_its_end_pass() {
+        let observed = observe(Some(&running("t")), &ended_at("t", 50.0), Some(10.0), true, 100.0);
+        assert_eq!(observed, Observed { calls: vec![], handled: Some(50.0) });
+        let woken = observe(Some(&running("t")), &ended_at("t", 80.0), Some(50.0), false, 100.0);
+        assert_eq!(woken.calls, vec![Call::Ended { at: 80.0, after: Some(50.0) }], "the last turn ends it");
     }
 
     #[test]
     fn a_snoozed_thread_lets_its_end_pass() {
         let snoozed = Thread { snoozed_until: Some(1000.0), ..ended_at("t", 50.0) };
-        let observed = observe(Some(&running("t")), &snoozed, Some(10.0), 100.0);
+        let observed = observe(Some(&running("t")), &snoozed, Some(10.0), false, 100.0);
         assert_eq!(observed, Observed { calls: vec![], handled: Some(50.0) });
 
         let snoozed_then = Thread { snoozed_until: Some(60.0), ..ended_at("t", 50.0) };
-        assert_eq!(observe(Some(&running("t")), &snoozed_then, Some(10.0), 100.0).calls, vec![]);
+        assert_eq!(observe(Some(&running("t")), &snoozed_then, Some(10.0), false, 100.0).calls, vec![]);
         let woke_before = Thread { snoozed_until: Some(40.0), ..ended_at("t", 50.0) };
-        assert_eq!(observe(Some(&running("t")), &woke_before, Some(10.0), 100.0).calls.len(), 1);
+        assert_eq!(observe(Some(&running("t")), &woke_before, Some(10.0), false, 100.0).calls.len(), 1);
     }
 
     #[test]
@@ -623,7 +650,7 @@ mod tests {
         ];
         let mut states = HashMap::new();
         for (index, thread) in threads.iter().enumerate() {
-            note_state(&mut states, thread, index as f64);
+            note_state(&mut states, thread, false, index as f64);
         }
         states.insert("finished".into(), (WorkState::Finished, 50.0));
         let projects = HashMap::from([("p".to_string(), "motile".to_string())]);
@@ -645,7 +672,7 @@ mod tests {
 
         let many: Vec<Thread> = (0..10).map(|index| running(&index.to_string())).collect();
         for thread in &many {
-            note_state(&mut states, thread, 1.0);
+            note_state(&mut states, thread, false, 1.0);
         }
         let work = ServerWork::new(String::new(), String::new(), work_items(many.iter(), &states, &projects), 0.0);
         assert_eq!((work.items.len(), work.working), (motile_protocol::alerts::WORK_ITEMS, 10));
@@ -654,16 +681,18 @@ mod tests {
     #[test]
     fn a_thread_keeps_its_state_since_it_came_to_it() {
         let mut states = HashMap::new();
-        note_state(&mut states, &running("t"), 1.0);
-        note_state(&mut states, &running("t"), 2.0);
+        note_state(&mut states, &running("t"), false, 1.0);
+        note_state(&mut states, &running("t"), false, 2.0);
         assert_eq!(states["t"], (WorkState::Working, 1.0));
-        note_state(&mut states, &asking("t", Ask::Approval), 3.0);
+        note_state(&mut states, &asking("t", Ask::Approval), false, 3.0);
         assert_eq!(states["t"], (WorkState::Waiting, 3.0));
-        note_state(&mut states, &thread("t"), 4.0);
+        note_state(&mut states, &thread("t"), false, 4.0);
         assert!(!states.contains_key("t"), "it rests");
         states.insert("t".into(), (WorkState::Finished, 5.0));
-        note_state(&mut states, &thread("t"), 6.0);
+        note_state(&mut states, &thread("t"), false, 6.0);
         assert_eq!(states["t"], (WorkState::Finished, 5.0), "its end stays");
+        note_state(&mut states, &thread("t"), true, 7.0);
+        assert_eq!(states["t"], (WorkState::Working, 7.0), "its agents work");
     }
 
     #[test]

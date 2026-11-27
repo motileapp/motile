@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 
 use motile_protocol::alerts::{
-    AlertChoices, AlertKind, ENDED_WORK_STAYS_SECS, PushKey, Pushed, ServerWork, WorkItem, WorkState,
+    AlertChoices, AlertKind, ENDED_WORK_STAYS_SECS, PushKey, Pushed, ServerWork, Started, WorkItem, WorkState,
 };
 use motile_protocol::auth_api::{PushRegistration, PushService};
 use motile_protocol::identity::DeviceKey;
@@ -173,20 +173,24 @@ fn counts(view: &ThreadView) -> bool {
 const WORK_TITLE_CHARS: usize = 60;
 
 /// What a server's agents are doing, for the widgets: the top-level threads that wait for the
-/// user, then those that work, then those whose turn ended in the last 15 minutes, the latest first.
+/// user, then those that work or whose agents do, then those whose turn ended in the last 15
+/// minutes, the latest first.
 pub fn work_of<'a>(
     server_id: &str,
     server_name: &str,
-    threads: impl Iterator<Item = &'a Thread>,
+    threads: impl Iterator<Item = &'a Thread> + Clone,
     project_name: impl Fn(&str) -> String,
     now: f64,
 ) -> ServerWork {
+    let started = Started::of(threads.clone());
     let items: Vec<WorkItem> = threads
         .filter(|thread| thread.parent.is_none() && thread.archived_at.is_none())
         .filter_map(|thread| {
             let (state, since) = match () {
                 _ if thread.needs_approval => (WorkState::Waiting, thread.updated_at),
-                _ if thread.running || thread.monitoring => (WorkState::Working, thread.updated_at),
+                _ if thread.running || thread.monitoring || started.agents_work(thread) => {
+                    (WorkState::Working, thread.updated_at)
+                }
                 _ => match thread.turn_ended_at {
                     Some(ended) if now - ended < ENDED_WORK_STAYS_SECS => (WorkState::Finished, ended),
                     _ => return None,
@@ -358,12 +362,26 @@ mod tests {
             ..thread("c", "Child")
         };
         let archived = Thread { running: true, archived_at: Some(5.0), ..thread("a", "Archived") };
-        let threads = [ended, long_ago, child, archived, working, waiting];
+        let delegated = Thread { turn_ended_at: Some(950.0), updated_at: 2.0, ..thread("d", "Delegates") };
+        let delegate = Thread {
+            running: true,
+            parent: Some(motile_protocol::wire::ThreadParent { thread_id: "d".into(), tool_id: None }),
+            ..thread("dc", "Delegate")
+        };
+        let threads = [ended, long_ago, child, archived, working, waiting, delegated, delegate];
         let work = work_of("s", "studio", threads.iter(), |_| "motile".into(), 1000.0);
         let listed: Vec<(&str, WorkState)> =
             work.items.iter().map(|item| (item.thread_id.as_str(), item.state)).collect();
-        assert_eq!(listed, [("w", WorkState::Waiting), ("r", WorkState::Working), ("e", WorkState::Finished)]);
-        assert_eq!((work.working, work.waiting), (1, 1));
+        assert_eq!(
+            listed,
+            [
+                ("w", WorkState::Waiting),
+                ("r", WorkState::Working),
+                ("d", WorkState::Working),
+                ("e", WorkState::Finished)
+            ]
+        );
+        assert_eq!((work.working, work.waiting), (2, 1));
         assert_eq!(work.items[0].project, "motile");
     }
 
