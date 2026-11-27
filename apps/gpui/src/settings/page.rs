@@ -424,13 +424,8 @@ impl SettingsPage {
         .button(outline);
         let caption = "Alerts when an agent finishes, fails, or needs your approval or an answer.";
         let mode = label("Notifications", Some(caption.into()), None, Cut::Wraps, cx);
-        let toasts = label(
-            "In-app notifications",
-            Some("When you're looking at another thread.".into()),
-            None,
-            Cut::Wraps,
-            cx,
-        );
+        let toasts =
+            label("In-app notifications", Some("When you're looking at another thread.".into()), None, Cut::Wraps, cx);
         let rows = vec![
             row(vec![mode], vec![menu.into_any_element()]).into_any_element(),
             divider_on(Surface::Card, cx).into_any_element(),
