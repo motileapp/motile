@@ -63,6 +63,13 @@ fun NotificationsPage() {
                 SettingsPressRow({ AlertNotifications.openSystemSettings(context) }) { SettingsActionLabel(NotificationsText.openSettings, Symbol.Settings) }
             }
         }
+        group("toasts", footer = NotificationsText.toasts) {
+            row {
+                SettingsToggle(NotificationsText.toastsTitle, settings.toasts) { on ->
+                    store.changeNotifications(settings.copy(toasts = on))
+                }
+            }
+        }
         group("alert-choices", header = NotificationsText.choices) {
             for ((title, choice) in AlertChoices.rows) row {
                 SettingsToggle(title, choice.isOn(settings.choices), enabled = settings.notifies && !refused) { on ->

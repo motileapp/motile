@@ -44,7 +44,7 @@ struct AlertChoices: Codable, Equatable {
 struct NotificationSettings: Codable, Equatable {
     var mode = NotificationMode.notificationsAndSound
     /// While Motile is in front on another thread, an alert shows inside it.
-    var toasts = true
+    var toasts = false
     var choices = AlertChoices()
     /// A phone shows what the agents do while they work.
     var live = false

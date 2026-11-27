@@ -84,7 +84,7 @@ struct SettingsEntry: Identifiable, Hashable {
         SettingsEntry(id: "storage", title: "Images and videos", section: .general, keywords: "storage cache clear media disk"),
         SettingsEntry(id: "log", title: "Log", section: .general, keywords: "troubleshooting debug problem connecting logs file"),
         SettingsEntry(id: "notifications", title: "Notifications", section: .notifications, keywords: "alerts sound banner permission system off"),
-        SettingsEntry(id: "toasts", title: "Show alerts inside Motile", section: .notifications, keywords: "in-app toast alerts banner", desktop: true),
+        SettingsEntry(id: "toasts", title: "Show alerts inside Motile", section: .notifications, keywords: "in-app toast alerts banner"),
         SettingsEntry(id: "alert-choices", title: NotificationsText.choices, section: .notifications, keywords: "finishes fails approval question plan usage limit alerts"),
         SettingsEntry(id: "live-activities", title: "Live Activities", section: .notifications, keywords: "lock screen dynamic island working agents widget", desktop: false),
         SettingsEntry(id: "agent-accounts", title: "Provider Accounts", section: .accounts, keywords: "agents claude codex sign in account folder subscription plan api key router"),

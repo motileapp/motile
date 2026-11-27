@@ -12,6 +12,7 @@ import app.motile.core.ServerWork
 import app.motile.core.parseJSON
 import app.motile.core.parseJSONArray
 import app.motile.core.sealedParts
+import app.motile.platform.Platform
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
@@ -53,12 +54,12 @@ object Pushes {
         }
     }
 
+    /** In front, the core shows the alert as a toast inside the client, so the system shows none. */
     private fun alert(context: Context, data: Map<String, String>) {
+        if (Platform.isActive) return
         val threadID = data["thread"] ?: return
         val opened = data["sealed"]?.let { open(context, it) } as? Pushed.Alert
         val notice = opened?.let { AlertNotice.of(it.alert) } ?: AlertNotice.placeholder(threadID, AlertKind.of(data["kind"]))
-        val store = (context.applicationContext as MotileApplication).store
-        if (store.showsThread(notice.link.threadID)) return
         AlertNotifications.post(context, notice, sound = data["sound"] == "1")
     }
 
