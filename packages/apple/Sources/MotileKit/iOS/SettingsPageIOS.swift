@@ -241,7 +241,7 @@ struct SettingsPage: View {
         .id("notifications")
 
         Section {
-            Toggle("Show alerts inside Motile", isOn: notificationSetting(\.toasts))
+            Toggle("In-app notifications", isOn: notificationSetting(\.toasts))
         } footer: {
             Text(NotificationsText.toasts)
                 .foregroundStyle(Color.themeMutedForeground)
@@ -276,7 +276,7 @@ struct SettingsPage: View {
         guard on else { return setNotificationMode(.off) }
         Task {
             guard await push.requestPermission() else { return }
-            setNotificationMode(.notificationsAndSound)
+            setNotificationMode(.notifications)
         }
     }
 

@@ -35,14 +35,14 @@ fun NotificationsPage() {
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         allowed = AlertNotifications.allowed(context)
-        if (allowed) store.changeNotifications(settings.copy(mode = NotificationMode.NotificationsAndSound))
+        if (allowed) store.changeNotifications(settings.copy(mode = NotificationMode.Notifications))
         store.syncPush()
     }
 
     /** Turning notifications on asks the system first; while it refuses, they stay off. */
     fun turn(on: Boolean) {
         if (!on || allowed || Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            store.changeNotifications(settings.copy(mode = if (on) NotificationMode.NotificationsAndSound else NotificationMode.Off))
+            store.changeNotifications(settings.copy(mode = if (on) NotificationMode.Notifications else NotificationMode.Off))
             return
         }
         Preferences.set(ASKED_KEY, true)

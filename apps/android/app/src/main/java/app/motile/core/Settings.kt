@@ -76,7 +76,7 @@ data class SettingsEntry(
             SettingsEntry("storage", "Images and videos", SettingsSection.General, "storage cache clear media disk"),
             SettingsEntry("log", "Log", SettingsSection.General, "troubleshooting debug problem connecting logs file"),
             SettingsEntry("notifications", NotificationsText.title, SettingsSection.Notifications, "alerts sound banner permission system off"),
-            SettingsEntry("toasts", NotificationsText.toastsTitle, SettingsSection.Notifications, "in-app toast alerts banner"),
+            SettingsEntry("toasts", NotificationsText.toastsTitle, SettingsSection.Notifications, "toast alerts banner inside"),
             SettingsEntry("alert-choices", NotificationsText.choices, SettingsSection.Notifications, "finishes fails approval question plan usage limit alerts"),
             SettingsEntry("live-activities", NotificationsText.live, SettingsSection.Notifications, "live update notification shade working agents widget"),
             SettingsEntry("agent-accounts", "Provider Accounts", SettingsSection.Accounts, "agents claude codex sign in account folder subscription plan api key router"),

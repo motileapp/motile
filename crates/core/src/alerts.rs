@@ -19,9 +19,9 @@ const REMEMBERED_ALERTS: usize = 200;
 #[serde(rename_all = "snake_case")]
 pub enum Mode {
     Off,
+    #[default]
     Notifications,
     Sound,
-    #[default]
     NotificationsAndSound,
 }
 
@@ -245,13 +245,13 @@ mod tests {
 
     #[test]
     fn an_alert_shows_by_where_the_user_is() {
-        let settings = Settings { toasts: true, ..Settings::default() };
+        let settings = Settings { mode: Mode::NotificationsAndSound, toasts: true, ..Settings::default() };
         let away = shown(&settings, AlertKind::Finished, &at(false, false)).unwrap();
         assert_eq!(away, Shown { system: true, sound: true, toast: false });
         let elsewhere = shown(&settings, AlertKind::Finished, &at(true, false)).unwrap();
         assert_eq!(elsewhere, Shown { system: false, sound: true, toast: true });
-        let quiet = Settings { mode: Mode::Notifications, ..Settings::default() };
-        assert_eq!(shown(&quiet, AlertKind::Finished, &at(false, false)).map(|shown| shown.sound), Some(false));
+        let by_default = shown(&Settings::default(), AlertKind::Finished, &at(false, false));
+        assert_eq!(by_default, Some(Shown { system: true, sound: false, toast: false }));
         assert_eq!(shown(&settings, AlertKind::Finished, &at(true, true)), None);
         let unfocused_on_thread = shown(&settings, AlertKind::Approval, &at(false, true)).unwrap();
         assert!(unfocused_on_thread.system);
@@ -315,9 +315,9 @@ mod tests {
         assert!(off.live);
         let on = registration(&device, &Settings::default());
         assert!(on.choices.allows(AlertKind::Finished));
-        assert!(on.choices.sound);
-        let quiet = registration(&device, &Settings { mode: Mode::Notifications, ..Settings::default() });
-        assert!(!quiet.choices.sound);
+        assert!(!on.choices.sound);
+        let loud = registration(&device, &Settings { mode: Mode::NotificationsAndSound, ..Settings::default() });
+        assert!(loud.choices.sound);
     }
 
     #[test]
