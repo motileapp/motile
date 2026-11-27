@@ -1,5 +1,6 @@
 package app.motile.core
 
+import app.motile.platform.Symbol
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -54,7 +55,7 @@ class AlertChoice(val isOn: (AlertChoices) -> Boolean, val with: (AlertChoices, 
 data class NotificationSettings(
     val mode: NotificationMode = NotificationMode.NotificationsAndSound,
     /** While the client is in front on another thread, an alert shows inside it. Desktop clients only. */
-    val toasts: Boolean = true,
+    val toasts: Boolean = false,
     val choices: AlertChoices = AlertChoices(),
     /** The ongoing notification of what the agents do while they work. */
     val live: Boolean = false,
@@ -66,7 +67,7 @@ data class NotificationSettings(
     companion object {
         fun of(json: JSON): NotificationSettings = NotificationSettings(
             mode = NotificationMode.of(json.optionalString("mode")),
-            toasts = json.optionalBool("toasts") ?: true,
+            toasts = json.optionalBool("toasts") ?: false,
             choices = AlertChoices.of(json.obj("choices")),
             live = json.optionalBool("live") ?: false,
         )
@@ -78,6 +79,8 @@ object NotificationsText {
     const val title = "Notifications"
     const val mode = "Alerts when an agent finishes, fails, or needs your approval or an answer."
     const val refused = "Allow notifications for Motile in Settings."
+    const val toastsTitle = "Show alerts inside Motile"
+    const val toasts = "When you're looking at another thread."
     const val choices = "Alert me when an agent"
     const val live = "Ongoing activity"
     const val openSettings = "Open Settings"
@@ -90,6 +93,14 @@ enum class AlertKind(val raw: String) {
 
     /** It waits for the user, rather than telling what happened. */
     val waitsForUser: Boolean get() = this == Approval || this == Question || this == Plan
+
+    val symbol: Symbol
+        get() = when (this) {
+            Finished -> Symbol.CircleCheck
+            Failed, Limit -> Symbol.CircleAlert
+            Approval -> Symbol.ShieldQuestionMark
+            else -> Symbol.MessageCircleQuestionMark
+        }
 
     /** What a notification says of an alert that couldn't be opened, as `AlertKind::placeholder` does. */
     val placeholder: String

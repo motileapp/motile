@@ -240,6 +240,14 @@ struct SettingsPage: View {
         }
         .id("notifications")
 
+        Section {
+            Toggle("Show alerts inside Motile", isOn: notificationSetting(\.toasts))
+        } footer: {
+            Text(NotificationsText.toasts)
+                .foregroundStyle(Color.themeMutedForeground)
+        }
+        .id("toasts")
+
         Section(NotificationsText.choices) {
             ForEach(AlertChoices.rows, id: \.title) { row in
                 Toggle(row.title, isOn: notificationSetting((\NotificationSettings.choices).appending(path: row.choice)))

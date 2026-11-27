@@ -17,10 +17,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.motile.LocalStore
+import app.motile.core.AlertKind
 import app.motile.core.Toast
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
@@ -89,8 +91,10 @@ fun ToastView(toast: Toast, modifier: Modifier = Modifier) {
             ) {
                 Box(Modifier.height(ToastView.titleHeight), contentAlignment = Alignment.Center) {
                     val symbolSize = iconSize(text = TextSize.Sm)
+                    val alert = toast.alert
                     when {
                         toast.pending -> Spinner(symbolSize)
+                        alert != null -> Icon(alert.kind.symbol, symbolSize, color = alertColor(alert.kind))
                         toast.failed -> Icon(Symbol.CircleAlert, symbolSize, color = palette.destructive)
                         else -> Icon(Symbol.CircleCheck, symbolSize, color = palette.success)
                     }
@@ -119,16 +123,26 @@ fun ToastView(toast: Toast, modifier: Modifier = Modifier) {
     }
 }
 
-/** What follows from the toast: its pull request, the next git action, the project it added. */
+@Composable
+private fun alertColor(kind: AlertKind): Color = when (kind) {
+    AlertKind.Finished -> Theme.colors.success
+    AlertKind.Failed -> Theme.colors.destructive
+    AlertKind.Limit -> Theme.colors.warning
+    else -> Theme.colors.foreground
+}
+
+/** What follows from the toast: its pull request, the next git action, the project it added, the thread it alerts of. */
 @Composable
 private fun Actions(toast: Toast) {
     val store = LocalStore.current
     val url = toast.url
     val next = toast.nextLabel
+    val alert = toast.alert
     val actions = buildList<Triple<String, Boolean, () -> Unit>> {
         if (url != null) add(Triple("View PR", next == null) { store.showPullRequest(url) })
         if (next != null) add(Triple(next, true) { store.runNextGit() })
         if (toast.projectID != null) add(Triple("Open project", true) { store.openToastProject() })
+        if (alert != null) add(Triple("Open", true) { store.openThread(alert.link) })
     }
     if (actions.isEmpty()) return
     Row(Modifier.padding(top = 6.dp)) {

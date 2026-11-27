@@ -824,6 +824,11 @@ class AppStore(private val context: Context) {
                 val settings = NotificationSettings.of(event.obj("settings") ?: EmptyJSON)
                 return { applyNotificationSettings(settings) }
             }
+            "alert" -> {
+                if (event.obj("shown")?.optionalBool("toast") != true) return null
+                val alert = PushedAlert.of(event.obj("alert") ?: return null)
+                return { present(alert) }
+            }
             "work" -> {
                 val servers = event.objects("servers").map(ServerWork::of)
                 Pushes.later { Pushes.work(context, servers) }
@@ -2253,10 +2258,17 @@ class AppStore(private val context: Context) {
     }
 
     /** What worked goes away by itself; what failed or is still under way stays until it is closed or replaced. */
-    private fun show(toast: Toast) {
+    private fun show(toast: Toast, lastingMillis: Long = 10_000) {
         this.toast = toast
         if (toast.failed || toast.pending) return
-        main.postDelayed({ if (this.toast == toast) this.toast = null }, 10_000)
+        main.postDelayed({ if (this.toast == toast) this.toast = null }, lastingMillis)
+    }
+
+    /** Shows an alert of another thread inside the client, unless what failed or is still under way has the toast. */
+    private fun present(alert: PushedAlert) {
+        if (toast?.let { it.failed || it.pending } == true) return
+        val link = ThreadLink(alert.serverID, alert.threadID)
+        show(Toast(title = alert.threadTitle, description = alert.body, alert = AlertToast(alert.kind, link)), lastingMillis = 6_000)
     }
 
     fun dismissToast() {

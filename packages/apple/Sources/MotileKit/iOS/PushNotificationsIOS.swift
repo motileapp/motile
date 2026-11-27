@@ -220,17 +220,12 @@ extension PushNotifications: AlertPresenting {
 }
 
 extension PushNotifications: UNUserNotificationCenterDelegate {
-    /// In front, an alert shows unless its thread is the one on screen. UIKit takes the answers to
-    /// both of these only on the main thread.
+    /// In front, the core shows an alert as a toast inside the app, so the system shows none.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        let thread = notification.request.content.userInfo["thread"] as? String
-        DispatchQueue.main.async {
-            let onScreen = MainActor.assumeIsolated { thread != nil && self.store?.selectedThread?.id == thread }
-            completionHandler(onScreen ? [] : [.banner, .list, .sound])
-        }
+        completionHandler([])
     }
 
     nonisolated func userNotificationCenter(

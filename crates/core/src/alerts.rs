@@ -38,22 +38,17 @@ impl Mode {
 }
 
 /// This device's notification settings.
-#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug, Default)]
 #[serde(default)]
 pub struct Settings {
     /// On a phone, the system shows its pushes: `off` stops them and the others keep them.
     pub mode: Mode,
-    /// While the client is in front and shows another thread, an alert shows inside it.
+    /// While the client is in front and shows another thread, an alert shows inside it. Off by
+    /// default, as it interrupts.
     pub toasts: bool,
     pub choices: AlertChoices,
     /// A phone shows what the agents do while they work: a Live Activity, or an ongoing notification.
     pub live: bool,
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        Self { mode: Mode::default(), toasts: true, choices: AlertChoices::default(), live: false }
-    }
 }
 
 impl Settings {
@@ -88,18 +83,19 @@ pub struct Where {
     pub focused: bool,
     /// The alert's thread is on screen.
     pub on_thread: bool,
-    /// A phone or a tablet, whose system shows the pushes rather than the client.
+    /// A phone or a tablet, whose system shows the pushes while the client isn't in front.
     pub pushed: bool,
 }
 
 pub fn shown(settings: &Settings, kind: AlertKind, at: &Where) -> Option<Shown> {
-    if !settings.choices.allows(kind) || at.pushed || (at.focused && at.on_thread) {
+    if !settings.choices.allows(kind) || (at.focused && at.on_thread) || (at.pushed && !at.focused) {
         return None;
     }
     let sound = settings.mode.sounds();
-    let shown = match at.focused {
-        true => Shown { system: false, sound, toast: settings.toasts },
-        false => Shown { system: settings.mode.notifies(), sound, toast: false },
+    let shown = match (at.focused, at.pushed) {
+        (true, true) => Shown { system: false, sound: false, toast: settings.toasts },
+        (true, false) => Shown { system: false, sound, toast: settings.toasts },
+        (false, _) => Shown { system: settings.mode.notifies(), sound, toast: false },
     };
     (shown.system || shown.sound || shown.toast).then_some(shown)
 }
@@ -269,7 +265,7 @@ mod tests {
 
     #[test]
     fn an_alert_shows_by_where_the_user_is() {
-        let settings = Settings::default();
+        let settings = Settings { toasts: true, ..Settings::default() };
         let away = shown(&settings, AlertKind::Finished, &at(false, false)).unwrap();
         assert_eq!(away, Shown { system: true, sound: true, toast: false });
         let elsewhere = shown(&settings, AlertKind::Finished, &at(true, false)).unwrap();
@@ -283,8 +279,17 @@ mod tests {
 
     #[test]
     fn settings_and_phones_silence_alerts() {
-        let phone = Where { focused: false, on_thread: false, pushed: true };
-        assert_eq!(shown(&Settings::default(), AlertKind::Approval, &phone), None);
+        let toasts = Settings { toasts: true, ..Settings::default() };
+        let phone_away = Where { focused: false, on_thread: false, pushed: true };
+        assert_eq!(shown(&toasts, AlertKind::Approval, &phone_away), None);
+        let phone_in_front = Where { focused: true, on_thread: false, pushed: true };
+        assert_eq!(
+            shown(&toasts, AlertKind::Approval, &phone_in_front),
+            Some(Shown { system: false, sound: false, toast: true })
+        );
+        assert_eq!(shown(&Settings::default(), AlertKind::Approval, &phone_in_front), None);
+        let phone_on_thread = Where { focused: true, on_thread: true, pushed: true };
+        assert_eq!(shown(&toasts, AlertKind::Approval, &phone_on_thread), None);
         let off = Settings { mode: Mode::Off, toasts: false, ..Settings::default() };
         assert_eq!(shown(&off, AlertKind::Approval, &at(false, false)), None);
         assert_eq!(shown(&off, AlertKind::Approval, &at(true, false)), None);
