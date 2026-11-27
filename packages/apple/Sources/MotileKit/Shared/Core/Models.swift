@@ -687,11 +687,13 @@ struct Toast: Equatable {
     }
 }
 
-/// The thread an alert's toast is about.
+/// The thread an alert's toast is about, and where it is.
 struct AlertToast: Equatable {
     let kind: AlertKind
     let serverID: String
     let threadID: String
+    let project: String
+    let serverName: String
 }
 
 /// An action that waits for the user to say where it should happen.

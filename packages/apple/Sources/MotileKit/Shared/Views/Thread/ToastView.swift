@@ -20,14 +20,69 @@ struct ToastView: View {
     private static let outputTop = closeMargin + closeSize + 2 - padding - titleHeight - titleSpacing
 
     var body: some View {
+        Group {
+            if let alert = toast.alert {
+                alertContent(alert)
+            } else {
+                content
+            }
+        }
+        .padding(.vertical, Self.padding)
+        .padding(.leading, Self.padding)
+        .padding(.trailing, Self.trailing)
+        .frame(maxWidth: Platform.scale > 1 ? 440 : 320)
+        .background {
+            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).fill(Color.themePopover)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themeBorderPopover, lineWidth: 1)
+        }
+        .overlay(alignment: .topTrailing) {
+            ActionButton(icon: .x, help: "Close", symbolSize: ControlSize.regular.smallSymbol) { store.dismissToast() }
+                .padding(Self.closeMargin)
+        }
+        .environment(\.surface, .popover)
+    }
+
+    /// What the thread did, as its sidebar row says it, then the thread and where it is.
+    private func alertContent(_ alert: AlertToast) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(alert.kind.symbol, size: .sm)
+                Text(alert.kind.label)
+                    .font(.ui(.xs, weight: .medium))
+            }
+            .foregroundStyle(alert.kind.color)
+            .frame(height: Self.titleHeight)
+            Text(toast.title)
+                .font(.ui(.sm, weight: .medium))
+                .foregroundStyle(Color.themeForeground)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 8)
+            let place = [alert.project, alert.serverName].filter { !$0.isEmpty }
+            if !place.isEmpty {
+                place.dropFirst().reduce(Text(verbatim: place[0])) { line, part in
+                    Text("\(line)\(Text(verbatim: " · ").foregroundStyle(Color.themeMutedStrongerForeground))\(part)")
+                }
+                    .font(.ui(.xs))
+                    .foregroundStyle(Color.themeMutedForeground)
+                    .lineLimit(1)
+                    .padding(.top, 2)
+            }
+            ActionButton("Open", variant: .primary) { store.openThread(serverId: alert.serverID, threadId: alert.threadID) }
+                .padding(.top, 10)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// What git or a project add did.
+    private var content: some View {
         let url = toast.url.flatMap { URL(string: $0) }
-        HStack(alignment: .top, spacing: 10) {
+        return HStack(alignment: .top, spacing: 10) {
             Group {
                 if toast.pending {
                     Spinner(size: .md)
-                } else if let alert = toast.alert {
-                    Image(alert.kind.symbol, size: .md)
-                        .foregroundStyle(alert.kind.color)
                 } else {
                     Image(toast.failed ? .circleAlert : .circleCheck, size: .md)
                         .foregroundStyle(toast.failed ? Color.themeDestructive : Color.themeSuccess)
@@ -66,21 +121,6 @@ struct ToastView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, Self.padding)
-        .padding(.leading, Self.padding)
-        .padding(.trailing, Self.trailing)
-        .frame(maxWidth: Platform.scale > 1 ? 440 : 320)
-        .background {
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).fill(Color.themePopover)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: Self.radius, style: .continuous).strokeBorder(Color.themeBorderPopover, lineWidth: 1)
-        }
-        .overlay(alignment: .topTrailing) {
-            ActionButton(icon: .x, help: "Close", symbolSize: ControlSize.regular.smallSymbol) { store.dismissToast() }
-                .padding(Self.closeMargin)
-        }
-        .environment(\.surface, .popover)
     }
 
     /// The room between the buttons' lights, which their presses share.
@@ -96,9 +136,6 @@ struct ToastView: View {
         }
         if toast.projectID != nil {
             actions.append(("Open project", true, { store.openToastProject() }))
-        }
-        if let alert = toast.alert {
-            actions.append(("Open", true, { store.openThread(serverId: alert.serverID, threadId: alert.threadID) }))
         }
         return actions
     }

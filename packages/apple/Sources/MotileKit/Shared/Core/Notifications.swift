@@ -76,12 +76,29 @@ enum NotificationsText {
 }
 
 extension AlertKind {
+    /// What the thread did, as its sidebar row says it.
+    var label: String {
+        switch self {
+        case .finished: "Finished"
+        case .failed: "Failed"
+        case .approval: "Needs approval"
+        case .question: "Has a question"
+        case .plan: "Has a plan"
+        case .limit: "Usage limit reached"
+        case .other: "Needs you"
+        }
+    }
+
+    /// The symbol its sidebar row shows for it.
     var symbol: Symbol {
         switch self {
-        case .finished: .circleCheck
-        case .failed, .limit: .circleAlert
-        case .approval: .shieldQuestionMark
-        case .question, .plan, .other: .messageCircleQuestionMark
+        case .finished: .flag
+        case .failed: .circleAlert
+        case .approval: .shield
+        case .question: .messageCircleQuestionMark
+        case .plan: .clipboardList
+        case .limit: .clock
+        case .other: .bell
         }
     }
 
@@ -89,8 +106,7 @@ extension AlertKind {
         switch self {
         case .finished: .themeSuccess
         case .failed: .themeDestructive
-        case .limit: .themeWarning
-        case .approval, .question, .plan, .other: .themeForeground
+        case .approval, .question, .plan, .limit, .other: .themeWarning
         }
     }
 }

@@ -1,10 +1,11 @@
-//! What the last git action or project add did, or what was refused, at the top of the thread.
+//! What the last git action or project add did, what was refused, or an alert of another thread,
+//! at the top of the thread.
 
 use gpui_kit::prelude::*;
 use gpui_kit::*;
 use motile_protocol::alerts::AlertKind;
 
-use crate::store::{Store, Toast};
+use crate::store::{AlertToast, Store, Toast};
 use crate::theme::{Colors, ControlSize, IconSize, Layer, Radius, Surface, TextSize, colors};
 use crate::ui::rich_text::RichText;
 use crate::ui::{ActionButton, FadingScroll, Spinner, Variant, icons, sharing};
@@ -23,41 +24,133 @@ const OUTPUT_PADDING: f32 = 8.;
 /// The room between the toast's buttons' lights, which their clicks share.
 const BUTTON_GAP: f32 = 8.;
 
-/// The symbol before the title, and its colour: what happened, or the alert's kind.
-fn symbol(toast: &Toast, c: &Colors) -> (&'static str, Hsla) {
-    let Some(alert) = &toast.alert else {
-        return if toast.failed { ("circle-alert", c.destructive) } else { ("circle-check", c.success) };
-    };
-    match alert.kind {
-        AlertKind::Finished => ("circle-check", c.success),
-        AlertKind::Failed => ("circle-alert", c.destructive),
-        AlertKind::Limit => ("circle-alert", c.warning),
-        AlertKind::Approval => ("shield-question-mark", c.foreground),
-        AlertKind::Question | AlertKind::Plan | AlertKind::Other => ("message-circle-question-mark", c.foreground),
+/// What the thread did, as its sidebar row says it: its word and its symbol.
+fn alert_label(kind: AlertKind) -> (&'static str, &'static str) {
+    match kind {
+        AlertKind::Finished => ("Finished", "flag"),
+        AlertKind::Failed => ("Failed", "circle-alert"),
+        AlertKind::Approval => ("Needs approval", "shield"),
+        AlertKind::Question => ("Has a question", "message-circle-question-mark"),
+        AlertKind::Plan => ("Has a plan", "clipboard-list"),
+        AlertKind::Limit => ("Usage limit reached", "clock"),
+        AlertKind::Other => ("Needs you", "bell"),
     }
+}
+
+fn alert_color(kind: AlertKind, c: &Colors) -> Hsla {
+    match kind {
+        AlertKind::Finished => c.success,
+        AlertKind::Failed => c.destructive,
+        _ => c.warning,
+    }
+}
+
+/// The toast's card, which its close button goes last in.
+fn card(c: &Colors) -> Div {
+    div()
+        .relative()
+        .max_w(px(320.))
+        .py(px(NOTICE_PADDING - 1.))
+        .pl(px(NOTICE_PADDING - 1.))
+        .pr(px(TRAILING - 1.))
+        .bg(c.popover)
+        .rounded(px(NOTICE_RADIUS))
+        .border_1()
+        .border_color(c.border_popover)
+        .block_mouse_except_scroll()
+}
+
+fn close_button(store: &Entity<Store>) -> impl IntoElement {
+    let close = store.clone();
+    div().absolute().top(px(CLOSE_MARGIN - 1.)).right(px(CLOSE_MARGIN - 1.)).child(
+        ActionButton::icon("toast-close", "x", "Close")
+            .symbol_size(ControlSize::Regular.small_symbol())
+            .surface(Surface::Popover)
+            .on_click(move |_, _, cx| {
+                close.update(cx, |store, cx| {
+                    store.dismiss_toast();
+                    cx.notify();
+                })
+            }),
+    )
+}
+
+/// What the thread did, as its sidebar row says it, then the thread and where it is.
+fn alert_view(store: &Entity<Store>, toast: &Toast, alert: &AlertToast, c: &Colors) -> Div {
+    let open = store.clone();
+    let thread_id = alert.thread_id.clone();
+    let (label, symbol) = alert_label(alert.kind);
+    let color = alert_color(alert.kind, c);
+    let place: Vec<String> =
+        [&alert.project, &alert.server_name].into_iter().filter(|part| !part.is_empty()).cloned().collect();
+    let mut place_line =
+        div().pt(px(2.)).flex().text_size(TextSize::Xs).text_color(c.muted_foreground).whitespace_nowrap();
+    for (index, part) in place.iter().enumerate() {
+        if index > 0 {
+            place_line = place_line.child(div().text_color(c.muted_stronger_foreground).child("\u{a0}·\u{a0}"));
+        }
+        place_line = place_line.child(part.clone());
+    }
+    card(c)
+        .child(
+            div()
+                .flex()
+                .flex_col()
+                .items_start()
+                .child(
+                    div()
+                        .h(px(TITLE_HEIGHT))
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .text_size(TextSize::Xs)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(color)
+                        .child(icons::symbol(symbol, IconSize::Sm).text_color(color))
+                        .child(label),
+                )
+                .child(
+                    div()
+                        .pt(px(8.))
+                        .text_size(TextSize::Sm)
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(c.foreground)
+                        .line_clamp(2)
+                        .child(toast.title.clone()),
+                )
+                .when(!place.is_empty(), |column| column.child(place_line))
+                .child(div().pt(px(10.)).child(
+                    ActionButton::new("toast-thread", "Open").primary().surface(Surface::Popover).on_click(
+                        move |_, _, cx| {
+                            open.update(cx, |store, cx| {
+                                store.open_alerted_thread(&thread_id, cx);
+                                cx.notify();
+                            })
+                        },
+                    ),
+                )),
+        )
+        .child(close_button(store))
 }
 
 /// What follows is one click away: the push after a commit, the pull request after a push, the
 /// thread in a project that was cloned, the thread an alert is of.
 pub fn toast_view(store: &Entity<Store>, toast: &Toast, cx: &App) -> impl IntoElement {
     let c = colors(cx);
-    let close = store.clone();
+    if let Some(alert) = &toast.alert {
+        return alert_view(store, toast, alert, c);
+    }
     let next = store.clone();
     let view = store.clone();
     let open = store.clone();
-    let open_thread = store.clone();
     let url = toast.url.clone();
     let next_label = toast.next_label();
     let opens_project = toast.project_id.is_some();
-    let alerted_thread = toast.alert.as_ref().map(|alert| alert.thread_id.clone());
-    let count = [url.is_some(), next_label.is_some(), opens_project, alerted_thread.is_some()]
-        .into_iter()
-        .filter(|shown| *shown)
-        .count();
+    let count = [url.is_some(), next_label.is_some(), opens_project].into_iter().filter(|shown| *shown).count();
     let next_index = usize::from(url.is_some());
     let project_index = next_index + usize::from(next_label.is_some());
-    let thread_index = project_index + usize::from(opens_project);
-    let (symbol, symbol_color) = symbol(toast, c);
+    let (symbol, symbol_color) =
+        if toast.failed { ("circle-alert", c.destructive) } else { ("circle-check", c.success) };
     let description = toast.description.clone().map(|description| {
         let text = RichText::new(SharedString::from(format!("toast-{}", toast.serial)), description);
         if !toast.failed {
@@ -87,17 +180,7 @@ pub fn toast_view(store: &Entity<Store>, toast: &Toast, cx: &App) -> impl IntoEl
             .border_color(Surface::Popover.border(c))
             .child(output)
     });
-    div()
-        .relative()
-        .max_w(px(320.))
-        .py(px(NOTICE_PADDING - 1.))
-        .pl(px(NOTICE_PADDING - 1.))
-        .pr(px(TRAILING - 1.))
-        .bg(c.popover)
-        .rounded(px(NOTICE_RADIUS))
-        .border_1()
-        .border_color(c.border_popover)
-        .block_mouse_except_scroll()
+    card(c)
         .flex()
         .items_start()
         .gap(px(10.))
@@ -173,35 +256,9 @@ pub fn toast_view(store: &Entity<Store>, toast: &Toast, cx: &App) -> impl IntoEl
                                             })
                                         }),
                                 )
-                            })
-                            .when_some(alerted_thread, |row, thread_id| {
-                                row.child(
-                                    ActionButton::new("toast-thread", "Open")
-                                        .primary()
-                                        .surface(Surface::Popover)
-                                        .margin(sharing(BUTTON_GAP, thread_index, count))
-                                        .on_click(move |_, _, cx| {
-                                            open_thread.update(cx, |store, cx| {
-                                                store.open_alerted_thread(&thread_id, cx);
-                                                cx.notify();
-                                            })
-                                        }),
-                                )
                             }),
                     )
                 }),
         )
-        .child(
-            div().absolute().top(px(CLOSE_MARGIN - 1.)).right(px(CLOSE_MARGIN - 1.)).child(
-                ActionButton::icon("toast-close", "x", "Close")
-                    .symbol_size(ControlSize::Regular.small_symbol())
-                    .surface(Surface::Popover)
-                    .on_click(move |_, _, cx| {
-                        close.update(cx, |store, cx| {
-                            store.dismiss_toast();
-                            cx.notify();
-                        })
-                    }),
-            ),
-        )
+        .child(close_button(store))
 }

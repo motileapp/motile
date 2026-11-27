@@ -925,7 +925,7 @@ impl Store {
             Event::Backup { backup } => self.backup = Some(backup),
             Event::AllServers { all_servers } => self.all_servers = all_servers,
             Event::Notifications { settings } => self.notifications = settings,
-            Event::Alert { alert, shown, .. } => self.present_alert(alert, shown, cx),
+            Event::Alert { alert, server_name, shown } => self.present_alert(alert, server_name, shown, cx),
             Event::Badge { count } => self.notifier.badge(count),
             Event::Work { .. } => {}
         }

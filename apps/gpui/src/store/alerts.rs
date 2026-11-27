@@ -13,19 +13,24 @@ use crate::notifier::Notifier;
 
 const TOAST_LASTS: Duration = Duration::from_secs(6);
 
-/// The alert a toast tells of, whose thread its Open button opens.
+/// The alert a toast tells of, whose thread its Open button opens, and where that thread is.
 #[derive(Clone, PartialEq, Debug)]
 pub struct AlertToast {
     pub thread_id: String,
     pub kind: AlertKind,
+    pub project: String,
+    pub server_name: String,
 }
 
 impl Toast {
-    fn alert(alert: &Alert) -> Self {
-        Self {
-            alert: Some(AlertToast { thread_id: alert.thread_id.clone(), kind: alert.kind }),
-            ..Self::new(alert.thread_title.clone(), Some(alert.body.clone()))
-        }
+    fn alert(alert: &Alert, server_name: String) -> Self {
+        let told = AlertToast {
+            thread_id: alert.thread_id.clone(),
+            kind: alert.kind,
+            project: alert.project.clone(),
+            server_name,
+        };
+        Self { alert: Some(told), ..Self::new(alert.thread_title.clone(), None) }
     }
 }
 
@@ -36,7 +41,7 @@ impl Store {
     }
 
     /// What failed or is still under way keeps its toast.
-    pub(super) fn present_alert(&mut self, alert: Alert, shown: Shown, cx: &mut Context<Self>) {
+    pub(super) fn present_alert(&mut self, alert: Alert, server_name: String, shown: Shown, cx: &mut Context<Self>) {
         if shown.system {
             self.notifier.show(&alert, shown.sound, cx);
         } else if shown.sound {
@@ -46,7 +51,7 @@ impl Store {
         if !shown.toast || busy {
             return;
         }
-        self.show_toast_for(Toast::alert(&alert), TOAST_LASTS, cx);
+        self.show_toast_for(Toast::alert(&alert, server_name), TOAST_LASTS, cx);
     }
 
     /// Opens the thread an alert is of, over the settings or the usage, or once it is known.

@@ -677,8 +677,8 @@ data class Toast(
         }
 }
 
-/** The thread an alert's toast is about. */
-data class AlertToast(val kind: AlertKind, val link: ThreadLink)
+/** The thread an alert's toast is about, and where it is. */
+data class AlertToast(val kind: AlertKind, val link: ThreadLink, val project: String, val serverName: String)
 
 /** An action that waits for the user to say where it should happen. */
 data class PendingGit(

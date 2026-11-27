@@ -2665,7 +2665,13 @@ final class AppStore {
         guard event.shown.toast, toast.map({ !$0.failed && !$0.pending }) ?? true else { return }
         let alert = event.alert
         show(
-            Toast(title: alert.threadTitle, description: alert.body, alert: AlertToast(kind: alert.kind, serverID: alert.serverId, threadID: alert.threadId)),
+            Toast(
+                title: alert.threadTitle,
+                alert: AlertToast(
+                    kind: alert.kind, serverID: alert.serverId, threadID: alert.threadId, project: alert.project,
+                    serverName: event.serverName
+                )
+            ),
             lasting: 6)
     }
 

@@ -17,12 +17,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.motile.LocalStore
 import app.motile.core.AlertKind
+import app.motile.core.AlertToast
 import app.motile.core.Toast
 import app.motile.platform.Platform
 import app.motile.platform.Symbol
@@ -84,17 +87,18 @@ fun ToastView(toast: Toast, modifier: Modifier = Modifier) {
                 .background(palette.popover, ToastView.shape)
                 .border(1.dp, palette.borderPopover, ToastView.shape),
         ) {
-            Row(
-                Modifier.padding(start = ToastView.edge, top = ToastView.edge, bottom = ToastView.edge, end = ToastView.trailing),
+            val padding = Modifier.padding(start = ToastView.edge, top = ToastView.edge, bottom = ToastView.edge, end = ToastView.trailing)
+            val alert = toast.alert
+            if (alert != null) AlertContent(toast.title, alert, padding)
+            else Row(
+                padding,
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.Top,
             ) {
                 Box(Modifier.height(ToastView.titleHeight), contentAlignment = Alignment.Center) {
                     val symbolSize = iconSize(text = TextSize.Sm)
-                    val alert = toast.alert
                     when {
                         toast.pending -> Spinner(symbolSize)
-                        alert != null -> Icon(alert.kind.symbol, symbolSize, color = alertColor(alert.kind))
                         toast.failed -> Icon(Symbol.CircleAlert, symbolSize, color = palette.destructive)
                         else -> Icon(Symbol.CircleCheck, symbolSize, color = palette.success)
                     }
@@ -123,26 +127,46 @@ fun ToastView(toast: Toast, modifier: Modifier = Modifier) {
     }
 }
 
+/** What the thread did, as its sidebar row says it, then the thread and where it is. */
 @Composable
-private fun alertColor(kind: AlertKind): Color = when (kind) {
-    AlertKind.Finished -> Theme.colors.success
-    AlertKind.Failed -> Theme.colors.destructive
-    AlertKind.Limit -> Theme.colors.warning
-    else -> Theme.colors.foreground
+private fun AlertContent(title: String, alert: AlertToast, modifier: Modifier) {
+    val store = LocalStore.current
+    val palette = Theme.colors
+    val color = when (alert.kind) {
+        AlertKind.Finished -> palette.success
+        AlertKind.Failed -> palette.destructive
+        else -> palette.warning
+    }
+    val place = listOf(alert.project, alert.serverName).filter { it.isNotEmpty() }
+    Column(modifier.fillMaxWidth()) {
+        Row(Modifier.height(ToastView.titleHeight), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(alert.kind.symbol, iconSize(text = TextSize.Sm), color = color)
+            Text(alert.kind.label, size = TextSize.Xs, weight = FontWeight.Medium, color = color, maxLines = 1)
+        }
+        Text(title, Modifier.padding(top = 8.dp), size = TextSize.Sm, weight = FontWeight.Medium, maxLines = 2)
+        if (place.isNotEmpty()) {
+            val line = buildAnnotatedString {
+                place.forEachIndexed { index, part ->
+                    if (index > 0) withStyle(SpanStyle(color = palette.mutedStrongerForeground)) { append(" · ") }
+                    append(part)
+                }
+            }
+            Text(line, Modifier.padding(top = 2.dp), size = TextSize.Xs, color = palette.mutedForeground, maxLines = 1)
+        }
+        ActionButton("Open", modifier = Modifier.padding(top = 10.dp), variant = ButtonVariant.Primary, onClick = { store.openThread(alert.link) })
+    }
 }
 
-/** What follows from the toast: its pull request, the next git action, the project it added, the thread it alerts of. */
+/** What follows from the toast: its pull request, the next git action, the project it added. */
 @Composable
 private fun Actions(toast: Toast) {
     val store = LocalStore.current
     val url = toast.url
     val next = toast.nextLabel
-    val alert = toast.alert
     val actions = buildList<Triple<String, Boolean, () -> Unit>> {
         if (url != null) add(Triple("View PR", next == null) { store.showPullRequest(url) })
         if (next != null) add(Triple(next, true) { store.runNextGit() })
         if (toast.projectID != null) add(Triple("Open project", true) { store.openToastProject() })
-        if (alert != null) add(Triple("Open", true) { store.openThread(alert.link) })
     }
     if (actions.isEmpty()) return
     Row(Modifier.padding(top = 6.dp)) {

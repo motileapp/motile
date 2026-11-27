@@ -94,12 +94,28 @@ enum class AlertKind(val raw: String) {
     /** It waits for the user, rather than telling what happened. */
     val waitsForUser: Boolean get() = this == Approval || this == Question || this == Plan
 
+    /** What the thread did, as its sidebar row says it. */
+    val label: String
+        get() = when (this) {
+            Finished -> "Finished"
+            Failed -> "Failed"
+            Approval -> "Needs approval"
+            Question -> "Has a question"
+            Plan -> "Has a plan"
+            Limit -> "Usage limit reached"
+            Other -> "Needs you"
+        }
+
+    /** The symbol its sidebar row shows for it. */
     val symbol: Symbol
         get() = when (this) {
-            Finished -> Symbol.CircleCheck
-            Failed, Limit -> Symbol.CircleAlert
-            Approval -> Symbol.ShieldQuestionMark
-            else -> Symbol.MessageCircleQuestionMark
+            Finished -> Symbol.Flag
+            Failed -> Symbol.CircleAlert
+            Approval -> Symbol.Shield
+            Question -> Symbol.MessageCircleQuestionMark
+            Plan -> Symbol.ClipboardList
+            Limit -> Symbol.Clock
+            Other -> Symbol.Bell
         }
 
     /** What a notification says of an alert that couldn't be opened, as `AlertKind::placeholder` does. */

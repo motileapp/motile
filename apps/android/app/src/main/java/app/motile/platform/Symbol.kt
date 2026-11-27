@@ -141,7 +141,6 @@ enum class Symbol(val character: String?) {
     Share("\uE155"),
     Shield("\uE158"),
     ShieldOff("\uE15A"),
-    ShieldQuestionMark("\uE40E"),
     SignalHigh("\uE260"),
     SignalLow("\uE261"),
     SignalMedium("\uE262"),
