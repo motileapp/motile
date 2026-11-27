@@ -157,13 +157,19 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
         let aside = abs(progress)
         sidebar.view.frame = CGRect(x: 0, y: 0, width: sidebarWidth, height: bounds.height)
         panel.view.frame = CGRect(x: bounds.width - panelWidth, y: 0, width: panelWidth, height: bounds.height)
-        card.frame = CGRect(x: progress * width(of: progress < 0 ? .panel : .sidebar), y: 0, width: bounds.width, height: bounds.height)
+        // Slid with a transform, so that what the card holds is never laid out again as it moves.
+        let offset = progress * width(of: progress < 0 ? .panel : .sidebar)
+        for view in [card, cardShadow] {
+            view.bounds = CGRect(origin: .zero, size: bounds.size)
+            view.center = CGPoint(x: bounds.midX, y: bounds.midY)
+            view.transform = CGAffineTransform(translationX: offset, y: 0)
+        }
         let lifted = min(1, aside * 6)
         content.view.frame = card.bounds
         cardEdges[0].frame = CGRect(x: 0, y: 0, width: 1, height: bounds.height)
         cardEdges[1].frame = CGRect(x: bounds.width - 1, y: 0, width: 1, height: bounds.height)
         for edge in cardEdges { edge.alpha = lifted }
-        placeShadow()
+        placeShadow(aside: offset)
         shade.frame = card.bounds
         shade.alpha = 0.55 * aside
         shade.isHidden = progress == 0
@@ -180,12 +186,11 @@ final class DrawerController: UIViewController, UIGestureRecognizerDelegate {
     }
 
     /// The shadow goes as the card leaves the screen, so it doesn't fall on the side that opened.
-    private func placeShadow() {
-        if cardShadow.bounds.size != card.bounds.size {
+    private func placeShadow(aside: CGFloat) {
+        if cardShadow.layer.shadowPath?.boundingBox.size != card.bounds.size {
             cardShadow.layer.shadowPath = UIBezierPath(rect: card.bounds).cgPath
         }
-        cardShadow.frame = card.frame
-        let onScreen = (view.bounds.width - abs(card.frame.minX)) / max(1, view.bounds.width)
+        let onScreen = (view.bounds.width - abs(aside)) / max(1, view.bounds.width)
         cardShadow.alpha = smoothstep(onScreen * 4)
     }
 
