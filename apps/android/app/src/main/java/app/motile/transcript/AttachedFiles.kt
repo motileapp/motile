@@ -1,5 +1,6 @@
 package app.motile.transcript
 
+import app.motile.media.mediaSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -111,7 +112,8 @@ private fun Tile(file: AttachedFile, modifier: Modifier, open: () -> Unit) {
         modifier = modifier.size(AttachedFiles.tile).semantics { contentDescription = file.name },
         onClick = open,
     ) {
-        PictureBox(picture, Modifier.fillMaxSize()) {
+        val viewed = file.media?.let { ViewedMedia(file.name, file.video, ViewedMedia.Source.Media(it)) }
+        PictureBox(picture, Modifier.fillMaxSize().mediaSource(viewed, picture, fills = false, radius = PictureBox.radius)) {
             if (file.video) OverlayButton(Symbol.Play, "Play", ControlSize.Regular, Modifier.align(Alignment.Center), onClick = open)
         }
     }

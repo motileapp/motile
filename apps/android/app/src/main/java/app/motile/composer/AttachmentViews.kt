@@ -1,5 +1,6 @@
 package app.motile.composer
 
+import app.motile.media.mediaSource
 import android.text.format.Formatter
 import android.util.LruCache
 import androidx.compose.foundation.Image
@@ -90,7 +91,7 @@ fun AttachmentTile(attachment: Attachment, open: () -> Unit) {
     }
     TileLook(attachment, open) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            picture?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit) }
+            picture?.let { Image(it, null, Modifier.fillMaxSize().mediaSource(attachment.viewed, it, fills = false), contentScale = ContentScale.Fit) }
             if (attachment.state == Attachment.State.Preparing) {
                 Spinner(IconSize.Lg, color = palette.mutedForeground)
             } else if (attachment.video) {

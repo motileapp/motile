@@ -1,5 +1,9 @@
 package app.motile
 
+import app.motile.core.Viewing
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
 import android.app.Activity
 import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
@@ -177,12 +181,16 @@ fun Root(store: AppStore) {
         if (store.account.signedIn) AsksForNotificationsOnce()
         store.escapes?.let { escape -> BackHandler { escape() } }
         Sheets(store)
-        store.viewing?.let { viewing ->
+        // The viewer stays while it flies its picture back into the thread.
+        val viewing = store.viewing
+        var closingViewer by remember { mutableStateOf<Viewing?>(null) }
+        LaunchedEffect(viewing) { if (viewing != null) closingViewer = viewing }
+        (viewing ?: closingViewer)?.let { shown ->
             Dialog(
                 onDismissRequest = { store.closeViewer() },
                 properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
             ) {
-                EngagedWindow { MediaViewer(viewing) }
+                EngagedWindow { MediaViewer(shown, closing = viewing == null) { closingViewer = null } }
             }
         }
         store.expandedPage?.let { page ->

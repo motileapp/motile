@@ -446,7 +446,12 @@ impl TranscriptView {
     /// Lets go of the turns more than twelve viewports above the end while the view rests on it,
     /// keeping the last six viewports.
     fn trim_earlier_if_far(&mut self, cx: &mut Context<Self>) {
-        if self.agent || self.trimming || self.glide.is_some() || !self.list(cx).is_following_tail() {
+        if self.agent
+            || self.trimming
+            || self.revealing.is_some()
+            || self.glide.is_some()
+            || !self.list(cx).is_following_tail()
+        {
             return;
         }
         let viewport = self.viewport_height(cx);
@@ -728,6 +733,8 @@ impl Render for TranscriptView {
             self.request_highlights(cx);
         }
         if let Some((row_id, range)) = self.model.update(cx, |model, _| model.revealing.take()) {
+            // The turns loaded for the row come after; they aren't trimmed away as the end is followed.
+            self.hold_still(cx);
             self.revealing = Some(Reveal { row_id, range, placed: false, frames: 0 });
             crate::ui::rich_text::forget_current_match();
             cx.on_next_frame(window, |this, window, cx| this.advance_reveal(window, cx));

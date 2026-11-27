@@ -26,6 +26,7 @@ struct AttachmentTile: View {
             }
         }
         .modifier(TileLook(attachment: attachment, open: open))
+        .mediaSource(attachment.viewed, picture: picture, fills: false, radius: tileRadius)
         .task(id: attachment.file) { loadPicture() }
     }
 

@@ -311,6 +311,16 @@ final class PictureView: LayerView {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    /// Where the picture is drawn in the box.
+    var shownFrame: CGRect {
+        guard let picture else { return image.frame }
+        let size = CGSize(width: picture.width, height: picture.height)
+        guard size.width > 0, size.height > 0, image.frame.width > 0, image.frame.height > 0 else { return image.frame }
+        let scale = min(image.frame.width / size.width, image.frame.height / size.height)
+        let shown = CGSize(width: size.width * scale, height: size.height * scale)
+        return CGRect(x: image.frame.midX - shown.width / 2, y: image.frame.midY - shown.height / 2, width: shown.width, height: shown.height)
+    }
+
     override func layoutNow() {
         let size = drawn.map { CGSize(width: min($0.width, bounds.width), height: min($0.height, bounds.height)) } ?? bounds.size
         image.frame = CGRect(

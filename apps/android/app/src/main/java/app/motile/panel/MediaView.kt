@@ -1,5 +1,6 @@
 package app.motile.panel
 
+import app.motile.media.mediaSource
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -162,7 +163,8 @@ private fun MediaSquare(media: GalleryMedia, side: Dp, open: () -> Unit) {
         onClick = open,
         interaction = interaction,
     ) {
-        Box(Modifier.fillMaxSize().padding(MediaGrid.gap / 2).background(palette.backgroundSecondary), contentAlignment = Alignment.Center) {
+        val square = Modifier.fillMaxSize().padding(MediaGrid.gap / 2).mediaSource(media.viewed, picture, fills = true)
+        Box(square.background(palette.backgroundSecondary), contentAlignment = Alignment.Center) {
             val shown = picture
             if (shown != null) {
                 Image(shown, null, Modifier.fillMaxSize().alpha(if (pressed || hovering) lit else 1f), contentScale = ContentScale.Crop)

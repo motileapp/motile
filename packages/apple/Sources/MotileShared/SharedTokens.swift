@@ -118,7 +118,6 @@ public enum SharedTokens {
 
     public static let overlayOpacity: (light: CGFloat, dark: CGFloat) = (0.5, 0.6)
     public static let overlayStrongerOpacity: (light: CGFloat, dark: CGFloat) = (0.75, 0.8)
-    public static let overlayPulledOpacity: (light: CGFloat, dark: CGFloat) = (0.4, 0.4)
     public static let disabledOpacity: (light: CGFloat, dark: CGFloat) = (0.45, 0.45)
     public static let litOpacity: (light: CGFloat, dark: CGFloat) = (0.88, 0.88)
     public static let litPictureOpacity: (light: CGFloat, dark: CGFloat) = (0.8, 0.7)

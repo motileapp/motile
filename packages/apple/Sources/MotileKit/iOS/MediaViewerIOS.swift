@@ -13,10 +13,10 @@ struct MediaViewer: View {
     private static let barGap: CGFloat = 6
 
     @Environment(AppStore.self) private var store
+    @Environment(ViewerPresentation.self) private var presentation
     let viewing: Viewing
     /// The page swiped to, once the swipe has settled.
     @State private var page: Int
-    @State private var pulled: CGFloat = 0
     @State private var zoomed = false
     @State private var shared: URL?
     @State private var chrome = true
@@ -39,9 +39,6 @@ struct MediaViewer: View {
     var body: some View {
         let item = viewing.item
         ZStack {
-            Color.themeOverlay
-                .opacity(max(Opacity.overlayPulled.fixed, 1 - Double(abs(pulled)) / 500))
-                .ignoresSafeArea()
             MediaPager(count: viewing.items.count, index: $page, swipes: markup == nil) { position in
                 let current = position == page
                 return MediaPage(
@@ -52,9 +49,10 @@ struct MediaViewer: View {
                     controls: current && markup != nil ? Self.markupControls : EdgeInsets(), tapped: toggleChrome
                 )
                 .environment(store)
+                .environment(presentation)
             }
             .ignoresSafeArea()
-            .offset(y: pulled)
+            .opacity(presentation.pagesShown ? 1 : 0)
         }
         .overlay(alignment: .top) {
             if let markup {
@@ -97,12 +95,12 @@ struct MediaViewer: View {
             endMarkup()
         }
         .onChange(of: store.markupStep) { follow(store.markupStep) }
+        .onChange(of: zoomed || markup != nil, initial: true) { presentation.holds = zoomed || markup != nil }
         .onChange(of: shared) { MarkupSession.read(viewing.item.video ? nil : shared) }
         .onDisappear {
             markup?.close()
             MarkupSession.read(nil)
         }
-        .simultaneousGesture(pull)
         .preferredColorScheme(checker == .light ? .light : .dark)
         .statusBarHidden(!buttonsShown(item))
         .persistentSystemOverlays(.hidden)
@@ -123,22 +121,6 @@ struct MediaViewer: View {
         withAnimation(.easeInOut(duration: 0.3)) { chrome.toggle() }
     }
 
-    /// Pulling the picture down closes the viewer, unless the picture is zoomed and the pull moves it.
-    private var pull: some Gesture {
-        DragGesture(minimumDistance: 24)
-            .onChanged { drag in
-                guard markup == nil, !zoomed, abs(drag.translation.height) > abs(drag.translation.width) else { return }
-                pulled = max(0, drag.translation.height)
-            }
-            .onEnded { drag in
-                guard markup == nil else { return }
-                guard pulled > 110 || drag.predictedEndTranslation.height > 400, !zoomed else {
-                    return withAnimation(.spring(duration: 0.3)) { pulled = 0 }
-                }
-                store.closeViewer()
-            }
-    }
-
     private func top(_ item: ViewedMedia) -> some View {
         ZStack {
             title(item)
@@ -155,7 +137,7 @@ struct MediaViewer: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, Self.barGap)
-        .shown(pulled == 0 && buttonsShown(item), edge: .top)
+        .shown(buttonsShown(item), closing: presentation.closing, edge: .top)
     }
 
     /// What else can be done with an image or a video of the open thread.
@@ -195,7 +177,7 @@ struct MediaViewer: View {
             .glassButton(in: Capsule())
             .padding(.trailing, 16)
             .padding(.bottom, Self.barGap)
-            .shown(pulled == 0 && buttonsShown(item), edge: .bottom)
+            .shown(buttonsShown(item), closing: presentation.closing, edge: .bottom)
         }
     }
 
@@ -314,17 +296,18 @@ struct MediaViewer: View {
 }
 
 private extension View {
-    /// Hidden, the buttons fade as they slide off their edge on a spring, as Telegram's do: those on
-    /// top out of the screen, those at the bottom by their own height.
-    func shown(_ shown: Bool, edge: VerticalEdge) -> some View {
-        animation(.easeInOut(duration: 0.3)) { $0.opacity(shown ? 1 : 0) }
+    /// Hidden with a tap, the buttons fade as they slide off their edge on a spring, as Telegram's
+    /// do: those on top out of the screen, those at the bottom by their own height. As the viewer
+    /// is pulled or closes, they only fade.
+    func shown(_ shown: Bool, closing: Bool, edge: VerticalEdge) -> some View {
+        animation(.easeInOut(duration: 0.3)) { $0.opacity(shown && !closing ? 1 : 0) }
             .animation(.spring(duration: 0.4)) {
                 $0.visualEffect { content, proxy in
                     let away = edge == .top ? -proxy.frame(in: .global).maxY : proxy.size.height
                     return content.offset(y: shown ? 0 : away)
                 }
             }
-            .allowsHitTesting(shown)
+            .allowsHitTesting(shown && !closing)
     }
 }
 
@@ -426,6 +409,7 @@ private struct MediaPage: View {
     }
 
     @Environment(AppStore.self) private var store
+    @Environment(ViewerPresentation.self) private var presentation
     let item: ViewedMedia
     let shown: Bool
     @Binding var zoomed: Bool
@@ -444,6 +428,9 @@ private struct MediaPage: View {
     let controls: EdgeInsets
     let tapped: () -> Void
     @State private var loaded: Loaded?
+    /// The sharp picture, held back while the viewer opens: putting so large a picture on screen
+    /// would hold up the zoom.
+    @State private var sharp: Loaded?
     @State private var fetched: URL?
     @State private var failed = false
     @State private var fraction: Double?
@@ -482,6 +469,10 @@ private struct MediaPage: View {
                 handOver()
             }
             .onChange(of: loaded) { handOver() }
+            .onChange(of: presentation.closing) {
+                guard !presentation.closing, let sharp else { return }
+                (loaded, self.sharp) = (sharp, nil)
+            }
             .onChange(of: fetched) { handOver() }
             .onChange(of: checker) { handOver() }
             .onReceive(NotificationCenter.default.publisher(for: .mediaProgress)) { note in
@@ -566,8 +557,9 @@ private struct MediaPage: View {
                     let id = "view:\(url.path)"
                     checker = Pictures.isSeenThrough(id) ? Pictures.checker(behind: id) : nil
                     svgSize = Pictures.svgSize(id)
-                    loaded = image.map { .image($0, scale: scale) } ?? loaded
-                    failed = loaded == nil
+                    guard let image else { return failed = loaded == nil }
+                    guard presentation.closing, loaded != nil else { return loaded = .image(image, scale: scale) }
+                    sharp = .image(image, scale: scale)
                 }
             }
             guard Self.playedHere.contains(url.pathExtension.lowercased()) else { return loaded = .other(url) }
@@ -640,6 +632,9 @@ final class ZoomingScrollView: UIScrollView, UIScrollViewDelegate, UIGestureReco
     private let margin: CGSize
     var largestFit: CGFloat
     private let picture = UIImageView()
+    var pictureView: UIView { picture }
+    var showsPicture: Bool { picture.image != nil && picture.bounds.width > 0 }
+    var checkerView: UIView { grid }
     /// The checkerboard behind the picture, kept over the visible bounds so that it stays put while
     /// the picture zooms and is dragged.
     private let grid = UIView()

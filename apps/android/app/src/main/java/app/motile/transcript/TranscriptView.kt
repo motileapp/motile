@@ -343,7 +343,7 @@ fun TranscriptView(
 
     fun trimEarlierIfFar() {
         val threadID = model.threadID ?: return
-        if (ofAgent || !follower.pinned || follower.userScrolling || follower.trimming) return
+        if (ofAgent || !follower.pinned || follower.userScrolling || follower.trimming || model.revealing != null) return
         val (above, viewport) = state.distanceAbove() ?: return
         if (above <= viewport * 12) return
         val info = state.layoutInfo
@@ -439,9 +439,10 @@ fun TranscriptView(
     val revealIndex = revealing?.let { request -> entries.indexOfFirst { (it as? RowModel)?.id == request.rowID } } ?: -1
     LaunchedEffect(revealing?.serial, revealIndex >= 0) {
         val request = revealing ?: return@LaunchedEffect
-        if (revealIndex < 0) return@LaunchedEffect
+        // The turns loaded for the row come after; they aren't trimmed away as the end is followed.
         follower.pinned = false
         follower.hold = null
+        if (revealIndex < 0) return@LaunchedEffect
         actions.revealing = request.rowID
         reveal(state, shownEntries, request, actions, listTop[0], with(density) { (top + findCover).toPx() })
         actions.revealing = null
