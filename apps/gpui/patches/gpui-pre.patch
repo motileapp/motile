@@ -496,7 +496,7 @@ index f0bf121..f53ea39 100644
              force_width: self.force_width,
          }
 diff --git a/src/window.rs b/src/window.rs
-index 1214b03..f5dc6b6 100644
+index 1214b03..5e4bebe 100644
 --- a/src/window.rs
 +++ b/src/window.rs
 @@ -1249,6 +1249,7 @@ pub struct Window {
@@ -545,43 +545,3 @@ index 1214b03..f5dc6b6 100644
          #[cfg(feature = "profiler")]
          self.window_profiler.record_present(
              present_start,
-@@ -4227,6 +4243,39 @@ impl Window {
-         result
-     }
- 
-+    /// Prepaints what `f` prepaints for [`Self::paint_scaled`], `scale` times its size around
-+    /// `origin`, which stays where it is. What it prepaints takes no part in hit testing.
-+    pub fn prepaint_scaled<R>(
-+        &mut self,
-+        origin: Point<Pixels>,
-+        scale: f32,
-+        f: impl FnOnce(&mut Self) -> R,
-+    ) -> R {
-+        self.invalidator.debug_assert_prepaint();
-+        self.content_mask_stack.push(ContentMask::default());
-+        let result = self.with_element_offset(origin * (1. / scale - 1.), f);
-+        self.content_mask_stack.pop();
-+        result
-+    }
-+
-+    /// Paints what `f` paints `scale` times its size, around the origin it was prepainted for.
-+    pub fn paint_scaled<R>(&mut self, scale: f32, f: impl FnOnce(&mut Self) -> R) -> R {
-+        self.invalidator.debug_assert_paint();
-+        let mask = self.content_mask().bounds;
-+        self.content_mask_stack.push(ContentMask {
-+            bounds: Bounds::new(
-+                mask.origin * (1. / scale),
-+                size(mask.size.width / scale, mask.size.height / scale),
-+            ),
-+        });
-+        let scale_factor = self.scale_factor;
-+        self.scale_factor = scale_factor * scale;
-+        let result = f(self);
-+        self.scale_factor = scale_factor;
-+        self.content_mask_stack.pop();
-+        result
-+    }
-+
-     /// Perform prepaint on child elements in a "retryable" manner, so that any side effects
-     /// of prepaints can be discarded before prepainting again. This is used to support autoscroll
-     /// where we need to prepaint children to detect the autoscroll bounds, then adjust the

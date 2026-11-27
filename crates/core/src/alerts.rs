@@ -52,7 +52,7 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { mode: Mode::default(), toasts: true, choices: AlertChoices::default(), live: true }
+        Self { mode: Mode::default(), toasts: true, choices: AlertChoices::default(), live: false }
     }
 }
 
@@ -313,7 +313,7 @@ mod tests {
     fn turning_notifications_off_on_a_phone_asks_for_no_alerts() {
         let device =
             PushDevice { service: PushService::Fcm, token: "t".into(), live_start_token: None, live_token: None };
-        let off = registration(&device, &Settings { mode: Mode::Off, ..Settings::default() });
+        let off = registration(&device, &Settings { mode: Mode::Off, live: true, ..Settings::default() });
         assert!(!off.choices.allows(AlertKind::Approval));
         assert!(off.live);
         let on = registration(&device, &Settings::default());

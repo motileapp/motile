@@ -57,7 +57,7 @@ data class NotificationSettings(
     val toasts: Boolean = true,
     val choices: AlertChoices = AlertChoices(),
     /** The ongoing notification of what the agents do while they work. */
-    val live: Boolean = true,
+    val live: Boolean = false,
 ) {
     val notifies: Boolean get() = mode != NotificationMode.Off
 
@@ -68,7 +68,7 @@ data class NotificationSettings(
             mode = NotificationMode.of(json.optionalString("mode")),
             toasts = json.optionalBool("toasts") ?: true,
             choices = AlertChoices.of(json.obj("choices")),
-            live = json.optionalBool("live") ?: true,
+            live = json.optionalBool("live") ?: false,
         )
     }
 }

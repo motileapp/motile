@@ -88,8 +88,6 @@ import app.motile.theme.Palette
 import app.motile.theme.Radius
 import app.motile.theme.Theme
 import app.motile.theme.symbolSide
-import app.motile.transcript.ThrowLayer
-import app.motile.transcript.ThrowLayerView
 import app.motile.transcript.TranscriptView
 import app.motile.ui.FileDrop
 import app.motile.ui.ActionButton
@@ -116,7 +114,6 @@ fun ThreadScreen(overSidebar: Boolean = true) {
     val store = LocalStore.current
     val density = LocalDensity.current
     var composerHeight by remember { mutableStateOf(120.dp) }
-    val throwLayer = remember { ThrowLayer() }
     var renaming by remember { mutableStateOf<ThreadInfo?>(null) }
     var deleting by remember { mutableStateOf<ThreadInfo?>(null) }
     val isStart = store.isStart
@@ -135,7 +132,7 @@ fun ThreadScreen(overSidebar: Boolean = true) {
                     val findCover = if (agent == null && store.find.shown && store.selectedThread != null) FindBar.cover else 0.dp
                     TranscriptView(
                         model, Modifier.fillMaxSize(), contentPadding = PaddingValues(top = top, bottom = bottom), findCover = findCover,
-                        topTaken = findCover > 0.dp || store.openToast != null, throwLayer = throwLayer,
+                        topTaken = findCover > 0.dp || store.openToast != null,
                     )
                 }
             }
@@ -157,8 +154,6 @@ fun ThreadScreen(overSidebar: Boolean = true) {
                     }
                 }
             }
-            // A message sent flies over the composer it leaves.
-            ThrowLayerView(throwLayer)
             ThreadCorner(Modifier.align(Alignment.TopEnd).padding(top = top + FindBar.gap, start = 14.dp, end = 14.dp))
         }
     }

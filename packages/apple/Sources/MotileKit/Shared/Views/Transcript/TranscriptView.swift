@@ -210,11 +210,6 @@ final class TranscriptView: FlippedView, RowOwner {
     private var lastScrollY: CGFloat = 0
     /// Moves the viewport to the end with every frame while a reply streams.
     private var glide: CADisplayLink?
-    /// The message just sent, on its way from the composer to its row, which the viewport goes to
-    /// the end with.
-    private var thrown: ThrownMessage?
-    private var throwLink: CADisplayLink?
-    private var throwScrolledFrom: CGFloat = 0
     /// Whether the thread has turns before the first row. They are asked for when the viewport
     /// comes within `earlierDistance` of the first row, and let go when it rests on the end
     /// with more than `trimDistance` above it.
@@ -283,7 +278,6 @@ final class TranscriptView: FlippedView, RowOwner {
     deinit {
         measuringStopped?.withLock { $0 = true }
         glide?.invalidate()
-        throwLink?.invalidate()
     }
 
     // MARK: Geometry
@@ -511,7 +505,6 @@ final class TranscriptView: FlippedView, RowOwner {
         trimming = false
         heldAnchor = nil
         stopGlide()
-        endThrow()
         pin()
         if let place, new.contains(where: { $0.id == place.rowID }) {
             pinned = false
@@ -539,7 +532,6 @@ final class TranscriptView: FlippedView, RowOwner {
         // travelled, and as a first guess its height.
         let sentHeight = hasPending && new.contains(where: \.isSentMessage) ? heights.last : nil
         if sentHeight != nil { removePending() }
-        if sentHeight != nil, let thrown, let sent = new.last(where: \.isSentMessage) { thrown.rowID = sent.id }
 
         // A row that is replaced by one with the same id keeps its view and, as a first guess,
         // its height: it is usually the same row with more text.
@@ -621,7 +613,6 @@ final class TranscriptView: FlippedView, RowOwner {
 
     /// Shows a message at the end before the server has confirmed it, or takes it away again.
     func setPending(_ row: RowModel?) {
-        let sent = !hasPending
         removePending()
         if let row {
             rows.append(row)
@@ -632,9 +623,7 @@ final class TranscriptView: FlippedView, RowOwner {
         }
         offsets = []
         recomputeOffsets(from: 0)
-        if let row, sent { throwIn(row) } else if row == nil { endThrow() }
         updateVisible()
-        placeThrown()
     }
 
     private func removePending() {
@@ -857,7 +846,6 @@ final class TranscriptView: FlippedView, RowOwner {
             while index < rows.count, y < bottom {
                 let row = rows[index]
                 let view = self.view(for: row)
-                if row.id == thrown?.rowID { view.opacity = 0 }
                 if !measured[index] || stale.contains(row.id) {
                     let height = view.layout(width: width)
                     stale.remove(row.id)
@@ -926,8 +914,6 @@ final class TranscriptView: FlippedView, RowOwner {
         target = max(0, min(target, end))
         let distance = target - current
         guard abs(distance) > 0.5 else { return }
-        // The message just sent takes the viewport to the end with it.
-        if glides, toEnd, thrown != nil, distance > 0, distance < viewportHeight { return }
         // A streaming reply pushes the end down a block at a time; the viewport glides after it.
         if glides, toEnd, animates || glide != nil, distance > 0, distance < viewportHeight {
             startGlide()
@@ -1018,7 +1004,7 @@ final class TranscriptView: FlippedView, RowOwner {
     }
 
     private func startGlide() {
-        guard glide == nil, thrown == nil else { return }
+        guard glide == nil else { return }
         let link = ticker(target: self, selector: #selector(glideStep))
         link.add(to: .main, forMode: .common)
         glide = link
@@ -1042,65 +1028,6 @@ final class TranscriptView: FlippedView, RowOwner {
         let step = max(2 * sixtieths, remaining * (1 - pow(0.78, sixtieths)))
         scroll(to: y + min(remaining, step))
         updateVisible(follows: false)
-    }
-
-    // MARK: Sending
-
-    /// Throws the message just sent in from the composer, where it was written, if it is still there.
-    private func throwIn(_ row: RowModel) {
-        endThrow()
-        guard !reducesMotion, bounds.width > 0, let origin = ThrowSources.origin(of: row, in: self),
-              let thrown = ThrownMessage(row, from: origin, width: columnWidth, owner: self) else { return }
-        self.thrown = thrown
-        origin.source.fadeInPlaceholder()
-        throwHost.addSubview(thrown.view)
-        throwScrolledFrom = scroller.offsetY
-        stopGlide()
-        let link = ticker(target: self, selector: #selector(throwStep))
-        link.add(to: .main, forMode: .common)
-        throwLink = link
-    }
-
-    /// Where the thrown message flies: over the composer, which it lifts off from at once.
-    private var throwHost: PlatformView {
-        #if os(macOS)
-        window?.contentView ?? self
-        #else
-        window ?? self
-        #endif
-    }
-
-    @objc private func throwStep() {
-        guard let thrown else { return endThrow() }
-        thrown.tick()
-        if pinned, !userScrolling {
-            let end = endY
-            let y = min(end, throwScrolledFrom + (end - throwScrolledFrom) * thrown.scrolled)
-            if abs(y - scroller.offsetY) > 0.1 {
-                scroll(to: y)
-                updateVisible(follows: false)
-            }
-        }
-        placeThrown()
-        guard thrown.done else { return }
-        endThrow()
-        updateVisible()
-        land()
-    }
-
-    private func placeThrown() {
-        guard let thrown, let row = views[thrown.rowID] as? ThrowableRow else { return }
-        thrown.place(toward: row.convert(row.bubbleFrame, to: self), in: throwHost, from: self)
-    }
-
-    /// Lets the thrown message go and shows its row in its place.
-    private func endThrow() {
-        throwLink?.invalidate()
-        throwLink = nil
-        guard let thrown else { return }
-        self.thrown = nil
-        thrown.view.removeFromSuperview()
-        views[thrown.rowID]?.opacity = 1
     }
 
     // MARK: Finding

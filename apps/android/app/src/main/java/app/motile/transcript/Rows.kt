@@ -92,22 +92,6 @@ class RowModel(
     /** The row is a message the server has: one in the transcript, or one that waits for the agent. */
     val isSentMessage: Boolean get() = isUser || isQueued
 
-    /** The text of a message the user sent. */
-    val sentText: String?
-        get() = when (val kind = kind) {
-            is Kind.User -> kind.text.text
-            is Kind.Queued -> kind.content.text.text
-            else -> null
-        }
-
-    /** The files attached to a message the user sent. */
-    val sentFiles: List<AttachedFile>
-        get() = when (val kind = kind) {
-            is Kind.User -> kind.attachments
-            is Kind.Queued -> kind.content.attachments
-            else -> emptyList()
-        }
-
     /** What kind of view draws it, for the list to reuse views between rows of one kind. */
     val contentType: String get() = kind::class.simpleName ?: ""
 

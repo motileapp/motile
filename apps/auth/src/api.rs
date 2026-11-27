@@ -21,7 +21,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::db::{NewSignIn, Phone, UserRow};
+use crate::db::{NewSignIn, Phone, UserRow, WorkPart};
 use crate::error::{AppError, AppResult};
 use crate::google::Identity;
 use crate::{AppState, db, limits};
@@ -477,7 +477,7 @@ pub async fn push_work(
             continue;
         }
         let parts = db::fresh_work(&state.db, &phone.device, user.id).await?;
-        deliveries.push((phone.clone(), parts, before.iter().map(|part| part.active).sum::<i64>()));
+        deliveries.push((phone.clone(), parts, before.iter().map(WorkPart::active).sum::<i64>()));
     }
     if !deliveries.is_empty() {
         let state = state.clone();

@@ -77,15 +77,6 @@ final class AttachedFilesView: FlippedView {
         }
     }
 
-    /// Each file's tile or card, in the files' order, and where it is in `view`.
-    func pieces(in view: PlatformView) -> [(view: PlatformView, frame: CGRect)] {
-        var (tiles, cards) = (self.tiles[...], self.cards[...])
-        return files.compactMap { file in
-            guard let piece: PlatformView = file.pictured ? tiles.popFirst() : cards.popFirst() else { return nil }
-            return (piece, view.convert(piece.frame, from: self))
-        }
-    }
-
     private func open(_ index: Int) {
         let viewed = files.filter(\.pictured).compactMap { file in
             file.media.map { ViewedMedia(name: file.name, video: file.video, source: .media($0)) }

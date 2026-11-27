@@ -64,7 +64,6 @@ struct ComposerTextView: UIViewRepresentable {
         view.placeholder = placeholder
         view.text = text
         context.coordinator.textView = view
-        if onSubmit != nil { ThrowSources.composers.add(view) }
         context.coordinator.picked = skills?.pick?.id
         context.coordinator.chipify(atEnd: true)
         DispatchQueue.main.async { context.coordinator.measure() }
@@ -205,18 +204,13 @@ struct ComposerTextView: UIViewRepresentable {
     }
 }
 
-final class ComposerUITextView: UITextView, ThrowSource {
+final class ComposerUITextView: UITextView {
     var onSubmit: (() -> Void)?
     var onFiles: (([URL]) -> Void)?
     var skills: SkillTyping?
 
     /// What is written, with each skill's chip as its `$name`.
     var written: String { attributedText.withSkillNames }
-    var writtenRect: CGRect {
-        let padding = textContainer.lineFragmentPadding
-        let inset = textContainerInset
-        return CGRect(x: padding, y: inset.top, width: bounds.width - padding * 2, height: max(0, contentSize.height - inset.top - inset.bottom))
-    }
     var placeholder = "" {
         didSet { placeholderLabel.text = placeholder }
     }
@@ -238,13 +232,6 @@ final class ComposerUITextView: UITextView, ThrowSource {
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
-
-    func fadeInPlaceholder() {
-        placeholderLabel.alpha = 0
-        UIView.animate(withDuration: Self.placeholderFade, delay: Self.placeholderDelay, options: [.curveEaseOut, .allowUserInteraction]) {
-            self.placeholderLabel.alpha = 1
-        }
-    }
 
     func showPlaceholder() {
         placeholderLabel.isHidden = !text.isEmpty

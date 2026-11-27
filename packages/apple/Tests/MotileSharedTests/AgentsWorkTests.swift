@@ -23,6 +23,14 @@ private func item(_ thread: String, _ state: WorkState, since: Double) -> WorkIt
     #expect(AgentsWork([]).summary == "No agents working")
 }
 
+@Test func theServersCountsHoldWhenNoPartOpens() {
+    let unopened = AgentsWork([], working: 1, waiting: 0)
+    #expect((unopened.active, unopened.headline, unopened.summary) == (1, "1 working", "1 working"))
+    #expect(AgentsWork([], working: 3, waiting: 2).headline == "2 need you")
+    #expect(AgentsWork([], working: 0, waiting: 1).headline == "1 needs you")
+    #expect(AgentsWork([]).headline == "Done")
+}
+
 @Test func whatWorksTurnsStaleWhenItsServerWasLastHeardLongAgo() {
     let server = ServerWork(
         serverId: "s", serverName: "s", items: [item("a", .working, since: 0), item("b", .finished, since: 0)], working: 1, waiting: 0, at: 1000

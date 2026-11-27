@@ -232,16 +232,14 @@ impl Watcher {
         }
     }
 
-    /// Pushes the work when it changed, at most once every `WORK_EVERY`.
+    /// Pushes the work when it changed, at most once every `WORK_EVERY`, and once on start, so that
+    /// what the server said before it stopped doesn't stay on the phones.
     fn keep_work_sent(&mut self) {
         let Some(pushes) = &self.pushes else { return };
         let now = now();
         self.states.retain(|_, (state, since)| !ended(*state) || *since + ENDED_WORK_STAYS_SECS > now);
         let items = work_items(self.threads.values().map(|watched| &watched.thread), &self.states, &self.projects);
-        let unchanged = match &self.sent {
-            Some(sent) => sent.items == items,
-            None => items.is_empty(),
-        };
+        let unchanged = self.sent.as_ref().is_some_and(|sent| sent.items == items);
         self.held = !unchanged;
         if unchanged || self.sent_at.is_some_and(|at| at.elapsed() < WORK_EVERY) {
             return;

@@ -96,7 +96,6 @@ private struct TileLook: ViewModifier {
         let tile = content
             .frame(width: AttachmentTile.side, height: AttachmentTile.side)
             .background(box.color)
-            .background { ThrowAnchor(file: attachment.attached) }
             .overlay(alignment: .bottom) { AttachmentProgress(attachment: attachment) }
             .clipShape(shape)
             .overlay(shape.strokeBorder(box.border, lineWidth: 1))
