@@ -47,7 +47,7 @@ struct NotificationSettings: Codable, Equatable {
     var toasts = true
     var choices = AlertChoices()
     /// A phone shows what the agents do while they work.
-    var live = true
+    var live = false
 
     init() {}
 

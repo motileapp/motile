@@ -114,10 +114,7 @@ function Row({
     case "user":
       return (
         <div className="mb-5 flex justify-end pt-1">
-          <p
-            data-sent
-            className="max-w-[80%] rounded-xl bg-background-secondary px-3.5 py-2.5 text-(length:--type-md) leading-6 text-foreground"
-          >
+          <p className="max-w-[80%] rounded-xl bg-background-secondary px-3.5 py-2.5 text-(length:--type-md) leading-6 text-foreground">
             {item.text}
           </p>
         </div>

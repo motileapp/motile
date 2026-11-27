@@ -31,7 +31,7 @@ export function Composer({
 }: {
   thread: Thread
   elapsed: (since: number) => string
-  onSend: (text: string, field: HTMLTextAreaElement | null) => void
+  onSend: (text: string) => void
   onAnswer: (allow: boolean) => void
   onStop: () => void
 }) {
@@ -43,7 +43,7 @@ export function Composer({
     .filter((run) => run.state === "working")
   const send = () => {
     if (!text.trim()) return
-    onSend(text.trim(), input.current)
+    onSend(text.trim())
     setText("")
   }
 
@@ -127,7 +127,7 @@ export function Composer({
           placeholder={
             status.kind === "working" ? "Send a follow-up" : "Ask anything"
           }
-          className="block w-full resize-none bg-transparent px-3.5 pt-3 text-(length:--type-md) leading-5 outline-none placeholder:text-muted-stronger-foreground placeholder:transition-opacity placeholder:duration-200 placeholder:ease-out data-thrown:placeholder:opacity-0 data-thrown:placeholder:transition-none pointer-coarse:text-(length:--type-lg)"
+          className="block w-full resize-none bg-transparent px-3.5 pt-3 text-(length:--type-md) leading-5 outline-none placeholder:text-muted-stronger-foreground pointer-coarse:text-(length:--type-lg)"
         />
         <div
           onClick={(event) => {

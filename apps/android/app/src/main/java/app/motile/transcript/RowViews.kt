@@ -41,7 +41,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -138,7 +137,7 @@ fun ticking(running: Boolean): Double {
     return now
 }
 
-internal object Bubble {
+private object Bubble {
     const val PADDING = 14f
     /** How far the text of a message with nothing attached is from the bubble's top and bottom. */
     val textInset = 10.dp
@@ -194,19 +193,14 @@ private fun UserRow(row: RowModel, user: RowModel.Kind.User) {
     val palette = LocalPalette.current
     val text = remember(user.text, palette) { user.text.styled.get(palette) }
     val beside = avatarBeside(user.avatar)
-    WithMore(user, text, beside) { more -> UserBubble(row, user, text, more, beside) }
-}
-
-/** Whether a long message is cut, its lines counted as its bubble's widest text sets them, before it is drawn. */
-@Composable
-private fun WithMore(user: RowModel.Kind.User, text: AnnotatedString, beside: Dp, content: @Composable (more: Boolean) -> Unit) {
-    if (!user.collapsible) return content(false)
+    if (!user.collapsible) return UserBubble(row, user, text, more = false, beside)
+    // A long message counts its lines as its bubble's widest text sets them, before it is drawn.
     BoxWithConstraints(Modifier.fillMaxWidth()) {
         val measurer = rememberTextMeasurer()
         val density = LocalDensity.current
         val width = with(density) { bubbleWidest(constraints.maxWidth, beside) - (Bubble.PADDING.dp * 2).roundToPx() }
         val lines = remember(text, width) { measurer.measure(text, messageStyle, constraints = Constraints(maxWidth = width)).lineCount }
-        content(lines > Cut.PAST)
+        UserBubble(row, user, text, more = lines > Cut.PAST, beside)
     }
 }
 
@@ -214,90 +208,62 @@ private fun WithMore(user: RowModel.Kind.User, text: AnnotatedString, beside: Dp
 @Composable
 private fun UserBubble(row: RowModel, user: RowModel.Kind.User, text: AnnotatedString, more: Boolean, beside: Dp) {
     val palette = LocalPalette.current
-    val target = rememberThrowTarget(row.id)
-    val shape = RoundedCornerShape(Bubble.radius)
-    Column(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalAlignment = Alignment.End) {
-        WithAvatar(user.avatar, user.sender, beside) {
-            Box(
-                Modifier
-                    .bubbleWidth(beside)
-                    .opacity(Opacity.Disabled, on = row.id == RowModel.pendingID)
-                    .clip(shape)
-                    .background(palette.backgroundSecondary, shape)
-                    .onPlaced { target.bubble = it },
-            ) {
-                UserBubbleContent(row, user, text, more, target, target.piece)
-            }
-        }
-        MessageMeta(Time.stamp(user.at), trailing = true, help = "Copy message", Modifier.padding(top = 4.dp, bottom = 25.dp)) {
-            Platform.copy(user.text.text)
-        }
-    }
-}
-
-/** What a message's bubble holds: its files, then its text. `target` is told where they are; the copy of a thrown message has none. */
-@Composable
-private fun UserBubbleContent(row: RowModel, user: RowModel.Kind.User, text: AnnotatedString, more: Boolean, target: ThrowTarget?, piece: (Int) -> Modifier) {
     val actions = LocalTranscript.current
+    val pending = row.id == RowModel.pendingID
     val hasText = text.isNotEmpty()
     val hasFiles = user.attachments.isNotEmpty()
     val open = actions.isExpanded(row.id)
     val cut = more && !open
     val cutHeight = with(LocalDensity.current) { (Typesetter.messageLineHeight * Cut.LINES).toDp() }
     val cutFade = with(LocalDensity.current) { (Typesetter.messageLineHeight * Cut.FADE_LINES).toDp() }
-    Column(
-        Modifier.padding(
-            start = Bubble.PADDING.dp, end = Bubble.PADDING.dp,
-            top = if (hasFiles) Bubble.PADDING.dp else Bubble.textInset,
-            bottom = when {
-                more -> 0.dp
-                hasText -> Bubble.textInset
-                else -> Bubble.PADDING.dp
-            },
-        ),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        CompositionLocalProvider(LocalSurface provides Surface.Secondary) {
-            if (hasFiles) AttachedFiles(user.attachments, piece = piece)
-            if (hasText) {
-                MessageWithMore(more) {
-                    val shown = if (cut) Modifier.heightIn(max = cutHeight).clipToBounds().edgeFade(above = { 0f }, below = { Float.MAX_VALUE }, length = cutFade) else Modifier
-                    val found = if (target == null) emptyList() else user.text.found(actions.model.found[row.id])
-                    val cutPx = with(LocalDensity.current) { cutHeight.toPx() }
-                    SelectionContainer(Modifier.onPlaced { target?.text = it }.then(shown)) {
-                        MarkedText(text, messageStyle, found = found, onCurrent = { local, window ->
-                            if (target == null) return@MarkedText
-                            actions.currentMatch(row.id, window)
-                            if (cut && actions.revealing == row.id && local.bottom > cutPx) actions.toggleExpansion(row.id)
-                        }, sent = user.text::sentOffset)
-                    }
-                    if (more) {
-                        ActionButton(
-                            if (open) "Show less" else "Show more", variant = ButtonVariant.Ghost, prose = true, expanded = open,
-                            padding = Bubble.PADDING.dp - Cut.inset, stretches = true,
-                            margin = PaddingValues(start = Cut.inset, top = Cut.gap, bottom = Cut.below),
-                        ) { actions.toggleExpansion(row.id) }
+    Column(Modifier.fillMaxWidth().padding(top = 14.dp), horizontalAlignment = Alignment.End) {
+        val shape = RoundedCornerShape(Bubble.radius)
+        WithAvatar(user.avatar, user.sender, beside) {
+            Column(
+                Modifier
+                    .bubbleWidth(beside)
+                    .opacity(Opacity.Disabled, on = pending)
+                    .clip(shape)
+                    .background(palette.backgroundSecondary, shape)
+                    .padding(
+                        start = Bubble.PADDING.dp, end = Bubble.PADDING.dp,
+                        top = if (hasFiles) Bubble.PADDING.dp else Bubble.textInset,
+                        bottom = when {
+                            more -> 0.dp
+                            hasText -> Bubble.textInset
+                            else -> Bubble.PADDING.dp
+                        },
+                    ),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CompositionLocalProvider(LocalSurface provides Surface.Secondary) {
+                    if (hasFiles) AttachedFiles(user.attachments)
+                    if (hasText) {
+                        MessageWithMore(more) {
+                            val shown = if (cut) Modifier.heightIn(max = cutHeight).clipToBounds().edgeFade(above = { 0f }, below = { Float.MAX_VALUE }, length = cutFade) else Modifier
+                            val found = user.text.found(actions.model.found[row.id])
+                            val cutPx = with(LocalDensity.current) { cutHeight.toPx() }
+                            SelectionContainer(shown) {
+                                MarkedText(text, messageStyle, found = found, onCurrent = { local, window ->
+                                    actions.currentMatch(row.id, window)
+                                    if (cut && actions.revealing == row.id && local.bottom > cutPx) actions.toggleExpansion(row.id)
+                                }, sent = user.text::sentOffset)
+                            }
+                            if (more) {
+                                ActionButton(
+                                    if (open) "Show less" else "Show more", variant = ButtonVariant.Ghost, prose = true, expanded = open,
+                                    padding = Bubble.PADDING.dp - Cut.inset, stretches = true,
+                                    margin = PaddingValues(start = Cut.inset, top = Cut.gap, bottom = Cut.below),
+                                ) { actions.toggleExpansion(row.id) }
+                            }
+                        }
                     }
                 }
             }
         }
-    }
-}
-
-/**
- * The bubble of a message thrown in from the composer, laid out as its row lays it out, without
- * what is around it. A user's bubble is only what it holds, as the throw draws its fill.
- */
-@Composable
-fun ThrownBubble(row: RowModel, piece: (Int) -> Modifier) {
-    when (val kind = row.kind) {
-        is RowModel.Kind.User -> {
-            val palette = LocalPalette.current
-            val text = remember(kind.text, palette) { kind.text.styled.get(palette) }
-            WithMore(kind, text, beside = 0.dp) { more -> Box(Modifier.bubbleWidth()) { UserBubbleContent(row, kind, text, more, target = null, piece) } }
+        MessageMeta(Time.stamp(user.at), trailing = true, help = "Copy message", Modifier.padding(top = 4.dp, bottom = 25.dp)) {
+            Platform.copy(user.text.text)
         }
-        is RowModel.Kind.Queued -> QueuedBubble(row, kind.content, target = null, piece)
-        else -> {}
     }
 }
 
@@ -366,39 +332,32 @@ private fun MessageWithMore(more: Boolean, content: @Composable () -> Unit) {
  */
 @Composable
 private fun QueuedRow(row: RowModel, queued: QueuedContent) {
-    val target = rememberThrowTarget(row.id)
-    Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.TopEnd) {
-        QueuedBubble(row, queued, target, target.piece)
-    }
-}
-
-/** A message that waits in its dotted bubble. `target` is told where its parts are; the copy of a thrown message has none. */
-@Composable
-private fun QueuedBubble(row: RowModel, queued: QueuedContent, target: ThrowTarget?, piece: (Int) -> Modifier) {
     val palette = LocalPalette.current
     val actions = LocalTranscript.current
     val text = remember(queued.text, palette) { queued.text.styled.get(palette) }
     val hasText = text.isNotEmpty()
     val hasFiles = queued.attachments.isNotEmpty()
     val waiting = row.id == RowModel.pendingID
-    Column(Modifier.bubbleWidth().dashedBorder(palette.border, Radius.xl).onPlaced { target?.bubble = it }) {
-        if (hasText || hasFiles) {
-            Column(
-                Modifier.padding(start = Bubble.PADDING.dp, end = Bubble.PADDING.dp, top = if (hasFiles) Bubble.PADDING.dp else 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (hasFiles) AttachedFiles(queued.attachments, piece = piece)
-                if (hasText) SelectionContainer(Modifier.onPlaced { target?.text = it }) { MarkedText(text, messageStyle) }
+    Box(Modifier.fillMaxWidth().padding(vertical = 14.dp), contentAlignment = Alignment.TopEnd) {
+        Column(Modifier.bubbleWidth().dashedBorder(palette.border, Radius.xl)) {
+            if (hasText || hasFiles) {
+                Column(
+                    Modifier.padding(start = Bubble.PADDING.dp, end = Bubble.PADDING.dp, top = if (hasFiles) Bubble.PADDING.dp else 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (hasFiles) AttachedFiles(queued.attachments)
+                    if (hasText) SelectionContainer { MarkedText(text, messageStyle) }
+                }
             }
-        }
-        Row(Modifier.padding(start = Bubble.PADDING.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Symbol.Clock, iconSize(text = TextSize.Xs), Modifier.padding(end = 4.dp), color = palette.mutedForeground)
-            Text(queued.status, Modifier.weight(1f, fill = false).padding(end = 6.dp), style = Theme.smallFont, color = palette.mutedForeground, maxLines = 1)
-            RowButton("Steer", "Send as a steer instead", bordered = true, margin = PaddingValues(start = 3.dp, end = 3.dp, top = 4.dp, bottom = 10.dp)) {
-                if (!waiting) actions.store.sendNow(row.itemID)
-            }
-            RowButton("Edit", "Edit in the composer", bordered = true, margin = PaddingValues(start = 3.dp, end = 10.dp, top = 4.dp, bottom = 10.dp)) {
-                if (!waiting) actions.store.takeBack(row.itemID)
+            Row(Modifier.padding(start = Bubble.PADDING.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Symbol.Clock, iconSize(text = TextSize.Xs), Modifier.padding(end = 4.dp), color = palette.mutedForeground)
+                Text(queued.status, Modifier.weight(1f, fill = false).padding(end = 6.dp), style = Theme.smallFont, color = palette.mutedForeground, maxLines = 1)
+                RowButton("Steer", "Send as a steer instead", bordered = true, margin = PaddingValues(start = 3.dp, end = 3.dp, top = 4.dp, bottom = 10.dp)) {
+                    if (!waiting) actions.store.sendNow(row.itemID)
+                }
+                RowButton("Edit", "Edit in the composer", bordered = true, margin = PaddingValues(start = 3.dp, end = 10.dp, top = 4.dp, bottom = 10.dp)) {
+                    if (!waiting) actions.store.takeBack(row.itemID)
+                }
             }
         }
     }

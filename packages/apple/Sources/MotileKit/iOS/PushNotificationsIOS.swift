@@ -50,7 +50,8 @@ final class PushNotifications: NSObject {
 
     /// The account, the settings or the permission changed.
     func update() {
-        guard let store, store.ready, store.account.signedIn else { return }
+        guard let store, store.ready else { return }
+        guard store.account.signedIn else { return forgetSecret() }
         keepSecret()
         askOnce()
         if !store.notificationSettings.live { endLiveActivities() }
@@ -109,9 +110,15 @@ final class PushNotifications: NSObject {
         guard !keptSecret, let store else { return }
         keptSecret = true
         Task {
-            guard let secret = await store.pushSecret() else { return keptSecret = false }
-            PushSecret.store(base64: secret)
+            guard let secret = await store.pushSecret(), PushSecret.store(base64: secret) else { return keptSecret = false }
         }
+    }
+
+    /// A new sign-in comes with a new key, which the extensions must not open pushes with the old one of.
+    private func forgetSecret() {
+        guard keptSecret else { return }
+        keptSecret = false
+        PushSecret.remove()
     }
 
     /// Registers with the auth server for what the settings want, and only when that changed.
@@ -213,23 +220,34 @@ extension PushNotifications: AlertPresenting {
 }
 
 extension PushNotifications: UNUserNotificationCenterDelegate {
-    /// In front, an alert shows unless its thread is the one on screen.
+    /// In front, an alert shows unless its thread is the one on screen. UIKit takes the answers to
+    /// both of these only on the main thread.
     nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter, willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
+        _ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
         let thread = notification.request.content.userInfo["thread"] as? String
-        let onScreen = await MainActor.run { thread != nil && store?.selectedThread?.id == thread }
-        return onScreen ? [] : [.banner, .list, .sound]
+        DispatchQueue.main.async {
+            let onScreen = MainActor.assumeIsolated { thread != nil && self.store?.selectedThread?.id == thread }
+            completionHandler(onScreen ? [] : [.banner, .list, .sound])
+        }
     }
 
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
         let info = response.notification.request.content.userInfo
-        guard let thread = info["thread"] as? String else { return }
-        let server = info["server"] as? String
-        await MainActor.run {
-            guard let server = server ?? store?.anyThread(thread)?.serverID else { return }
-            open(ThreadLink(serverId: server, threadId: thread))
+        let (thread, server) = (info["thread"] as? String, info["server"] as? String)
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { self.openTapped(thread: thread, server: server) }
+            completionHandler()
         }
+    }
+
+    private func openTapped(thread: String?, server: String?) {
+        guard let thread, let server = server ?? store?.anyThread(thread)?.serverID else { return }
+        open(ThreadLink(serverId: server, threadId: thread))
     }
 }
 

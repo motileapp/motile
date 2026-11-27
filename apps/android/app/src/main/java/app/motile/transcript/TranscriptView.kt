@@ -90,12 +90,10 @@ import app.motile.theme.symbolSide
 import app.motile.ui.Icon
 import app.motile.ui.Text
 import app.motile.ui.pressesAtOnce
-import kotlin.math.abs
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -122,9 +120,6 @@ class TranscriptActions(val store: AppStore, val model: TranscriptModel, val ofA
 
     /** The pieces of the text of each row on screen, for where finding starts. */
     val texts = HashMap<String, RowTexts>()
-
-    /** Where each message's row on screen has its bubble, for a message thrown in from the composer. */
-    val throwTargets = HashMap<String, ThrowTarget>()
 
     /** Called as a row opens or closes, which mustn't drag the view to the end; `byCore` when its rows come from the core. */
     var holding: (byCore: Boolean) -> Unit = {}
@@ -236,8 +231,6 @@ fun TranscriptView(
     findCover: Dp = 0.dp,
     /** Whether something lies over the top of the rows, like the find bar or a toast, which the way to the top gives way to. */
     topTaken: Boolean = false,
-    /** Where a message sent is drawn on its way in from the composer; without it, none is thrown. */
-    throwLayer: ThrowLayer? = null,
 ) {
     val store = LocalStore.current
     val palette = LocalPalette.current
@@ -265,25 +258,6 @@ fun TranscriptView(
     }
     val placed = remember(model, resets) { model.place?.let { entries.shownAt(it, density) } }
     val follower = remember(model, resets) { Follower().apply { pinned = placed == null } }
-    val throws = remember(model, resets) { Throws(model) }
-    // A message just sent is thrown in from the composer, where it was written, if it is still there.
-    val sentNow = pending != null && throws.seenPending == null
-    throws.seenPending = pending
-    val origin = if (pending != null && sentNow && throwLayer != null && !Platform.reducesMotion) ThrowSources.origin(pending) else null
-    val starting = if (pending != null && origin != null) ThrownMessage(pending, origin, rows.lastOrNull { it.isSentMessage }?.id) else null
-    SideEffect {
-        if (!sentNow) return@SideEffect
-        throws.thrown = starting
-        if (starting != null) origin?.source?.threw()
-    }
-    // Drawn from the frame of the send on, when its row is first laid out.
-    val thrown = if (sentNow) starting else throws.thrown
-    val actions = remember(model, resets) { TranscriptActions(store, model, ofAgent) }
-    val flying = remember(thrown) { thrown?.let { ThrowLayer.Flying(it) { throws.rowID?.let(actions.throwTargets::get) } } }
-    if (throwLayer != null) {
-        throwLayer.flying = flying
-        DisposableEffect(throwLayer, flying) { onDispose { if (throwLayer.flying === flying) throwLayer.flying = null } }
-    }
     val state = remember(model, resets) {
         placed?.let { (index, offset) -> LazyListState(index, offset) } ?: LazyListState(firstVisibleItemIndex = max(0, entries.size - 1))
     }
@@ -293,6 +267,7 @@ fun TranscriptView(
     }
     // The way back at the end only shows while the one at the top is out of sight; its room stays, so that nothing moves when it does.
     val topInSight by remember(state, entries) { derivedStateOf { entries.firstOrNull() is StartedBy && state.firstVisibleItemIndex == 0 } }
+    val actions = remember(model, resets) { TranscriptActions(store, model, ofAgent) }
     val scope = rememberCoroutineScope()
     val animates = model.activity.running && model.live && !Platform.reducesMotion
     val top = contentPadding.calculateTopPadding()
@@ -381,7 +356,7 @@ fun TranscriptView(
         val least = with(density) { 2.dp.toPx() }
         while (true) {
             val remaining = state.remaining() ?: return state.scrollToEnd()
-            if (remaining <= 0.5f || !follower.pinned || follower.userScrolling || throws.thrown != null) return
+            if (remaining <= 0.5f || !follower.pinned || follower.userScrolling) return
             val sixtieths = withFrameNanos { now ->
                 val passed = if (last == 0L) 1f else max(0.25f, (now - last) / 1e9f * 60f)
                 last = now
@@ -407,8 +382,6 @@ fun TranscriptView(
             val remaining = state.remaining() ?: return state.scrollToEnd()
             if (remaining <= 0) return
             val viewport = state.layoutInfo.viewportSize.height
-            // The message just sent takes the view to the end with it.
-            if (throws.thrown != null && remaining < viewport) return
             if (follower.settled && animates && remaining < viewport) glide() else state.scrollBy(remaining.toFloat())
             trimEarlierIfFar()
         } finally {
@@ -418,21 +391,6 @@ fun TranscriptView(
 
     LaunchedEffect(state) {
         snapshotFlow { Triple(state.remaining(), state.layoutInfo.totalItemsCount, model.version) }.collectLatest { follow() }
-    }
-    LaunchedEffect(thrown) {
-        thrown ?: return@LaunchedEffect
-        var travelled = 0f
-        while (!thrown.done && throws.rowID != null) {
-            withFrameNanos(thrown::tick)
-            if (!follower.pinned || follower.userScrolling) continue
-            val remaining = state.remaining() ?: continue
-            val step = min(remaining.toFloat(), (remaining + travelled) * thrown.scrolled - travelled)
-            if (abs(step) <= 0.1f) continue
-            // On its own, so that the user's scrolling stops it and not the throw.
-            launch(start = CoroutineStart.UNDISPATCHED) { travelled += state.scrollBy(step) }
-        }
-        throws.end(thrown)
-        scope.launch { follow() }
     }
     val shownEntries by rememberUpdatedState(entries)
     val revealing = model.revealing
@@ -562,9 +520,7 @@ fun TranscriptView(
                     val entry = entries[index]
                     val row = entry as? RowModel
                     val fades = animates && row?.isSentMessage != true
-                    val animated = Modifier.fillMaxWidth().animateItem(fadeInSpec = if (fades) tween(350) else null, placementSpec = null, fadeOutSpec = null)
-                    // The row of the message on its way shows once it is there.
-                    val placed = if (row?.isSentMessage == true) animated.graphicsLayer { alpha = if (throws.rowID == row.id) 0f else 1f } else animated
+                    val placed = Modifier.fillMaxWidth().animateItem(fadeInSpec = if (fades) tween(350) else null, placementSpec = null, fadeOutSpec = null)
                     Box(placed) {
                         when {
                             row != null -> {
@@ -582,10 +538,6 @@ fun TranscriptView(
                     }
                 }
             }
-            if (thrown != null && throwLayer != null) {
-                val column = maxWidth - side * 2 - contentPadding.calculateStartPadding(direction) - contentPadding.calculateEndPadding(direction)
-                ThrownCopy(thrown, pending ?: thrown.row, actions.throwTargets, { throws.rowID }, column, throwLayer)
-            }
         }
         val jumps by remember(follower, state) {
             androidx.compose.runtime.derivedStateOf {
@@ -602,8 +554,6 @@ fun TranscriptView(
                 val info = state.layoutInfo
                 val first = info.visibleItemsInfo.firstOrNull() ?: return@derivedStateOf false
                 val last = info.visibleItemsInfo.last()
-                // The list may already have laid out rows that these entries don't have yet.
-                if (last.index >= entries.size) return@derivedStateOf false
                 heights.note(info)
                 val keys = { index: Int -> entryKey(entries[index]) }
                 val viewport = info.viewportSize.height.toFloat()

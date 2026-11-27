@@ -9,14 +9,12 @@ import {
   type LucideIcon,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { flushSync } from "react-dom"
 import { Composer } from "./composer"
 import { DiffPanel } from "./diff-panel"
 import { Glow } from "./glow"
 import { MenuChevron, ProjectIcon, TrafficLights } from "./icons"
 import { Sidebar } from "./sidebar"
 import { ThreadCardLayer, useThreadPeek } from "./thread-card"
-import { rectIn, textRect, throwMessage } from "./throw"
 import { threads as startingThreads, type Item, type Thread } from "./threads"
 import { Transcript } from "./transcript"
 import { cn } from "@/lib/utils"
@@ -32,8 +30,6 @@ export function Demo() {
   const [panel, setPanel] = useState<Panel>("closed")
   const [sidebarShown, setSidebarShown] = useState(true)
   const demoWindow = useRef<HTMLDivElement>(null)
-  const transcript = useRef<HTMLDivElement>(null)
-  const stopThrow = useRef<() => void>(undefined)
   const { peek, point } = useThreadPeek(demoWindow)
   const seconds = useSeconds()
 
@@ -49,38 +45,12 @@ export function Demo() {
       status: { kind: "idle", ago: "now" },
     }))
 
-  useEffect(() => () => stopThrow.current?.(), [])
-
-  /** Shows the message in the transcript and throws it there from the field it was written in. */
-  const send = (text: string, field: HTMLTextAreaElement | null) => {
+  const send = (text: string) => {
     const id = thread.id
-    const shown = demoWindow.current
-    const rows = transcript.current
-    stopThrow.current?.()
-    const from = shown && field ? textRect(shown, field) : undefined
-    const before = shown && rows ? rectIn(shown, rows).y : 0
-    flushSync(() =>
-      update(id, (one) => ({
-        items: [...one.items, { kind: "user", text }],
-        status: { kind: "working", since: -seconds },
-      }))
-    )
-    const bubble = [
-      ...(rows?.querySelectorAll<HTMLElement>("[data-sent]") ?? []),
-    ].at(-1)
-    const still = matchMedia("(prefers-reduced-motion: reduce)").matches
-    if (shown && rows && field && from && bubble && !still) {
-      const rise = Math.max(0, before - rectIn(shown, rows).y)
-      stopThrow.current = throwMessage({
-        within: shown,
-        text,
-        from,
-        field,
-        bubble,
-        transcript: rows,
-        rise,
-      })
-    }
+    update(id, (one) => ({
+      items: [...one.items, { kind: "user", text }],
+      status: { kind: "working", since: -seconds },
+    }))
     setTimeout(() => {
       const agent = thread.agent === "claude" ? "Claude Code" : "Codex"
       finish(id, [
@@ -181,7 +151,7 @@ export function Demo() {
             </div>
             <div className="relative min-h-0 flex-1">
               <div className="absolute inset-0 flex flex-col-reverse overflow-y-auto">
-                <div ref={transcript} className="mb-auto">
+                <div className="mb-auto">
                   <Transcript
                     key={thread.id}
                     thread={thread}

@@ -80,7 +80,8 @@ impl Pusher {
     /// or waited before the part that came now.
     pub async fn work(&self, db: &PgPool, phone: &Phone, parts: &[WorkPart], before: i64) {
         let registration = &phone.registration;
-        let active: i64 = parts.iter().map(|part| part.active).sum();
+        let counts = Counts::of(parts);
+        let active = counts.working + counts.waiting;
         match &registration.service {
             PushService::Apns { topic, sandbox } => {
                 let Some(apns) = &self.apns else { return dropped("APNs") };
@@ -99,7 +100,8 @@ impl Pusher {
                     }
                     _ => return,
                 };
-                let sealed = fitted(parts, |sealed| live(event, sealed, now).to_string().len() <= MAX_PAYLOAD_BYTES);
+                let sealed =
+                    fitted(parts, |sealed| live(event, sealed, counts, now).to_string().len() <= MAX_PAYLOAD_BYTES);
                 let push = ApnsPush {
                     token,
                     topic,
@@ -108,7 +110,7 @@ impl Pusher {
                     collapse_id: None,
                     expiration: None,
                     sandbox: *sandbox,
-                    payload: live(event, &sealed, now),
+                    payload: live(event, &sealed, counts, now),
                 };
                 let sent = apns.send(&push).await;
                 if sent == Sent::Gone || (sent == Sent::Delivered && event == LiveEvent::End) {
@@ -179,8 +181,25 @@ enum LiveEvent {
     End,
 }
 
-fn live(event: LiveEvent, sealed: &[&str], now: i64) -> Value {
-    let content = json!({ "parts": sealed });
+/// How many agents work and wait across the account's servers, which the auth server already sees,
+/// so that the Live Activity counts right even when its parts don't open or don't all fit.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+struct Counts {
+    working: i64,
+    waiting: i64,
+}
+
+impl Counts {
+    fn of(parts: &[WorkPart]) -> Self {
+        Self {
+            working: parts.iter().map(|part| part.working).sum(),
+            waiting: parts.iter().map(|part| part.waiting).sum(),
+        }
+    }
+}
+
+fn live(event: LiveEvent, sealed: &[&str], counts: Counts, now: i64) -> Value {
+    let content = json!({ "parts": sealed, "working": counts.working, "waiting": counts.waiting });
     let aps = match event {
         LiveEvent::Start => json!({
             "timestamp": now,
@@ -249,7 +268,8 @@ mod tests {
         WorkPart {
             server: server.into(),
             sealed: "x".repeat(size),
-            active: 1,
+            working: 1,
+            waiting: 0,
             at: Utc::now() - Duration::seconds(age_secs),
         }
     }
@@ -257,7 +277,8 @@ mod tests {
     #[test]
     fn the_oldest_parts_are_dropped_until_the_push_fits() {
         let parts = [part("a", 1500, 30), part("b", 1500, 600), part("c", 1500, 5)];
-        let fits = |sealed: &[&str]| live(LiveEvent::Update, sealed, 0).to_string().len() <= MAX_PAYLOAD_BYTES;
+        let counts = Counts::of(&parts);
+        let fits = |sealed: &[&str]| live(LiveEvent::Update, sealed, counts, 0).to_string().len() <= MAX_PAYLOAD_BYTES;
         let kept = fitted(&parts, fits);
         assert_eq!(kept.len(), 2);
         assert_eq!(kept, vec![parts[0].sealed.as_str(), parts[2].sealed.as_str()]);

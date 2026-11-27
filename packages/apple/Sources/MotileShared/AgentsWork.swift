@@ -31,9 +31,10 @@ public struct AgentsWork: Equatable, Sendable {
     public let working: Int
     public let waiting: Int
 
-    public init(_ servers: [ServerWork]) {
-        working = servers.reduce(0) { $0 + $1.working }
-        waiting = servers.reduce(0) { $0 + $1.waiting }
+    /// `working` and `waiting` stand for the servers' own counts when known.
+    public init(_ servers: [ServerWork], working: Int? = nil, waiting: Int? = nil) {
+        self.working = working ?? servers.reduce(0) { $0 + $1.working }
+        self.waiting = waiting ?? servers.reduce(0) { $0 + $1.waiting }
         var seen = Set<String>()
         items = servers
             .flatMap { server in
@@ -62,6 +63,13 @@ public struct AgentsWork: Equatable, Sendable {
     /// "2 working · 1 needs you".
     public var summary: String {
         summaryParts.joined(separator: " · ")
+    }
+
+    /// What matters most, in a few words: "1 needs you", else "2 working", else "Done".
+    public var headline: String {
+        guard active > 0 else { return "Done" }
+        guard waiting == 0 else { return waiting == 1 ? "1 needs you" : "\(waiting) need you" }
+        return "\(working) working"
     }
 }
 

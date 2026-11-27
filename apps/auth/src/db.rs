@@ -433,17 +433,32 @@ impl PhoneRow {
 pub struct WorkPart {
     pub server: String,
     pub sealed: String,
-    /// The threads that work or wait for the user.
-    pub active: i64,
+    pub working: i64,
+    pub waiting: i64,
     pub at: DateTime<Utc>,
 }
 
+impl WorkPart {
+    /// The threads that work or wait for the user.
+    pub fn active(&self) -> i64 {
+        self.working + self.waiting
+    }
+}
+
+/// Keeps the phone's registration. Its push token is its app's install, so an older device of that
+/// install, whose key the phone no longer has, loses it.
 pub async fn set_push(db: &PgPool, device: &str, registration: &PushRegistration) -> Result<(), sqlx::Error> {
     let (service, topic, sandbox) = match &registration.service {
         PushService::Apns { topic, sandbox } => ("apns", Some(topic.as_str()), *sandbox),
         PushService::Fcm => ("fcm", None, false),
     };
     let choices = serde_json::to_string(&registration.choices).expect("choices are JSON");
+    let mut transaction = db.begin().await?;
+    sqlx::query("DELETE FROM push_registrations WHERE token = $1 AND device <> $2")
+        .bind(&registration.token)
+        .bind(device)
+        .execute(&mut *transaction)
+        .await?;
     sqlx::query(
         "INSERT INTO push_registrations
              (device, service, topic, sandbox, token, choices, live, live_start_token, live_token)
@@ -468,9 +483,9 @@ pub async fn set_push(db: &PgPool, device: &str, registration: &PushRegistration
     .bind(registration.live)
     .bind(&registration.live_start_token)
     .bind(&registration.live_token)
-    .execute(db)
+    .execute(&mut *transaction)
     .await?;
-    Ok(())
+    transaction.commit().await
 }
 
 /// Drops the phone's registration and what was kept for it.
@@ -560,7 +575,7 @@ pub async fn store_work(
 /// phone, by server.
 pub async fn fresh_work(db: &PgPool, device: &str, user_id: Uuid) -> Result<Vec<WorkPart>, sqlx::Error> {
     sqlx::query_as(
-        "SELECT work.server, work.sealed, work.working::BIGINT + work.waiting::BIGINT AS active, work.at
+        "SELECT work.server, work.sealed, work.working::BIGINT AS working, work.waiting::BIGINT AS waiting, work.at
          FROM push_work work JOIN devices ON devices.public_key = work.server
          WHERE work.device = $1 AND devices.user_id = $2 AND work.at > now() - interval '2 hours'
          ORDER BY work.server",

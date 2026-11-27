@@ -277,73 +277,8 @@ pub fn attached_files(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let landing = ctx.landing(row_id);
-    let measured = |index: usize| {
-        landing.map(|landing| {
-            let landing = landing.clone();
-            // Inside the file's border.
-            canvas(move |bounds, _, _| landing.borrow_mut().set_file(index, bounds.dilate(px(1.))), |_, _, _, _| {})
-                .absolute()
-                .inset_0()
-        })
-    };
-    let pictured: Vec<(usize, &AttachedFile)> = files.iter().enumerate().filter(|(_, file)| file.pictured()).collect();
-    let named: Vec<(usize, &AttachedFile)> = files.iter().enumerate().filter(|(_, file)| !file.pictured()).collect();
-    let (columns, card_width) = file::card_grid(named.len(), width);
-    let card_lines: Vec<AnyElement> = named
-        .chunks(columns)
-        .map(|line| {
-            div()
-                .flex()
-                .gap(px(TILE_GAP))
-                .children(line.iter().map(|(index, file)| {
-                    let key = format!("attached-file-{row_id}-{index}");
-                    file::attached_card(key, &ctx.store, file, card_width, ctx.removed, window, cx)
-                        .children(measured(*index))
-                }))
-                .into_any_element()
-        })
-        .collect();
-    let tiles: Vec<Stateful<Div>> = pictured
-        .iter()
-        .enumerate()
-        .map(|(shown, (index, _))| picture_tile(files, shown, ctx, cx).children(measured(*index)))
-        .collect();
-    div()
-        .flex()
-        .flex_col()
-        .gap(px(TILE_GAP))
-        .when(!tiles.is_empty(), |files| files.child(div().flex().flex_wrap().gap(px(TILE_GAP)).children(tiles)))
-        .when(!card_lines.is_empty(), |files| {
-            files.child(div().flex().flex_col().items_start().gap(px(TILE_GAP)).children(card_lines))
-        })
-        .into_any_element()
-}
-
-/// The file at `index` of a message's, drawn alone as among the others: a picture's tile, or a
-/// card `width` wide.
-pub fn attached_file(
-    row_id: &str,
-    ctx: &RowContext,
-    files: &[AttachedFile],
-    index: usize,
-    width: f32,
-    window: &mut Window,
-    cx: &mut App,
-) -> Option<AnyElement> {
-    let file = files.get(index)?;
-    if !file.pictured() {
-        let key = format!("attached-file-{row_id}-{index}");
-        return Some(file::attached_card(key, &ctx.store, file, width, ctx.removed, window, cx).into_any_element());
-    }
-    let shown = files[..index].iter().filter(|file| file.pictured()).count();
-    Some(picture_tile(files, shown, ctx, cx).into_any_element())
-}
-
-/// The tile of the `shown`th picture among a message's files, which opens them in the viewer there.
-fn picture_tile(files: &[AttachedFile], shown: usize, ctx: &RowContext, cx: &App) -> Stateful<Div> {
-    let c = colors(cx);
     let store = &ctx.store;
+    let c = colors(cx);
     let pictured: Vec<&AttachedFile> = files.iter().filter(|file| file.pictured()).collect();
     let viewed: Vec<ViewedMedia> = pictured
         .iter()
@@ -359,51 +294,84 @@ fn picture_tile(files: &[AttachedFile], shown: usize, ctx: &RowContext, cx: &App
             })
         })
         .collect();
-    let file = pictured[shown];
-    let index = shown;
-    let media = file.media.clone().unwrap_or_default();
-    let (open_store, open_viewed) = (store.clone(), viewed);
-    let (menu_store, menu_media, menu_name, video) = (store.clone(), media.clone(), file.name.clone(), file.video);
-    let open = move |cx: &mut App| {
-        let viewed = open_viewed.clone();
-        open_store.update(cx, |store, cx| {
-            store.view(viewed, index);
-            cx.notify();
+    let named: Vec<(usize, &AttachedFile)> = files.iter().enumerate().filter(|(_, file)| !file.pictured()).collect();
+    let (columns, card_width) = file::card_grid(named.len(), width);
+    let card_lines: Vec<AnyElement> = named
+        .chunks(columns)
+        .map(|line| {
+            div()
+                .flex()
+                .gap(px(TILE_GAP))
+                .children(line.iter().map(|(index, file)| {
+                    let key = format!("attached-file-{row_id}-{index}");
+                    file::attached_card(key, store, file, card_width, ctx.removed, window, cx)
+                }))
+                .into_any_element()
         })
-    };
-    let play = open.clone();
+        .collect();
     div()
-        .id(SharedString::from(format!("attached-{media}-{index}")))
-        .relative()
-        .size(px(TILE))
-        .rounded(px(Radius::LG))
-        .overflow_hidden()
-        .bg(c.background_secondary)
-        .border_1()
-        .border_color(c.border)
-        .cursor_pointer()
-        .when_some(file.picture().cloned(), |tile, picture| {
-            tile.child(MediaImage::new(store.clone(), picture).size(TILE - 2.).radius(Radius::LG - 1.))
+        .flex()
+        .flex_col()
+        .gap(px(TILE_GAP))
+        .when(!pictured.is_empty(), |files| {
+            files.child(div().flex().flex_wrap().gap(px(TILE_GAP)).children(pictured.iter().enumerate().map(
+                |(index, file)| {
+                    let media = file.media.clone().unwrap_or_default();
+                    let (store, viewed) = (store.clone(), viewed.clone());
+                    let (open_store, open_viewed) = (store.clone(), viewed.clone());
+                    let (menu_store, menu_media, menu_name, video) =
+                        (store.clone(), media.clone(), file.name.clone(), file.video);
+                    let open = move |cx: &mut App| {
+                        let viewed = open_viewed.clone();
+                        open_store.update(cx, |store, cx| {
+                            store.view(viewed, index);
+                            cx.notify();
+                        })
+                    };
+                    let play = open.clone();
+                    div()
+                        .id(SharedString::from(format!("attached-{media}-{index}")))
+                        .relative()
+                        .size(px(TILE))
+                        .rounded(px(Radius::LG))
+                        .overflow_hidden()
+                        .bg(c.background_secondary)
+                        .border_1()
+                        .border_color(c.border)
+                        .cursor_pointer()
+                        .when_some(file.picture().cloned(), |tile, picture| {
+                            tile.child(MediaImage::new(store.clone(), picture).size(TILE - 2.).radius(Radius::LG - 1.))
+                        })
+                        .when(file.video, |tile| {
+                            tile.child(
+                                div().absolute().inset_0().flex().items_center().justify_center().child(
+                                    ActionButton::icon(
+                                        SharedString::from(format!("play-{media}-{index}")),
+                                        "play",
+                                        "Play",
+                                    )
+                                    .overlay()
+                                    .round(true)
+                                    .on_click(move |_, _, cx| play(cx)),
+                                ),
+                            )
+                        })
+                        .tooltip(crate::ui::tooltip(file.name.clone()))
+                        .on_click(move |_, _, cx| {
+                            cx.stop_propagation();
+                            open(cx)
+                        })
+                        .on_mouse_down(MouseButton::Right, move |event, window, cx| {
+                            cx.stop_propagation();
+                            media_menu(&menu_store, &menu_media, video, &menu_name).show(event.position, window, cx);
+                        })
+                },
+            )))
         })
-        .when(file.video, |tile| {
-            tile.child(
-                div().absolute().inset_0().flex().items_center().justify_center().child(
-                    ActionButton::icon(SharedString::from(format!("play-{media}-{index}")), "play", "Play")
-                        .overlay()
-                        .round(true)
-                        .on_click(move |_, _, cx| play(cx)),
-                ),
-            )
+        .when(!card_lines.is_empty(), |files| {
+            files.child(div().flex().flex_col().items_start().gap(px(TILE_GAP)).children(card_lines))
         })
-        .tooltip(crate::ui::tooltip(file.name.clone()))
-        .on_click(move |_, _, cx| {
-            cx.stop_propagation();
-            open(cx)
-        })
-        .on_mouse_down(MouseButton::Right, move |event, window, cx| {
-            cx.stop_propagation();
-            media_menu(&menu_store, &menu_media, video, &menu_name).show(event.position, window, cx);
-        })
+        .into_any_element()
 }
 
 /// The size an SVG opens at in the viewer: its row's, which the core enlarged if it was small.

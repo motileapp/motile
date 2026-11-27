@@ -6,9 +6,6 @@ import android.content.ClipData
 import android.view.KeyCharacterMap
 import android.view.KeyEvent as AndroidKeyEvent
 import android.webkit.MimeTypeMap
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animate
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.content.MediaType
 import androidx.compose.foundation.content.ReceiveContentListener
@@ -33,9 +30,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -45,9 +40,7 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -58,10 +51,6 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.layout
-import androidx.compose.ui.layout.onPlaced
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -84,14 +73,10 @@ import app.motile.platform.scaled
 import app.motile.theme.LocalDark
 import app.motile.theme.TextSize
 import app.motile.theme.Theme
-import app.motile.transcript.ThrowSource
-import app.motile.transcript.ThrowSources
 import app.motile.ui.ImageFiles
 import app.motile.ui.Text
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -302,12 +287,6 @@ fun ComposerTextField(model: ComposerTextModel, placeholder: String, focusReques
     val output = remember(model, palette) { model.output(SkillChip.styles(palette)) }
     val scroll = rememberScrollState()
     val layout = remember { arrayOfNulls<() -> TextLayoutResult?>(1) }
-    val scope = rememberCoroutineScope()
-    val source = remember(model, scope) { ComposerThrowSource(model, scroll, scope) { layout[0]?.invoke() } }
-    DisposableEffect(source) {
-        ThrowSources.composer = source
-        onDispose { if (ThrowSources.composer === source) ThrowSources.composer = null }
-    }
 
     LaunchedEffect(model) {
         snapshotFlow { store.draftKey to store.draft }.collect { (key, draft) -> model.load(key, draft) }
@@ -339,57 +318,11 @@ fun ComposerTextField(model: ComposerTextModel, placeholder: String, focusReques
         scrollState = scroll,
         decorator = { field ->
             Box(Modifier.padding(horizontal = 2.dp, vertical = ComposerText.verticalInset)) {
-                if (model.state.text.isEmpty()) {
-                    Text(placeholder, Modifier.graphicsLayer { alpha = source.placeholderAlpha }, style = style, color = palette.mutedStrongerForeground, maxLines = 1)
-                }
-                Box(Modifier.clipToBounds().drawBehind { drawChips(model, layout[0]?.invoke(), scroll, palette, dark) }.then(source.modifier)) { field() }
+                if (model.state.text.isEmpty()) Text(placeholder, style = style, color = palette.mutedStrongerForeground, maxLines = 1)
+                Box(Modifier.clipToBounds().drawBehind { drawChips(model, layout[0]?.invoke(), scroll, palette, dark) }) { field() }
             }
         },
     )
-}
-
-/** The composer's text as it was last laid out, which a message sent is thrown from. */
-private class ComposerThrowSource(
-    private val model: ComposerTextModel,
-    private val scroll: ScrollState,
-    private val scope: CoroutineScope,
-    private val textLayout: () -> TextLayoutResult?,
-) : ThrowSource {
-    override var written = ""
-        private set
-    private var coordinates: LayoutCoordinates? = null
-    var placeholderAlpha by mutableFloatStateOf(1f)
-        private set
-    private var fading: Job? = null
-
-    override fun threw() {
-        fading?.cancel()
-        placeholderAlpha = 0f
-        fading = scope.launch {
-            delay(150)
-            animate(0f, 1f, animationSpec = tween(200, easing = FastOutSlowInEasing)) { value, _ -> placeholderAlpha = value }
-        }
-    }
-
-    /** The whole text, scrolled or not, as wide as the field. */
-    override val writtenRect: Rect?
-        get() {
-            val box = coordinates?.takeIf { it.isAttached } ?: return null
-            val at = box.positionInRoot()
-            val top = at.y - scroll.value
-            val height = textLayout()?.size?.height ?: box.size.height
-            return Rect(at.x, top, at.x + box.size.width, top + height)
-        }
-
-    val modifier = Modifier
-        .onPlaced { coordinates = it }
-        .layout { measurable, constraints ->
-            val placeable = measurable.measure(constraints)
-            layout(placeable.width, placeable.height) {
-                written = model.state.text.toString()
-                placeable.place(0, 0)
-            }
-        }
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawChips(

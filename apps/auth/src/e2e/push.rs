@@ -273,6 +273,11 @@ fn parts(push: &Received) -> Vec<String> {
     serde_json::from_value(push.body["aps"]["content-state"]["parts"].clone()).unwrap()
 }
 
+fn counts(push: &Received) -> (i64, i64) {
+    let content = &push.body["aps"]["content-state"];
+    (content["working"].as_i64().unwrap(), content["waiting"].as_i64().unwrap())
+}
+
 fn opened_work(phone: &DeviceKey, sealed: &str) -> ServerWork {
     match PushKey::of_device(phone).open_pushed(sealed) {
         Some(Pushed::Work(work)) => work,
@@ -519,6 +524,29 @@ async fn a_phone_that_stops_is_removed_or_moves_takes_no_pushes(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn a_new_device_of_the_same_install_takes_its_push_token(db: PgPool) {
+    let push = Push::start(db).await;
+    let (old, _) = push.auth.new_client(&ANN).await;
+    let (new, _) = push.auth.new_client(&ANN).await;
+    let server = push.server_of(&new).await;
+    let registration = PushRegistration { live: true, live_token: Some("live0000".into()), ..iphone("aaaa1111") };
+    push.auth.client.set_push(&old, &registration).await.unwrap();
+    push.auth.client.push_work(&server, &work_for(&[&old], &work(&server, 1, 0))).await.unwrap();
+    push.fake.pushes(1).await;
+
+    push.auth.client.set_push(&new, &registration).await.unwrap();
+    assert_eq!((push.count("push_registrations").await, push.count("push_work").await), (1, 0));
+    let targets = push.auth.client.push_targets(&server).await.unwrap();
+    assert_eq!(targets.iter().map(|target| target.device.clone()).collect::<Vec<_>>(), vec![new.public()]);
+
+    push.auth.client.push_work(&server, &work_for(&[&old, &new], &work(&server, 1, 0))).await.unwrap();
+    let pushes = push.fake.pushes(2).await;
+    assert_eq!(opened_work(&new, &parts(&pushes[1])[0]).working, 1, "only what the phone's key opens");
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    assert_eq!(push.fake.received().iter().filter(|received| received.path.starts_with("/3/")).count(), 2);
+}
+
+#[sqlx::test]
 async fn a_token_the_push_service_no_longer_takes_is_dropped(db: PgPool) {
     let push = Push::start(db).await;
     let (iphone_key, _) = push.auth.new_client(&ANN).await;
@@ -568,6 +596,7 @@ async fn work_starts_updates_and_ends_a_live_activity(db: PgPool) {
     let sealed = parts(start);
     assert_eq!(sealed.len(), 1);
     assert_eq!(opened_work(&phone, &sealed[0]), started);
+    assert_eq!(counts(start), (1, 0));
 
     // It starts once: until the phone sends the Live Activity's token, more work starts nothing.
     push.auth.client.push_work(&first, &work_for(&[&phone], &work(&first, 2, 0))).await.unwrap();
@@ -587,6 +616,7 @@ async fn work_starts_updates_and_ends_a_live_activity(db: PgPool) {
     servers.sort();
     let shown: Vec<String> = parts(update).iter().map(|sealed| opened_work(&phone, sealed).server_id).collect();
     assert_eq!(shown, servers);
+    assert_eq!(counts(update), (2, 1), "every server's counts, as the parts may not open");
 
     // While the second still waits, the first stopping updates it.
     push.auth.client.push_work(&first, &work_for(&[&phone], &work(&first, 0, 0))).await.unwrap();

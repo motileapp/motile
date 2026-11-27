@@ -31,9 +31,10 @@ struct AgentsLiveActivity: Widget {
             } compactLeading: {
                 StateDot(work: work)
             } compactTrailing: {
-                Text("\(work.active)")
+                Text(work.headline)
                     .font(.widget(.sm, weight: .semibold))
                     .foregroundStyle(WidgetTheme.foreground)
+                    .lineLimit(1)
             } minimal: {
                 StateDot(work: work)
             }
@@ -42,13 +43,18 @@ struct AgentsLiveActivity: Widget {
     }
 }
 
-/// The colour of what matters most: an agent that waits, else one that works.
+/// The colour of what matters most: an agent that waits, else one that works, else that they're done.
 private struct StateDot: View {
     let work: AgentsWork
 
+    private var state: WorkState {
+        guard work.active > 0 else { return .finished }
+        return work.waiting > 0 ? .waiting : .working
+    }
+
     var body: some View {
         Circle()
-            .fill(WidgetTheme.color(of: work.waiting > 0 ? .waiting : .working))
+            .fill(WidgetTheme.color(of: state))
             .frame(width: WorkRow.dot * 1.5, height: WorkRow.dot * 1.5)
     }
 }

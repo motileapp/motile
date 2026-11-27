@@ -1,7 +1,6 @@
 //! How each kind of row is drawn, as the Mac's `RowViews.swift` draws them. A row is as wide as
 //! the transcript's column.
 
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::rc::Rc;
@@ -21,7 +20,6 @@ use super::kit::{GrowthFade, RowButton, Shimmer, Sideways, TailLine, dashed_outl
 use super::model::RowModel;
 use super::prose::{self, CodeBox, ParaStyle, ProseBlock, TableCell, TextPara};
 use super::sender::SenderAvatar;
-use super::throw::{self, Landing, Mark};
 use super::view::TranscriptView;
 use crate::models::{AttachedFile, duration, elapsed};
 use crate::store::Store;
@@ -41,7 +39,7 @@ const FOLD_RULE_GAP: f32 = 4.;
 const META_HEIGHT: f32 = 28.;
 pub const TURN_END_HEIGHT: f32 = META_HEIGHT + 10.;
 const BUBBLE_PADDING: f32 = 14.;
-pub const BUBBLE_RADIUS: f32 = 18.;
+const BUBBLE_RADIUS: f32 = 18.;
 /// How far a message's text is from its bubble's top and bottom.
 const BUBBLE_TEXT_INSET: f32 = 10.;
 /// The avatar beside a message the user didn't write is a circle as tall as a message of one line.
@@ -78,8 +76,6 @@ pub struct RowContext {
     pub thread_id: Option<String>,
     /// What finding in the thread found, by row.
     pub found: Rc<HashMap<String, Marks>>,
-    /// The message thrown in from the composer.
-    pub throw: Option<Mark>,
 }
 
 /// What the text of a row is known by, so that a selection keeps to the row.
@@ -97,17 +93,6 @@ impl RowContext {
 
     fn meta_shown(&self, row_id: &str) -> bool {
         self.meta_row.as_deref() == Some(row_id)
-    }
-
-    /// Where the row's bubble lands, while a message thrown in from the composer lands on it.
-    pub fn landing(&self, row_id: &str) -> Option<&Rc<RefCell<Landing>>> {
-        let throw = self.throw.as_ref().filter(|throw| !throw.copy && throw.row_id == row_id)?;
-        Some(&throw.landing)
-    }
-
-    /// What is drawn is the copy of a thrown message, whose files fly on their own.
-    fn flying(&self) -> bool {
-        self.throw.as_ref().is_some_and(|throw| throw.copy)
     }
 }
 
@@ -886,8 +871,7 @@ fn bubble_content(
         .flex_col()
         .gap(px(if has_files && !text.is_empty() { 8. } else { 0. }))
         .when(has_files, |bubble| {
-            let files = crate::media::attached_files(&model.row.id, ctx, attachments, widest, window, cx);
-            bubble.child(div().when(ctx.flying(), |files| files.opacity(0.)).child(files))
+            bubble.child(crate::media::attached_files(&model.row.id, ctx, attachments, widest, window, cx))
         })
         .when(!text.is_empty(), |bubble| {
             let id = format!("{}-text", model.row.id);
@@ -907,17 +891,7 @@ fn bubble_content(
                 Some(height) => body.relative().max_h(px(height)).overflow_hidden().child(fade()),
                 None => body,
             };
-            let measured = ctx.landing(&model.row.id).map(|landing| {
-                throw::measure(landing, |landing, bounds| {
-                    let letters = px(trim(theme::PROSE_SIZE, MESSAGE_LINE));
-                    let height = (bounds.size.height - letters * 2.).max(px(0.));
-                    landing.text = Some(Bounds::new(
-                        point(bounds.left(), bounds.top() + letters),
-                        size(bounds.size.width, height),
-                    ));
-                })
-            });
-            bubble.child(body.relative().children(measured))
+            bubble.child(body)
         });
     (bubble, more)
 }
@@ -1013,11 +987,17 @@ fn user_row(
     cx: &mut App,
 ) -> AnyElement {
     let c = colors(cx);
-    let copied_text = message.text.to_string();
-    let bubble = user_bubble(model, message, collapsible, avatar, attachments, ctx, window, cx);
-    let measured = ctx
-        .landing(&model.row.id)
-        .map(|landing| throw::measure(landing, |landing, bounds| landing.bubble = Some(bounds)));
+    let text = message.text;
+    let copied_text = text.to_string();
+    let (bubble, more) =
+        bubble_content(model, message, collapsible, avatar, attachments, c.foreground, ctx, window, cx);
+    let bottom = if text.is_empty() {
+        BUBBLE_PADDING
+    } else if more {
+        0.
+    } else {
+        BUBBLE_TEXT_INSET
+    };
     div()
         .pt(px(14.))
         .pb(px(25.))
@@ -1034,11 +1014,13 @@ fn user_row(
                 .children(message_avatar(model, avatar, sender, ctx))
                 .child(
                     bubble
-                        .relative()
+                        .when(more, |bubble| bubble.child(more_button(model, ctx)))
+                        .max_w(px(bubble_widest(ctx.width, avatar)))
+                        .min_w(px(12. + BUBBLE_PADDING * 2.))
+                        .pb(px(bottom))
                         .bg(c.background_secondary)
                         .rounded(px(BUBBLE_RADIUS))
-                        .when(model.is_pending(), |bubble| bubble.opacity(0.6))
-                        .children(measured),
+                        .when(model.is_pending(), |bubble| bubble.opacity(0.6)),
                 ),
         )
         .child(div().w_full().mt(px(4.)).child(message_meta(
@@ -1053,35 +1035,6 @@ fn user_row(
         .into_any_element()
 }
 
-/// What a message's bubble holds, as wide as it, without its fill.
-#[allow(clippy::too_many_arguments)]
-fn user_bubble(
-    model: &RowModel,
-    message: Message,
-    collapsible: bool,
-    avatar: MessageAvatar,
-    attachments: &[AttachedFile],
-    ctx: &RowContext,
-    window: &mut Window,
-    cx: &mut App,
-) -> Div {
-    let empty = message.text.is_empty();
-    let foreground = colors(cx).foreground;
-    let (bubble, more) = bubble_content(model, message, collapsible, avatar, attachments, foreground, ctx, window, cx);
-    let bottom = if empty {
-        BUBBLE_PADDING
-    } else if more {
-        0.
-    } else {
-        BUBBLE_TEXT_INSET
-    };
-    bubble
-        .when(more, |bubble| bubble.child(more_button(model, ctx)))
-        .max_w(px(bubble_widest(ctx.width, avatar)))
-        .min_w(px(12. + BUBBLE_PADDING * 2.))
-        .pb(px(bottom))
-}
-
 /// A message that waits for the agent: what it says, how it waits, and the buttons that steer
 /// the turn with it or take it back into the composer. It stands where the user's messages do,
 /// dotted around instead of filled.
@@ -1094,23 +1047,6 @@ fn queued_row(
     window: &mut Window,
     cx: &mut App,
 ) -> AnyElement {
-    let measured = ctx
-        .landing(&model.row.id)
-        .map(|landing| throw::measure(landing, |landing, bounds| landing.bubble = Some(bounds)));
-    let bubble = queued_bubble(model, shown, attachments, status, ctx, window, cx).children(measured);
-    div().py(px(14.)).flex().justify_end().child(bubble).into_any_element()
-}
-
-/// The dotted bubble of a message that waits for the agent, with its status and buttons.
-fn queued_bubble(
-    model: &RowModel,
-    shown: Message,
-    attachments: &[AttachedFile],
-    status: &str,
-    ctx: &RowContext,
-    window: &mut Window,
-    cx: &mut App,
-) -> Div {
     let c = colors(cx);
     // The buttons are this far from the bubble's right and bottom, this far from the message,
     // and a click this far above them still presses them.
@@ -1184,17 +1120,34 @@ fn queued_bubble(
                 }),
         );
     div()
-        .relative()
-        .max_w(relative(0.8))
-        .rounded(px(QUEUED_RADIUS))
+        .py(px(14.))
         .flex()
-        .flex_col()
-        .child(dashed_outline(QUEUED_RADIUS, [2., 3.], c.border))
+        .justify_end()
         .child(
-            bubble_content(model, shown, false, MessageAvatar::None, attachments, c.muted_foreground, ctx, window, cx)
-                .0,
+            div()
+                .relative()
+                .max_w(relative(0.8))
+                .rounded(px(QUEUED_RADIUS))
+                .flex()
+                .flex_col()
+                .child(dashed_outline(QUEUED_RADIUS, [2., 3.], c.border))
+                .child(
+                    bubble_content(
+                        model,
+                        shown,
+                        false,
+                        MessageAvatar::None,
+                        attachments,
+                        c.muted_foreground,
+                        ctx,
+                        window,
+                        cx,
+                    )
+                    .0,
+                )
+                .child(foot),
         )
-        .child(foot)
+        .into_any_element()
 }
 
 /// A code block of a reply.
@@ -2343,52 +2296,6 @@ pub fn render_row(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &
             queued_row(model, message, &files, status, ctx, window, cx)
         }
     }
-}
-
-/// The bubble of a message thrown in from the composer, as its row draws it but without its fill,
-/// and whether it takes its own shape as it flies, which a waiting message has from the start.
-/// It is as wide as its row lets it be, its text at its top left.
-pub fn thrown_bubble(model: &RowModel, ctx: &RowContext, window: &mut Window, cx: &mut App) -> Option<(Div, bool)> {
-    match &model.row.kind {
-        RowKind::User { text, attachments, collapsible, avatar, .. } => {
-            let files: Vec<AttachedFile> = attachments.iter().map(AttachedFile::from).collect();
-            let message = Message { text, links: Vec::new(), skills: Vec::new() };
-            let bubble = user_bubble(model, message, *collapsible, *avatar, &files, ctx, window, cx);
-            Some((div().w(px(bubble_widest(ctx.width, *avatar))).flex().child(bubble), true))
-        }
-        RowKind::Queued { text, attachments, status, .. } => {
-            let files: Vec<AttachedFile> = attachments.iter().map(AttachedFile::from).collect();
-            let message = Message { text, links: Vec::new(), skills: Vec::new() };
-            let bubble = queued_bubble(model, message, &files, status, ctx, window, cx);
-            Some((div().w(px(ctx.width)).flex().child(bubble), false))
-        }
-        _ => None,
-    }
-}
-
-/// The files of a thrown message that landed in its bubble, each drawn as there, with its index,
-/// whether it is a picture, and where it landed.
-pub fn thrown_files(
-    model: &RowModel,
-    ctx: &RowContext,
-    landed: &[Option<Bounds<Pixels>>],
-    window: &mut Window,
-    cx: &mut App,
-) -> Vec<(usize, AnyElement, bool, Bounds<Pixels>)> {
-    let (RowKind::User { attachments, .. } | RowKind::Queued { attachments, .. }) = &model.row.kind else {
-        return Vec::new();
-    };
-    let files: Vec<AttachedFile> = attachments.iter().map(AttachedFile::from).collect();
-    landed
-        .iter()
-        .enumerate()
-        .filter_map(|(index, bounds)| {
-            let bounds = (*bounds)?;
-            let width = f32::from(bounds.size.width);
-            let file = crate::media::attached_file(&model.row.id, ctx, &files, index, width, window, cx)?;
-            Some((index, file, files[index].pictured(), bounds))
-        })
-        .collect()
 }
 
 #[cfg(test)]
