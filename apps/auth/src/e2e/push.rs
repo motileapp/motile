@@ -235,7 +235,7 @@ fn alert(kind: AlertKind) -> Alert {
         project: "motile".into(),
         detail: Some("Run greet.py".into()),
         body: format!("{} · Run greet.py", kind.headline()),
-        at: now(),
+        at: whole_now(),
     }
 }
 
@@ -249,16 +249,22 @@ fn sealed(phone: &DeviceKey, alert: &Alert) -> SealedAlert {
 }
 
 fn work(server: &DeviceKey, working: usize, waiting: usize) -> ServerWork {
+    let at = whole_now();
     let item = |index: usize, state| WorkItem {
         thread_id: format!("thread-{index}"),
         title: format!("Thread {index}"),
         project: "motile".into(),
         state,
-        since: now(),
+        since: at,
     };
     let items = (0..working).map(|index| item(index, WorkState::Working));
     let items = items.chain((working..working + waiting).map(|index| item(index, WorkState::Waiting)));
-    ServerWork::new(server.public(), "build-box".into(), items.collect(), now())
+    ServerWork::new(server.public(), "build-box".into(), items.collect(), at)
+}
+
+/// Now in whole seconds, which come back from JSON exactly, as a fraction may not.
+fn whole_now() -> f64 {
+    now().floor()
 }
 
 fn work_for(phones: &[&DeviceKey], work: &ServerWork) -> PushWork {
