@@ -194,7 +194,7 @@ final class GestureTests: XCTestCase {
     }
 
     /// A hold lifts a tab of the panel and a move drags it before another. A hold that doesn't
-    /// move still brings up the tab's menu.
+    /// move still brings up the tab's menu, and the tab stays once the menu goes.
     func testAHoldAndAMoveOnAPanelTabDragsItBeforeAnother() {
         openBlankPanel()
         panelButton("Agents")?.tap()
@@ -204,6 +204,11 @@ final class GestureTests: XCTestCase {
         XCTAssertTrue(panelOrdered("Files", before: "Agents", along: .horizontal))
         panelButton("Agents")?.press(forDuration: 1.2)
         XCTAssertTrue(app.buttons["Close Others"].waitForExistence(timeout: 3))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.8)).tap()
+        XCTAssertTrue(app.buttons["Close Others"].waitForNonExistence(timeout: 3))
+        XCTAssertNotNil(panelButton("Agents"))
+        drag("Agents", before: "Files", along: .horizontal)
+        XCTAssertTrue(panelOrdered("Agents", before: "Files", along: .horizontal))
     }
 
     /// Launches the client with no tabs kept, and opens the panel on its blank tab.

@@ -81,15 +81,22 @@ final class Reorder {
 
     /// Lifts the view: hides it and keeps where all of them lie.
     fileprivate func pickUp(_ id: String, among ids: [String]) {
-        guard dragged == nil, !settling, ids.contains(id), ids.allSatisfy({ frames[$0] != nil }) else { return }
+        guard prepare(id, among: ids) else { return }
+        order = ids
+        dragged = id
+    }
+
+    /// Keeps where the views lie as the system lifts one, which is hidden only once the copy comes
+    /// over the stack: a hold that doesn't move brings up its menu, and the system says no more.
+    fileprivate func prepare(_ id: String, among ids: [String]) -> Bool {
+        guard dragged == nil, !settling, ids.contains(id), ids.allSatisfy({ frames[$0] != nil }) else { return false }
         lifted = frames.filter { ids.contains($0.key) }
         spans = ids.compactMap { lifted[$0] }.map { start($0)...(start($0) + length($0)) }
         let from = ids.firstIndex(of: id) ?? 0
         lift = (id, ids, from)
         landing = from
         travel = 0
-        order = ids
-        dragged = id
+        return true
     }
 
     /// Carries the copy `translation` from where the view lifted, and lets the others make way.
@@ -176,7 +183,7 @@ final class Reorder {
         }
     }
 
-    /// The copy came back: hides the view again.
+    /// The copy is over the stack: hides the view.
     fileprivate func resume() {
         guard let lift, dragged == nil else { return }
         landing = lift.from
@@ -366,7 +373,7 @@ private struct ReorderGesture: ViewModifier {
         if stack.menus {
             content
                 .onDrag {
-                    reorder.pickUp(id, among: stack.ids)
+                    _ = reorder.prepare(id, among: stack.ids)
                     return NSItemProvider(object: id as NSString)
                 } preview: {
                     stack.copy(id)
