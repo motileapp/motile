@@ -213,7 +213,10 @@ struct PanelTabStrip: View {
                         }
                     }
                     if store.panelUnavailable == nil, !tabs.isBlank {
-                        ActionButton(icon: .plus, help: "New tab", margin: .beside(leading: PanelTabChip.margin)) { store.rightPanel.openBlank() }
+                        // Opened after the tap, as iOS slides a button that its own tap moves.
+                        ActionButton(icon: .plus, help: "New tab", margin: .beside(leading: PanelTabChip.margin)) {
+                            DispatchQueue.main.async { store.rightPanel.openBlank() }
+                        }
                     }
                 }
                 // Every tab is as wide as its title needs.
